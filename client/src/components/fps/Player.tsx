@@ -10,6 +10,7 @@ export default function Player() {
   const { 
     gameState, 
     shoot, 
+    reload,
     addBullet, 
     isPointerLocked,
     playerStats 
@@ -21,7 +22,7 @@ export default function Player() {
   const playerRef = useRef<THREE.Group>(null);
   const velocityRef = useRef<THREE.Vector3>(new THREE.Vector3());
   const directionRef = useRef<THREE.Vector3>(new THREE.Vector3());
-  const mouseMovementRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const rotationRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const isOnGroundRef = useRef<boolean>(true);
   const lastShotTime = useRef<number>(0);
   
@@ -31,13 +32,13 @@ export default function Player() {
       if (!isPointerLocked || gameState !== 'playing') return;
       
       const sensitivity = 0.002;
-      mouseMovementRef.current.x -= event.movementX * sensitivity;
-      mouseMovementRef.current.y -= event.movementY * sensitivity;
+      rotationRef.current.y -= event.movementX * sensitivity;
+      rotationRef.current.x -= event.movementY * sensitivity;
       
       // Clamp vertical rotation
-      mouseMovementRef.current.y = Math.max(
+      rotationRef.current.x = Math.max(
         -Math.PI / 2, 
-        Math.min(Math.PI / 2, mouseMovementRef.current.y)
+        Math.min(Math.PI / 2, rotationRef.current.x)
       );
     };
     
@@ -61,13 +62,18 @@ export default function Player() {
     if (currentTime - lastShotTime.current < 100) return; // Rate limit shooting
     
     if (shoot()) {
-      // Get camera direction
+      // Get shooting direction based on player rotation
       const direction = new THREE.Vector3();
-      camera.getWorldDirection(direction);
+      direction.set(
+        -Math.sin(rotationRef.current.y),
+        Math.sin(rotationRef.current.x),
+        -Math.cos(rotationRef.current.y)
+      );
+      direction.normalize();
       
-      // Create bullet
+      // Create bullet from player position
       const bulletPosition = camera.position.clone();
-      bulletPosition.add(direction.clone().multiplyScalar(1)); // Start bullet in front of camera
+      bulletPosition.add(direction.clone().multiplyScalar(1)); // Start bullet in front of player
       
       addBullet({
         position: [bulletPosition.x, bulletPosition.y, bulletPosition.z],
@@ -100,15 +106,32 @@ export default function Player() {
     // Reset direction
     directionRef.current.set(0, 0, 0);
     
-    // Get camera forward and right vectors
+    // Update player model rotation and camera
+    if (playerRef.current) {
+      playerRef.current.rotation.y = rotationRef.current.y;
+      
+      // Position camera relative to player model
+      const cameraOffset = new THREE.Vector3(0, 1.4, 0); // Camera height offset
+      camera.position.copy(playerRef.current.position).add(cameraOffset);
+      camera.rotation.y = rotationRef.current.y;
+      camera.rotation.x = rotationRef.current.x;
+    }
+    
+    // Get forward and right vectors based on player rotation
     const forward = new THREE.Vector3();
     const right = new THREE.Vector3();
     
-    camera.getWorldDirection(forward);
-    forward.y = 0; // Remove vertical component for movement
-    forward.normalize();
+    forward.set(
+      -Math.sin(rotationRef.current.y),
+      0,
+      -Math.cos(rotationRef.current.y)
+    );
     
-    right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
+    right.set(
+      Math.cos(rotationRef.current.y),
+      0,
+      -Math.sin(rotationRef.current.y)
+    );
     
     // Apply movement input
     if (keys.forward) {
@@ -142,31 +165,30 @@ export default function Player() {
     // Apply gravity
     velocityRef.current.y -= 30 * deltaTime;
     
-    // Update camera position
-    const newPosition = camera.position.clone();
-    newPosition.add(velocityRef.current.clone().multiplyScalar(deltaTime));
-    
-    // Simple ground collision (y = 1.6 is player height)
-    if (newPosition.y < 1.6) {
-      newPosition.y = 1.6;
-      velocityRef.current.y = 0;
-      isOnGroundRef.current = true;
+    // Update player position
+    if (playerRef.current) {
+      const newPosition = playerRef.current.position.clone();
+      newPosition.add(velocityRef.current.clone().multiplyScalar(deltaTime));
+      
+      // Simple ground collision (y = 1 is player model center height)
+      if (newPosition.y < 1) {
+        newPosition.y = 1;
+        velocityRef.current.y = 0;
+        isOnGroundRef.current = true;
+      }
+      
+      // Simple boundary collision
+      const boundary = 25;
+      newPosition.x = THREE.MathUtils.clamp(newPosition.x, -boundary, boundary);
+      newPosition.z = THREE.MathUtils.clamp(newPosition.z, -boundary, boundary);
+      
+      playerRef.current.position.copy(newPosition);
     }
-    
-    // Simple boundary collision
-    const boundary = 25;
-    newPosition.x = THREE.MathUtils.clamp(newPosition.x, -boundary, boundary);
-    newPosition.z = THREE.MathUtils.clamp(newPosition.z, -boundary, boundary);
-    
-    camera.position.copy(newPosition);
-    
-    // Apply mouse look
-    camera.rotation.y = mouseMovementRef.current.x;
-    camera.rotation.x = mouseMovementRef.current.y;
     
     // Handle reload
     if (keys.reload) {
-      // Handle reload logic here if needed
+      reload();
+      console.log('Reloaded! Ammo:', playerStats.maxAmmo);
     }
     
     // Log player state for debugging
@@ -182,8 +204,12 @@ export default function Player() {
   });
   
   return (
-    <group ref={playerRef}>
-      {/* Player model is just the camera, no visual representation needed */}
+    <group ref={playerRef} position={[0, 1, 0]}>
+      {/* Visible player model - blue box to represent the player */}
+      <mesh castShadow>
+        <boxGeometry args={[0.8, 2, 0.8]} />
+        <meshLambertMaterial color="#4444ff" />
+      </mesh>
     </group>
   );
 }

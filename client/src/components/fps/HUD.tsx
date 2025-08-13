@@ -125,6 +125,7 @@ export default function HUD() {
         <div style={{ marginBottom: '4px' }}>SPACE: Jump</div>
         <div style={{ marginBottom: '4px' }}>MOUSE: Look</div>
         <div style={{ marginBottom: '4px' }}>CLICK: Shoot</div>
+        <div style={{ marginBottom: '4px' }}>R: Reload</div>
         <div>ESC: Pause</div>
       </div>
       

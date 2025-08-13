@@ -62,6 +62,7 @@ export default function Menu() {
             <div><strong>SPACE</strong> - Jump</div>
             <div><strong>MOUSE</strong> - Look around</div>
             <div><strong>LEFT CLICK</strong> - Shoot</div>
+            <div><strong>R</strong> - Reload</div>
             <div><strong>ESC</strong> - Pause game</div>
           </div>
         </div>
