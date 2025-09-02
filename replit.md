@@ -7,6 +7,7 @@ The project implements a 3D FPS game where players navigate through an environme
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
+Code preferences: Simplified single-file structure for easier sharing with other AI tools.
 
 # System Architecture
 
