@@ -151,9 +151,13 @@ function Player({
     const moveSpeed = 8;
     const jumpSpeed = 12;
     
-    // Update player rotation
+    // Update player rotation and billboarding
     if (playerRef.current) {
-      playerRef.current.rotation.y = rotationRef.current.y;
+      // Billboard effect - make player sprite always face camera
+      const playerMesh = playerRef.current.children[0] as THREE.Mesh;
+      if (playerMesh) {
+        playerMesh.lookAt(camera.position);
+      }
       
       // Update camera position and look direction
       const cameraOffset = new THREE.Vector3(0, 1.4, 0);
@@ -241,8 +245,8 @@ function Player({
   return (
     <group ref={playerRef} position={[0, 1, 0]}>
       <mesh castShadow>
-        <boxGeometry args={[0.8, 2, 0.8]} />
-        <meshLambertMaterial color="#4444ff" />
+        <planeGeometry args={[0.8, 2]} />
+        <meshBasicMaterial color="#4444ff" side={THREE.DoubleSide} />
       </mesh>
     </group>
   );
@@ -259,8 +263,14 @@ function Enemy({
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
 }) {
   const enemyRef = useRef<THREE.Mesh>(null);
+  const { camera } = useThree();
   
   useFrame(() => {
+    // Billboard effect - make enemy always face the camera
+    if (enemyRef.current) {
+      enemyRef.current.lookAt(camera.position);
+    }
+    
     // Check bullet collisions
     gameState.bullets.forEach(bullet => {
       const bulletPos = new THREE.Vector3(...bullet.position);
@@ -282,8 +292,8 @@ function Enemy({
   
   return (
     <mesh ref={enemyRef} position={enemy.position} castShadow>
-      <boxGeometry args={[1, 2, 1]} />
-      <meshLambertMaterial color="#ff4444" />
+      <planeGeometry args={[1, 2]} />
+      <meshBasicMaterial color="#ff4444" side={THREE.DoubleSide} />
     </mesh>
   );
 }
