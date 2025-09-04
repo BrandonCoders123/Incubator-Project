@@ -44,31 +44,31 @@ function Environment() {
   return (
     <>
       {/* Ground */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
         <planeGeometry args={[100, 100]} />
         <meshLambertMaterial map={grassTexture} />
       </mesh>
       
       {/* Walls */}
-      <mesh position={[25, 5, 0]} castShadow>
+      <mesh position={[25, 5, 0]}>
         <boxGeometry args={[1, 10, 50]} />
         <meshLambertMaterial map={woodTexture} />
       </mesh>
-      <mesh position={[-25, 5, 0]} castShadow>
+      <mesh position={[-25, 5, 0]}>
         <boxGeometry args={[1, 10, 50]} />
         <meshLambertMaterial map={woodTexture} />
       </mesh>
-      <mesh position={[0, 5, 25]} castShadow>
+      <mesh position={[0, 5, 25]}>
         <boxGeometry args={[50, 10, 1]} />
         <meshLambertMaterial map={woodTexture} />
       </mesh>
-      <mesh position={[0, 5, -25]} castShadow>
+      <mesh position={[0, 5, -25]}>
         <boxGeometry args={[50, 10, 1]} />
         <meshLambertMaterial map={woodTexture} />
       </mesh>
 
       {/* Central platform */}
-      <mesh position={[0, 0.5, 0]} receiveShadow castShadow>
+      <mesh position={[0, 0.5, 0]}>
         <boxGeometry args={[8, 1, 8]} />
         <meshLambertMaterial map={asphaltTexture} />
       </mesh>
@@ -244,9 +244,9 @@ function Player({
   
   return (
     <group ref={playerRef} position={[0, 1, 0]}>
-      <mesh castShadow>
+      <mesh>
         <planeGeometry args={[0.8, 2]} />
-        <meshBasicMaterial color="#4444ff" side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#4444ff" side={THREE.DoubleSide} transparent opacity={0} />
       </mesh>
     </group>
   );
@@ -266,9 +266,12 @@ function Enemy({
   const { camera } = useThree();
   
   useFrame(() => {
-    // Billboard effect - make enemy always face the camera
+    // Billboard effect - make enemy always face the camera but stay upright
     if (enemyRef.current) {
-      enemyRef.current.lookAt(camera.position);
+      const enemyPos = new THREE.Vector3(...enemy.position);
+      const cameraPos = camera.position.clone();
+      cameraPos.y = enemyPos.y; // Keep same Y level to prevent tilting
+      enemyRef.current.lookAt(cameraPos);
     }
     
     // Check bullet collisions
@@ -291,7 +294,7 @@ function Enemy({
   });
   
   return (
-    <mesh ref={enemyRef} position={enemy.position} castShadow>
+    <mesh ref={enemyRef} position={enemy.position}>
       <planeGeometry args={[1, 2]} />
       <meshBasicMaterial color="#ff4444" side={THREE.DoubleSide} />
     </mesh>
@@ -476,7 +479,6 @@ function Game() {
   return (
     <>
       <Canvas
-        shadows
         camera={{ position: [0, 2.4, 0], fov: 75, near: 0.1, far: 1000 }}
         gl={{ antialias: true, powerPreference: "high-performance" }}
         style={{ width: '100vw', height: '100vh' }}
@@ -488,15 +490,6 @@ function Game() {
         <directionalLight
           position={[50, 50, 25]}
           intensity={1}
-          castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
-          shadow-camera-near={0.1}
-          shadow-camera-far={200}
-          shadow-camera-left={-50}
-          shadow-camera-right={50}
-          shadow-camera-top={50}
-          shadow-camera-bottom={-50}
         />
         
         <Suspense fallback={null}>
