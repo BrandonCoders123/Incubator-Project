@@ -155,11 +155,20 @@ function Player({
     if (playerRef.current) {
       playerRef.current.rotation.y = rotationRef.current.y;
       
-      // Update camera
+      // Update camera position and look direction
       const cameraOffset = new THREE.Vector3(0, 1.4, 0);
       camera.position.copy(playerRef.current.position).add(cameraOffset);
-      camera.rotation.y = rotationRef.current.y;
-      camera.rotation.x = rotationRef.current.x;
+      
+      // Calculate look direction based on rotation values
+      const direction = new THREE.Vector3(
+        -Math.sin(rotationRef.current.y) * Math.cos(rotationRef.current.x),
+        Math.sin(rotationRef.current.x),
+        -Math.cos(rotationRef.current.y) * Math.cos(rotationRef.current.x)
+      );
+      
+      // Set camera to look in the calculated direction
+      const lookAt = camera.position.clone().add(direction);
+      camera.lookAt(lookAt);
     }
     
     // Movement direction
