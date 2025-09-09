@@ -30,6 +30,7 @@ const controls = [
   { name: "rightward", keys: ["KeyD", "ArrowRight"] },
   { name: "jump", keys: ["Space"] },
   { name: "reload", keys: ["KeyR"] },
+  { name: "pause", keys: ["Escape"] },
 ];
 
 // Environment Component
@@ -223,6 +224,12 @@ function Player({
       setGameState(prev => ({ ...prev, ammo: 30 }));
     }
     
+    // Pause
+    if (keys.pause) {
+      setGameState(prev => ({ ...prev, gamePhase: 'paused' }));
+      document.exitPointerLock();
+    }
+    
     // Update bullets
     setGameState(prev => ({
       ...prev,
@@ -354,6 +361,58 @@ function HUD({
           >
             START GAME
           </button>
+        </div>
+      </div>
+    );
+  }
+  
+  if (gameState.gamePhase === 'paused') {
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+        background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'white', fontFamily: 'Inter, sans-serif', zIndex: 1000
+      }}>
+        <div style={{
+          textAlign: 'center', padding: '40px', background: 'rgba(20,20,20,0.9)',
+          borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+        }}>
+          <h2 style={{ fontSize: '48px', fontWeight: 'bold', marginBottom: '30px' }}>GAME PAUSED</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <button
+              onClick={() => {
+                setGameState(prev => ({ ...prev, gamePhase: 'playing' }));
+                document.body.requestPointerLock();
+              }}
+              style={{
+                padding: '15px 30px', fontSize: '20px', fontWeight: 'bold',
+                background: '#4CAF50', color: 'white', border: 'none',
+                borderRadius: '8px', cursor: 'pointer'
+              }}
+            >
+              RESUME
+            </button>
+            <button
+              onClick={() => {
+                setGameState(prev => ({ 
+                  ...prev, 
+                  gamePhase: 'menu',
+                  health: 100,
+                  ammo: 30,
+                  score: 0,
+                  enemies: [],
+                  bullets: []
+                }));
+              }}
+              style={{
+                padding: '15px 30px', fontSize: '20px', fontWeight: 'bold',
+                background: '#f44336', color: 'white', border: 'none',
+                borderRadius: '8px', cursor: 'pointer'
+              }}
+            >
+              EXIT TO MAIN MENU
+            </button>
+          </div>
         </div>
       </div>
     );
