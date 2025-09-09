@@ -713,7 +713,7 @@ function Game() {
     }
   });
   
-  if (gameState.gamePhase === 'menu') {
+  if (gameState.gamePhase !== 'playing' && gameState.gamePhase !== 'paused') {
     return <HUD gameState={gameState} setGameState={setGameState} />;
   }
   
