@@ -9,7 +9,7 @@ interface GameState {
   health: number;
   ammo: number;
   score: number;
-  gamePhase: 'menu' | 'playing' | 'paused';
+  gamePhase: 'login' | 'register' | 'menu' | 'playing' | 'paused';
   enemies: Array<{
     id: string;
     position: [number, number, number];
@@ -20,6 +20,12 @@ interface GameState {
     position: [number, number, number];
     direction: [number, number, number];
   }>;
+  user: {
+    username: string | null;
+    isGuest: boolean;
+    currency: number;
+    cosmetics: string[];
+  };
 }
 
 // Controls configuration
@@ -326,6 +332,167 @@ function HUD({
   gameState: GameState; 
   setGameState: React.Dispatch<React.SetStateAction<GameState>> 
 }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+
+  // Login Page
+  if (gameState.gamePhase === 'login') {
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+        background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        color: 'white', fontFamily: 'Inter, sans-serif', zIndex: 1000
+      }}>
+        <div style={{
+          textAlign: 'center', padding: '40px', background: 'rgba(0,0,0,0.3)',
+          borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', maxWidth: '400px', width: '100%'
+        }}>
+          <h1 style={{ fontSize: '48px', fontWeight: 'bold', marginBottom: '30px' }}>FPS ARENA</h1>
+          <h2 style={{ fontSize: '24px', marginBottom: '20px' }}>Login</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
+            <input
+              type="text"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              style={{
+                padding: '12px', fontSize: '16px', borderRadius: '8px',
+                border: 'none', outline: 'none'
+              }}
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{
+                padding: '12px', fontSize: '16px', borderRadius: '8px',
+                border: 'none', outline: 'none'
+              }}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <button
+              onClick={() => {
+                // Simple login logic - in a real app you'd validate against accounts.json
+                setGameState(prev => ({
+                  ...prev,
+                  gamePhase: 'menu',
+                  user: { username, isGuest: false, currency: 1000, cosmetics: [] }
+                }));
+              }}
+              style={{
+                padding: '12px 20px', fontSize: '18px', fontWeight: 'bold',
+                background: '#4CAF50', color: 'white', border: 'none',
+                borderRadius: '8px', cursor: 'pointer'
+              }}
+            >
+              LOGIN
+            </button>
+            <button
+              onClick={() => setGameState(prev => ({ ...prev, gamePhase: 'register' }))}
+              style={{
+                padding: '12px 20px', fontSize: '16px',
+                background: 'transparent', color: 'white', border: '2px solid white',
+                borderRadius: '8px', cursor: 'pointer'
+              }}
+            >
+              Create Account
+            </button>
+            <button
+              onClick={() => {
+                setGameState(prev => ({
+                  ...prev,
+                  gamePhase: 'menu',
+                  user: { username: 'Guest', isGuest: true, currency: 0, cosmetics: [] }
+                }));
+              }}
+              style={{
+                padding: '12px 20px', fontSize: '16px',
+                background: 'rgba(255,255,255,0.1)', color: 'white', border: 'none',
+                borderRadius: '8px', cursor: 'pointer'
+              }}
+            >
+              Play as Guest
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Registration Page
+  if (gameState.gamePhase === 'register') {
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+        background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        color: 'white', fontFamily: 'Inter, sans-serif', zIndex: 1000
+      }}>
+        <div style={{
+          textAlign: 'center', padding: '40px', background: 'rgba(0,0,0,0.3)',
+          borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', maxWidth: '400px', width: '100%'
+        }}>
+          <h1 style={{ fontSize: '48px', fontWeight: 'bold', marginBottom: '30px' }}>FPS ARENA</h1>
+          <h2 style={{ fontSize: '24px', marginBottom: '20px' }}>Create Account</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginBottom: '20px' }}>
+            <input
+              type="text"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              style={{
+                padding: '12px', fontSize: '16px', borderRadius: '8px',
+                border: 'none', outline: 'none'
+              }}
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{
+                padding: '12px', fontSize: '16px', borderRadius: '8px',
+                border: 'none', outline: 'none'
+              }}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <button
+              onClick={() => {
+                // Simple registration logic - in a real app you'd save to accounts.json
+                setGameState(prev => ({
+                  ...prev,
+                  gamePhase: 'menu',
+                  user: { username, isGuest: false, currency: 1000, cosmetics: [] }
+                }));
+              }}
+              style={{
+                padding: '12px 20px', fontSize: '18px', fontWeight: 'bold',
+                background: '#4CAF50', color: 'white', border: 'none',
+                borderRadius: '8px', cursor: 'pointer'
+              }}
+            >
+              CREATE ACCOUNT
+            </button>
+            <button
+              onClick={() => setGameState(prev => ({ ...prev, gamePhase: 'login' }))}
+              style={{
+                padding: '12px 20px', fontSize: '16px',
+                background: 'transparent', color: 'white', border: '2px solid white',
+                borderRadius: '8px', cursor: 'pointer'
+              }}
+            >
+              Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (gameState.gamePhase === 'menu') {
     return (
       <div style={{
@@ -339,6 +506,9 @@ function HUD({
           borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
         }}>
           <h1 style={{ fontSize: '64px', fontWeight: 'bold', marginBottom: '20px' }}>FPS ARENA</h1>
+          <p style={{ fontSize: '18px', marginBottom: '10px', color: '#ffeb3b' }}>
+            Welcome, {gameState.user.username}! {gameState.user.isGuest ? '(Guest)' : `Currency: ${gameState.user.currency}`}
+          </p>
           <p style={{ fontSize: '18px', marginBottom: '30px' }}>
             Fast-paced first-person shooting. Eliminate enemies and survive!
           </p>
@@ -396,12 +566,18 @@ function HUD({
               onClick={() => {
                 setGameState(prev => ({ 
                   ...prev, 
-                  gamePhase: 'menu',
+                  gamePhase: 'login',
                   health: 100,
                   ammo: 30,
                   score: 0,
                   enemies: [],
-                  bullets: []
+                  bullets: [],
+                  user: {
+                    username: null,
+                    isGuest: false,
+                    currency: 0,
+                    cosmetics: []
+                  }
                 }));
               }}
               style={{
@@ -526,9 +702,15 @@ function Game() {
     health: 100,
     ammo: 30,
     score: 0,
-    gamePhase: 'menu',
+    gamePhase: 'login',
     enemies: [],
-    bullets: []
+    bullets: [],
+    user: {
+      username: null,
+      isGuest: false,
+      currency: 0,
+      cosmetics: []
+    }
   });
   
   if (gameState.gamePhase === 'menu') {
