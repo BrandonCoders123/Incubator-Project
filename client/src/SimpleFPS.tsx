@@ -9,7 +9,7 @@ interface GameState {
   health: number;
   ammo: number;
   score: number;
-  gamePhase: 'login' | 'register' | 'menu' | 'playing' | 'paused';
+  gamePhase: 'login' | 'register' | 'menu' | 'playing' | 'paused' | 'gameover';
   enemies: Array<{
     id: string;
     position: [number, number, number];
@@ -26,6 +26,7 @@ interface GameState {
     currency: number;
     cosmetics: string[];
   };
+  lastDamageTime: number;
 }
 
 // Controls configuration
@@ -278,13 +279,52 @@ function Enemy({
   const enemyRef = useRef<THREE.Mesh>(null);
   const { camera } = useThree();
   
-  useFrame(() => {
+  useFrame((state, deltaTime) => {
+    // Only update during gameplay
+    if (gameState.gamePhase !== 'playing') return;
+    
     // Billboard effect - make enemy always face the camera but stay upright
     if (enemyRef.current) {
       const enemyPos = new THREE.Vector3(...enemy.position);
       const cameraPos = camera.position.clone();
       cameraPos.y = enemyPos.y; // Keep same Y level to prevent tilting
       enemyRef.current.lookAt(cameraPos);
+      
+      // AI Movement - move towards player
+      const playerPos = camera.position.clone();
+      const direction = new THREE.Vector3().subVectors(playerPos, enemyPos);
+      direction.y = 0; // Keep movement on horizontal plane
+      direction.normalize();
+      
+      const moveSpeed = 2; // Enemy movement speed
+      const newPos = enemyPos.add(direction.multiplyScalar(moveSpeed * deltaTime));
+      
+      // Update enemy position in game state
+      setGameState(prev => ({
+        ...prev,
+        enemies: prev.enemies.map(e => 
+          e.id === enemy.id ? { ...e, position: [newPos.x, newPos.y, newPos.z] as [number, number, number] } : e
+        )
+      }));
+      
+      // Check contact damage (melee attack)
+      const distanceToPlayer = enemyPos.distanceTo(playerPos);
+      if (distanceToPlayer < 1.5) { // Contact range
+        const currentTime = Date.now();
+        setGameState(prev => {
+          // Only damage if 1 second has passed since last damage
+          if (currentTime - prev.lastDamageTime > 1000) {
+            const newHealth = Math.max(0, prev.health - 10);
+            return {
+              ...prev,
+              health: newHealth,
+              lastDamageTime: currentTime,
+              gamePhase: newHealth <= 0 ? 'gameover' : prev.gamePhase
+            };
+          }
+          return prev;
+        });
+      }
     }
     
     // Check bullet collisions
@@ -358,7 +398,7 @@ function HUD({
               onChange={(e) => setUsername(e.target.value)}
               style={{
                 padding: '12px', fontSize: '16px', borderRadius: '8px',
-                border: 'none', outline: 'none'
+                border: 'none', outline: 'none', color: 'black'
               }}
             />
             <input
@@ -368,19 +408,34 @@ function HUD({
               onChange={(e) => setPassword(e.target.value)}
               style={{
                 padding: '12px', fontSize: '16px', borderRadius: '8px',
-                border: 'none', outline: 'none'
+                border: 'none', outline: 'none', color: 'black'
               }}
             />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <button
-              onClick={() => {
-                // Simple login logic - in a real app you'd validate against accounts.json
-                setGameState(prev => ({
-                  ...prev,
-                  gamePhase: 'menu',
-                  user: { username, isGuest: false, currency: 1000, cosmetics: [] }
-                }));
+              onClick={async () => {
+                try {
+                  const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                  });
+                  
+                  if (response.ok) {
+                    const data = await response.json();
+                    setGameState(prev => ({
+                      ...prev,
+                      gamePhase: 'menu',
+                      user: { username: data.user.username, isGuest: false, currency: data.currency, cosmetics: data.cosmetics || [] }
+                    }));
+                  } else {
+                    const error = await response.json();
+                    alert(error.error || 'Login failed');
+                  }
+                } catch (error) {
+                  alert('Network error during login');
+                }
               }}
               style={{
                 padding: '12px 20px', fontSize: '18px', fontWeight: 'bold',
@@ -445,7 +500,7 @@ function HUD({
               onChange={(e) => setUsername(e.target.value)}
               style={{
                 padding: '12px', fontSize: '16px', borderRadius: '8px',
-                border: 'none', outline: 'none'
+                border: 'none', outline: 'none', color: 'black'
               }}
             />
             <input
@@ -455,19 +510,34 @@ function HUD({
               onChange={(e) => setPassword(e.target.value)}
               style={{
                 padding: '12px', fontSize: '16px', borderRadius: '8px',
-                border: 'none', outline: 'none'
+                border: 'none', outline: 'none', color: 'black'
               }}
             />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <button
-              onClick={() => {
-                // Simple registration logic - in a real app you'd save to accounts.json
-                setGameState(prev => ({
-                  ...prev,
-                  gamePhase: 'menu',
-                  user: { username, isGuest: false, currency: 1000, cosmetics: [] }
-                }));
+              onClick={async () => {
+                try {
+                  const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                  });
+                  
+                  if (response.ok) {
+                    // Auto-login after successful registration
+                    setGameState(prev => ({
+                      ...prev,
+                      gamePhase: 'menu',
+                      user: { username, isGuest: false, currency: 1000, cosmetics: [] }
+                    }));
+                  } else {
+                    const error = await response.json();
+                    alert(error.error || 'Registration failed');
+                  }
+                } catch (error) {
+                  alert('Network error during registration');
+                }
               }}
               style={{
                 padding: '12px 20px', fontSize: '18px', fontWeight: 'bold',
@@ -531,6 +601,115 @@ function HUD({
           >
             START GAME
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Game Over Screen
+  if (gameState.gamePhase === 'gameover') {
+    const currencyEarned = Math.floor(gameState.score / 100);
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+        background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'white', fontFamily: 'Inter, sans-serif', zIndex: 1000
+      }}>
+        <div style={{
+          textAlign: 'center', padding: '40px', background: 'rgba(20,20,20,0.9)',
+          borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+        }}>
+          <h2 style={{ fontSize: '48px', fontWeight: 'bold', marginBottom: '20px', color: '#ff4444' }}>GAME OVER</h2>
+          <div style={{ marginBottom: '30px', fontSize: '20px' }}>
+            <div style={{ marginBottom: '10px' }}>Final Score: <span style={{ color: '#ffeb3b' }}>{gameState.score}</span></div>
+            <div style={{ marginBottom: '10px' }}>Currency Earned: <span style={{ color: '#4caf50' }}>{currencyEarned}</span></div>
+            {!gameState.user.isGuest && (
+              <div style={{ fontSize: '16px', opacity: 0.8 }}>Currency added to your account!</div>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <button
+              onClick={async () => {
+                const newCurrency = gameState.user.isGuest ? gameState.user.currency : gameState.user.currency + currencyEarned;
+                
+                // Save currency to backend for registered users
+                if (!gameState.user.isGuest && gameState.user.username) {
+                  try {
+                    await fetch('/api/update-currency', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ username: gameState.user.username, currency: newCurrency })
+                    });
+                  } catch (error) {
+                    console.error('Failed to save currency:', error);
+                  }
+                }
+                
+                setGameState(prev => ({
+                  ...prev,
+                  health: 100,
+                  ammo: 30,
+                  score: 0,
+                  gamePhase: 'playing',
+                  enemies: [],
+                  bullets: [],
+                  lastDamageTime: 0,
+                  user: {
+                    ...prev.user,
+                    currency: newCurrency
+                  }
+                }));
+                document.body.requestPointerLock();
+              }}
+              style={{
+                padding: '15px 30px', fontSize: '20px', fontWeight: 'bold',
+                background: '#4CAF50', color: 'white', border: 'none',
+                borderRadius: '8px', cursor: 'pointer'
+              }}
+            >
+              PLAY AGAIN
+            </button>
+            <button
+              onClick={async () => {
+                const newCurrency = gameState.user.isGuest ? gameState.user.currency : gameState.user.currency + currencyEarned;
+                
+                // Save currency to backend for registered users
+                if (!gameState.user.isGuest && gameState.user.username) {
+                  try {
+                    await fetch('/api/update-currency', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ username: gameState.user.username, currency: newCurrency })
+                    });
+                  } catch (error) {
+                    console.error('Failed to save currency:', error);
+                  }
+                }
+                
+                setGameState(prev => ({
+                  ...prev,
+                  health: 100,
+                  ammo: 30,
+                  score: 0,
+                  gamePhase: 'menu',
+                  enemies: [],
+                  bullets: [],
+                  lastDamageTime: 0,
+                  user: {
+                    ...prev.user,
+                    currency: newCurrency
+                  }
+                }));
+              }}
+              style={{
+                padding: '15px 30px', fontSize: '20px', fontWeight: 'bold',
+                background: '#2196F3', color: 'white', border: 'none',
+                borderRadius: '8px', cursor: 'pointer'
+              }}
+            >
+              RETURN HOME
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -710,7 +889,8 @@ function Game() {
       isGuest: false,
       currency: 0,
       cosmetics: []
-    }
+    },
+    lastDamageTime: 0
   });
   
   if (gameState.gamePhase !== 'playing' && gameState.gamePhase !== 'paused') {
