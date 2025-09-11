@@ -4,6 +4,23 @@ import { Suspense, useRef, useEffect, useState, useCallback } from "react";
 import * as THREE from "three";
 import "@fontsource/inter";
 
+// Weapon definitions
+interface Weapon {
+  name: string;
+  maxAmmo: number;
+  damage: number;
+  reloadTime: number;
+  fireRate: number; // shots per second, 0 for semi-auto
+  bulletsPerKill: number;
+}
+
+const weapons: Record<number, Weapon> = {
+  1: { name: "Pistol", maxAmmo: 15, damage: 25, reloadTime: 3000, fireRate: 0, bulletsPerKill: 3 }, // 25 * 3 = 75 damage
+  2: { name: "Rifle", maxAmmo: 20, damage: 37.5, reloadTime: 5000, fireRate: 0, bulletsPerKill: 2 }, // 37.5 * 2 = 75 damage  
+  3: { name: "Assault Rifle", maxAmmo: 40, damage: 18.75, reloadTime: 3000, fireRate: 8, bulletsPerKill: 4 }, // 18.75 * 4 = 75 damage
+  4: { name: "LMG", maxAmmo: 100, damage: 25, reloadTime: 10000, fireRate: 10, bulletsPerKill: 3 } // 25 * 3 = 75 damage
+};
+
 // Simple game state
 interface GameState {
   health: number;
@@ -19,6 +36,7 @@ interface GameState {
     id: string;
     position: [number, number, number];
     direction: [number, number, number];
+    damage: number;
   }>;
   user: {
     username: string | null;
@@ -27,6 +45,10 @@ interface GameState {
     cosmetics: string[];
   };
   lastDamageTime: number;
+  currentWeapon: number;
+  isReloading: boolean;
+  reloadStartTime: number;
+  lastShotTime: number;
 }
 
 // Controls configuration
@@ -38,6 +60,10 @@ const controls = [
   { name: "jump", keys: ["Space"] },
   { name: "reload", keys: ["KeyR"] },
   { name: "pause", keys: ["Escape"] },
+  { name: "weapon1", keys: ["Digit1"] },
+  { name: "weapon2", keys: ["Digit2"] },
+  { name: "weapon3", keys: ["Digit3"] },
+  { name: "weapon4", keys: ["Digit4"] },
 ];
 
 // Environment Component
@@ -99,7 +125,10 @@ function Player({
   const velocityRef = useRef(new THREE.Vector3());
   const rotationRef = useRef({ x: 0, y: 0 });
   const isOnGroundRef = useRef(true);
-  const lastShotTime = useRef(0);
+  const mouseDownRef = useRef(false);
+  const weaponAmmo = useRef<Record<number, number>>({
+    1: 15, 2: 20, 3: 40, 4: 100
+  });
   
   // Mouse controls - simplified approach
   useEffect(() => {
@@ -112,41 +141,56 @@ function Player({
       }
     };
     
-    const handleClick = () => {
-      if (gameState.gamePhase === 'playing' && gameState.ammo > 0) {
-        const now = Date.now();
-        if (now - lastShotTime.current > 100) {
-          // Shoot bullet
-          const direction = new THREE.Vector3(
-            -Math.sin(rotationRef.current.y),
-            Math.sin(rotationRef.current.x),
-            -Math.cos(rotationRef.current.y)
-          ).normalize();
-          
-          const bulletPos = camera.position.clone().add(direction.clone().multiplyScalar(1));
-          
-          setGameState(prev => ({
-            ...prev,
-            ammo: prev.ammo - 1,
-            bullets: [...prev.bullets, {
-              id: `bullet_${Date.now()}`,
-              position: [bulletPos.x, bulletPos.y, bulletPos.z],
-              direction: [direction.x, direction.y, direction.z]
-            }]
-          }));
-          
-          lastShotTime.current = now;
-          console.log('Shot fired!');
+    const handleMouseDown = () => {
+      mouseDownRef.current = true;
+      // Fire immediately for semi-auto weapons (single click)
+      if (gameState.gamePhase === 'playing' && gameState.ammo > 0 && !gameState.isReloading) {
+        const currentWeapon = weapons[gameState.currentWeapon];
+        if (currentWeapon.fireRate === 0) { // Semi-automatic
+          const now = Date.now();
+          if (now - gameState.lastShotTime >= 100) { // Minimum delay for semi-auto
+            // Shoot bullet
+            const direction = new THREE.Vector3(
+              -Math.sin(rotationRef.current.y),
+              Math.sin(rotationRef.current.x),
+              -Math.cos(rotationRef.current.y)
+            ).normalize();
+            
+            const bulletPos = camera.position.clone().add(direction.clone().multiplyScalar(1));
+            
+            // Update weapon ammo ref
+            weaponAmmo.current[gameState.currentWeapon] = gameState.ammo - 1;
+            
+            setGameState(prev => ({
+              ...prev,
+              ammo: prev.ammo - 1,
+              bullets: [...prev.bullets, {
+                id: `bullet_${Date.now()}`,
+                position: [bulletPos.x, bulletPos.y, bulletPos.z],
+                direction: [direction.x, direction.y, direction.z],
+                damage: currentWeapon.damage
+              }],
+              lastShotTime: now
+            }));
+            
+            console.log(`${currentWeapon.name} fired!`);
+          }
         }
       }
     };
     
+    const handleMouseUp = () => {
+      mouseDownRef.current = false;
+    };
+    
     window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('click', handleClick);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mouseup', handleMouseUp);
     
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('click', handleClick);
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [gameState.gamePhase, gameState.ammo, camera, setGameState]);
   
@@ -154,6 +198,41 @@ function Player({
     if (gameState.gamePhase !== 'playing') return;
     
     const keys = getKeys();
+    
+    // Automatic firing for automatic weapons
+    const currentWeapon = weapons[gameState.currentWeapon];
+    if (mouseDownRef.current && currentWeapon.fireRate > 0 && gameState.ammo > 0 && !gameState.isReloading) {
+      const now = Date.now();
+      const fireInterval = 1000 / currentWeapon.fireRate;
+      
+      if (now - gameState.lastShotTime >= fireInterval) {
+        // Shoot bullet
+        const direction = new THREE.Vector3(
+          -Math.sin(rotationRef.current.y),
+          Math.sin(rotationRef.current.x),
+          -Math.cos(rotationRef.current.y)
+        ).normalize();
+        
+        const bulletPos = camera.position.clone().add(direction.clone().multiplyScalar(1));
+        
+        // Update weapon ammo ref
+        weaponAmmo.current[gameState.currentWeapon] = gameState.ammo - 1;
+        
+        setGameState(prev => ({
+          ...prev,
+          ammo: prev.ammo - 1,
+          bullets: [...prev.bullets, {
+            id: `bullet_${Date.now()}`,
+            position: [bulletPos.x, bulletPos.y, bulletPos.z],
+            direction: [direction.x, direction.y, direction.z],
+            damage: currentWeapon.damage
+          }],
+          lastShotTime: now
+        }));
+        
+        console.log(`${currentWeapon.name} auto-firing!`);
+      }
+    }
     
     // Movement
     const moveSpeed = 8;
@@ -226,9 +305,43 @@ function Player({
       playerRef.current.position.copy(newPos);
     }
     
+    // Weapon switching
+    if (keys.weapon1 && gameState.currentWeapon !== 1) {
+      weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
+      setGameState(prev => ({ ...prev, currentWeapon: 1, ammo: weaponAmmo.current[1], isReloading: false }));
+    }
+    if (keys.weapon2 && gameState.currentWeapon !== 2) {
+      weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
+      setGameState(prev => ({ ...prev, currentWeapon: 2, ammo: weaponAmmo.current[2], isReloading: false }));
+    }
+    if (keys.weapon3 && gameState.currentWeapon !== 3) {
+      weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
+      setGameState(prev => ({ ...prev, currentWeapon: 3, ammo: weaponAmmo.current[3], isReloading: false }));
+    }
+    if (keys.weapon4 && gameState.currentWeapon !== 4) {
+      weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
+      setGameState(prev => ({ ...prev, currentWeapon: 4, ammo: weaponAmmo.current[4], isReloading: false }));
+    }
+    
     // Reload
-    if (keys.reload) {
-      setGameState(prev => ({ ...prev, ammo: 30 }));
+    const weapon = weapons[gameState.currentWeapon];
+    if (keys.reload && !gameState.isReloading && gameState.ammo < weapon.maxAmmo) {
+      setGameState(prev => ({ 
+        ...prev, 
+        isReloading: true, 
+        reloadStartTime: Date.now() 
+      }));
+    }
+    
+    // Check if reload is complete
+    if (gameState.isReloading && Date.now() - gameState.reloadStartTime >= weapon.reloadTime) {
+      const newAmmo = weapon.maxAmmo;
+      weaponAmmo.current[gameState.currentWeapon] = newAmmo; // Update ref
+      setGameState(prev => ({ 
+        ...prev, 
+        isReloading: false, 
+        ammo: newAmmo 
+      }));
     }
     
     // Pause
@@ -338,9 +451,9 @@ function Enemy({
           ...prev,
           bullets: prev.bullets.filter(b => b.id !== bullet.id),
           enemies: prev.enemies.map(e => 
-            e.id === enemy.id ? { ...e, health: e.health - 25 } : e
+            e.id === enemy.id ? { ...e, health: e.health - bullet.damage } : e
           ).filter(e => e.health > 0),
-          score: enemy.health <= 25 ? prev.score + 100 : prev.score
+          score: enemy.health - bullet.damage <= 0 ? prev.score + 100 : prev.score
         }));
       }
     });
@@ -354,12 +467,85 @@ function Enemy({
   );
 }
 
-// Bullet Component
+// Bullet Component (invisible)
 function Bullet({ bullet }: { bullet: { id: string; position: [number, number, number] } }) {
   return (
     <mesh position={bullet.position}>
-      <sphereGeometry args={[0.1]} />
-      <meshBasicMaterial color="#ffff00" />
+      <sphereGeometry args={[0.05]} />
+      <meshBasicMaterial transparent opacity={0} />
+    </mesh>
+  );
+}
+
+// Weapon Sprite Component
+function WeaponSprite({ 
+  gameState 
+}: { 
+  gameState: GameState 
+}) {
+  const { camera } = useThree();
+  const weaponRef = useRef<THREE.Mesh>(null);
+  
+  // Get weapon colors for different weapons
+  const getWeaponColor = (weaponNum: number) => {
+    switch(weaponNum) {
+      case 1: return '#888888'; // Gray for pistol
+      case 2: return '#654321'; // Brown for rifle
+      case 3: return '#2e2e2e'; // Dark gray for assault rifle
+      case 4: return '#1a1a1a'; // Black for LMG
+      default: return '#888888';
+    }
+  };
+  
+  // Get weapon size based on type
+  const getWeaponSize = (weaponNum: number): [number, number] => {
+    switch(weaponNum) {
+      case 1: return [0.3, 0.6]; // Small pistol
+      case 2: return [0.4, 1.0]; // Medium rifle
+      case 3: return [0.5, 0.9]; // Assault rifle
+      case 4: return [0.6, 1.2]; // Large LMG
+      default: return [0.3, 0.6];
+    }
+  };
+
+  useFrame(() => {
+    if (weaponRef.current && gameState.gamePhase === 'playing') {
+      // Position weapon sprite in bottom-right of view (DOOM style center-right)
+      const weaponPos = camera.position.clone();
+      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+      const down = new THREE.Vector3(0, -1, 0).applyQuaternion(camera.quaternion);
+      
+      // Position weapon sprite
+      weaponPos.add(forward.multiplyScalar(2)); // Forward from camera
+      weaponPos.add(right.multiplyScalar(0.8)); // Right side
+      weaponPos.add(down.multiplyScalar(0.5)); // Slightly down
+      
+      weaponRef.current.position.copy(weaponPos);
+      weaponRef.current.lookAt(camera.position);
+      
+      // Add firing animation (slight recoil)
+      const timeSinceShot = Date.now() - gameState.lastShotTime;
+      if (timeSinceShot < 100) {
+        const recoilAmount = (100 - timeSinceShot) / 100 * 0.1;
+        weaponRef.current.position.add(new THREE.Vector3(0, -recoilAmount, recoilAmount));
+      }
+    }
+  });
+
+  const [width, height] = getWeaponSize(gameState.currentWeapon);
+  
+  if (gameState.gamePhase !== 'playing') return null;
+
+  return (
+    <mesh ref={weaponRef}>
+      <planeGeometry args={[width, height]} />
+      <meshBasicMaterial 
+        color={getWeaponColor(gameState.currentWeapon)} 
+        side={THREE.DoubleSide}
+        transparent
+        opacity={gameState.isReloading ? 0.5 : 1.0}
+      />
     </mesh>
   );
 }
@@ -815,15 +1001,23 @@ function HUD({
         <div style={{ marginTop: '4px', fontSize: '12px' }}>{gameState.health} / 100</div>
       </div>
       
-      {/* Ammo */}
+      {/* Weapon & Ammo */}
       <div style={{
         position: 'absolute', bottom: '40px', right: '40px',
         background: 'rgba(0,0,0,0.7)', padding: '15px', borderRadius: '8px',
         color: 'white', textAlign: 'center', border: '2px solid rgba(255,255,255,0.3)'
       }}>
-        <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '4px' }}>{gameState.ammo}</div>
-        <div style={{ fontSize: '12px', opacity: 0.8 }}>/ 30</div>
+        <div style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '8px', color: '#ffeb3b' }}>
+          {weapons[gameState.currentWeapon].name}
+        </div>
+        <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '4px' }}>
+          {gameState.isReloading ? 'RELOADING...' : gameState.ammo}
+        </div>
+        <div style={{ fontSize: '12px', opacity: 0.8 }}>/ {weapons[gameState.currentWeapon].maxAmmo}</div>
         <div style={{ fontSize: '10px', marginTop: '4px', opacity: 0.6 }}>AMMO</div>
+        <div style={{ fontSize: '8px', marginTop: '4px', opacity: 0.5 }}>
+          Keys: 1-4 to switch | R to reload
+        </div>
       </div>
       
       {/* Score */}
@@ -879,7 +1073,7 @@ function GameLogic({
 function Game() {
   const [gameState, setGameState] = useState<GameState>({
     health: 100,
-    ammo: 30,
+    ammo: 15, // Start with pistol ammo
     score: 0,
     gamePhase: 'login',
     enemies: [],
@@ -890,7 +1084,11 @@ function Game() {
       currency: 0,
       cosmetics: []
     },
-    lastDamageTime: 0
+    lastDamageTime: 0,
+    currentWeapon: 1, // Start with pistol
+    isReloading: false,
+    reloadStartTime: 0,
+    lastShotTime: 0
   });
   
   if (gameState.gamePhase !== 'playing' && gameState.gamePhase !== 'paused') {
@@ -916,6 +1114,7 @@ function Game() {
         <Suspense fallback={null}>
           <Environment />
           <Player gameState={gameState} setGameState={setGameState} />
+          <WeaponSprite gameState={gameState} />
           
           {gameState.enemies.map(enemy => (
             <Enemy key={enemy.id} enemy={enemy} gameState={gameState} setGameState={setGameState} />
