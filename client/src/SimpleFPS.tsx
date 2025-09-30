@@ -53,12 +53,20 @@ const weapons: Record<number, Weapon> = {
   }, // 25 * 3 = 75 damage
 };
 
+// Story elements
+const SETTLEMENTS = [
+  "Bun Valley Outpost",
+  "Condiment Creek Base", 
+  "Relish Ridge Fortress",
+  "Mustard Mountain Stronghold"
+];
+
 // Simple game state
 interface GameState {
   health: number;
   ammo: number;
   score: number;
-  gamePhase: "login" | "register" | "menu" | "playing" | "paused" | "gameover";
+  gamePhase: "login" | "register" | "menu" | "introCutscene" | "playing" | "paused" | "gameover" | "victory";
   enemies: Array<{
     id: string;
     position: [number, number, number];
@@ -75,6 +83,12 @@ interface GameState {
     isGuest: boolean;
     currency: number;
     cosmetics: string[];
+  };
+  story: {
+    currentSettlement: number;
+    alliesRescued: number;
+    settlementsConquered: string[];
+    totalKills: number;
   };
   lastDamageTime: number;
   currentWeapon: number;
@@ -535,14 +549,14 @@ function Enemy({
         ),
       }));
 
-      // Check contact damage (melee attack)
+      // Check contact damage (melee attack) - only if still playing
       const distanceToPlayer = enemyPos.distanceTo(playerPos);
-      if (distanceToPlayer < 1.5) {
+      if (distanceToPlayer < 1.5 && gameState.gamePhase === "playing") {
         // Contact range
         const currentTime = Date.now();
         setGameState((prev) => {
-          // Only damage if 1 second has passed since last damage
-          if (currentTime - prev.lastDamageTime > 1000) {
+          // Only damage if 1 second has passed since last damage and still playing
+          if (currentTime - prev.lastDamageTime > 1000 && prev.gamePhase === "playing") {
             const newHealth = Math.max(0, prev.health - 10);
             return {
               ...prev,
@@ -563,19 +577,51 @@ function Enemy({
 
       if (bulletPos.distanceTo(enemyPos) < 1) {
         // Hit enemy
-        setGameState((prev) => ({
-          ...prev,
-          bullets: prev.bullets.filter((b) => b.id !== bullet.id),
-          enemies: prev.enemies
-            .map((e) =>
-              e.id === enemy.id
-                ? { ...e, health: e.health - bullet.damage }
-                : e,
-            )
-            .filter((e) => e.health > 0),
-          score:
-            enemy.health - bullet.damage <= 0 ? prev.score + 100 : prev.score,
-        }));
+        setGameState((prev) => {
+          const enemyKilled = enemy.health - bullet.damage <= 0;
+          const newScore = enemyKilled ? prev.score + 100 : prev.score;
+          
+          // Increment kill counter only if enemy died
+          const newKills = enemyKilled ? prev.story.totalKills + 1 : prev.story.totalKills;
+          
+          // Every 10 kills = conquer a settlement
+          const newSettlementIndex = Math.floor(newKills / 10);
+          
+          // Every 3 kills = rescue an ally
+          const newAlliesRescued = Math.floor(newKills / 3);
+          
+          // Check if we just conquered a new settlement
+          let newSettlementsConquered = prev.story.settlementsConquered;
+          if (newSettlementIndex > prev.story.currentSettlement && newSettlementIndex <= SETTLEMENTS.length) {
+            const settlementName = SETTLEMENTS[newSettlementIndex - 1];
+            if (!prev.story.settlementsConquered.includes(settlementName)) {
+              newSettlementsConquered = [...prev.story.settlementsConquered, settlementName];
+            }
+          }
+          
+          // Check victory condition - all settlements conquered
+          const allConquered = newSettlementIndex >= SETTLEMENTS.length;
+          
+          return {
+            ...prev,
+            bullets: prev.bullets.filter((b) => b.id !== bullet.id),
+            enemies: prev.enemies
+              .map((e) =>
+                e.id === enemy.id
+                  ? { ...e, health: e.health - bullet.damage }
+                  : e,
+              )
+              .filter((e) => e.health > 0),
+            score: newScore,
+            story: {
+              currentSettlement: Math.min(newSettlementIndex, SETTLEMENTS.length - 1),
+              alliesRescued: newAlliesRescued,
+              settlementsConquered: newSettlementsConquered,
+              totalKills: newKills,
+            },
+            gamePhase: allConquered ? "victory" : prev.gamePhase,
+          };
+        });
       }
     });
   });
@@ -1026,13 +1072,13 @@ function HUD({
           left: 0,
           width: "100vw",
           height: "100vh",
-          background: "linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)",
+          background: "linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #fdc830 100%)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           color: "white",
-          fontFamily: "Inter, sans-serif",
+          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
           zIndex: 1000,
         }}
       >
@@ -1040,37 +1086,51 @@ function HUD({
           style={{
             textAlign: "center",
             padding: "40px",
-            background: "rgba(0,0,0,0.3)",
+            background: "rgba(0,0,0,0.5)",
             borderRadius: "20px",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+            maxWidth: "700px",
           }}
         >
           <h1
             style={{
-              fontSize: "64px",
+              fontSize: "56px",
               fontWeight: "bold",
-              marginBottom: "20px",
+              marginBottom: "10px",
+              textShadow: "3px 3px 6px rgba(0,0,0,0.8)",
             }}
           >
-            FPS ARENA
+            My GHS Story:
           </h1>
+          <h2
+            style={{
+              fontSize: "48px",
+              fontWeight: "bold",
+              marginBottom: "20px",
+              color: "#fdc830",
+              textShadow: "3px 3px 6px rgba(0,0,0,0.8)",
+            }}
+          >
+            The Legend of MUSTARD
+          </h2>
           <p
-            style={{ fontSize: "18px", marginBottom: "10px", color: "#ffeb3b" }}
+            style={{ fontSize: "16px", marginBottom: "10px", color: "#ffeb3b" }}
           >
             Welcome, {gameState.user.username}!{" "}
             {gameState.user.isGuest
               ? "(Guest)"
               : `Currency: ${gameState.user.currency}`}
           </p>
-          <p style={{ fontSize: "18px", marginBottom: "30px" }}>
-            Fast-paced first-person shooting. Eliminate enemies and survive!
+          <p style={{ fontSize: "18px", marginBottom: "30px", lineHeight: "1.6" }}>
+            Help Hayden the hot dog rescue his parents from the robot hot dogs!<br/>
+            Conquer settlements and make allies along the way.
           </p>
-          <div style={{ marginBottom: "30px", fontSize: "16px" }}>
+          <div style={{ marginBottom: "30px", fontSize: "16px", lineHeight: "1.8" }}>
             <div>
-              <strong>WASD</strong> - Move
+              <strong>WASD</strong> - Move around
             </div>
             <div>
-              <strong>MOUSE</strong> - Look
+              <strong>MOUSE</strong> - Look around
             </div>
             <div>
               <strong>CLICK</strong> - Shoot
@@ -1078,25 +1138,377 @@ function HUD({
             <div>
               <strong>R</strong> - Reload
             </div>
+            <div>
+              <strong>1-4</strong> - Switch weapons
+            </div>
           </div>
+          <button
+            onClick={() => {
+              setGameState((prev) => ({ ...prev, gamePhase: "introCutscene" }));
+            }}
+            style={{
+              padding: "20px 40px",
+              fontSize: "24px",
+              fontWeight: "bold",
+              background: "#fdc830",
+              color: "#333",
+              border: "none",
+              borderRadius: "12px",
+              cursor: "pointer",
+              boxShadow: "0 8px 16px rgba(0,0,0,0.3)",
+              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+            }}
+          >
+            START ADVENTURE
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Intro Cutscene
+  if (gameState.gamePhase === "introCutscene") {
+    const [currentScene, setCurrentScene] = useState(0);
+    
+    const scenes = [
+      {
+        text: "In the peaceful town of Hot Dog Haven, a young hot dog named Hayden lived happily with his family...",
+        duration: 4000
+      },
+      {
+        text: "But one fateful day, an army of robot hot dogs descended upon the town!",
+        duration: 4000
+      },
+      {
+        text: "They captured Hayden's parents and took them to their stronghold at Mustard Mountain!",
+        duration: 4000
+      },
+      {
+        text: "Now Hayden must be brave. He must conquer the robot settlements scattered across the land...",
+        duration: 4000
+      },
+      {
+        text: "Along the way, he'll rescue captured hot dog allies and grow stronger.",
+        duration: 4000
+      },
+      {
+        text: "Only by defeating all four robot settlements can Hayden reach Mustard Mountain and save his parents!",
+        duration: 4000
+      },
+      {
+        text: "The legend of MUSTARD begins now...",
+        duration: 3000,
+        isLast: true
+      }
+    ];
+    
+    useEffect(() => {
+      if (currentScene < scenes.length - 1) {
+        const timer = setTimeout(() => {
+          setCurrentScene(currentScene + 1);
+        }, scenes[currentScene].duration);
+        
+        return () => clearTimeout(timer);
+      } else {
+        const timer = setTimeout(() => {
+          setGameState((prev) => ({ ...prev, gamePhase: "playing" }));
+          document.body.requestPointerLock();
+        }, scenes[currentScene].duration);
+        
+        return () => clearTimeout(timer);
+      }
+    }, [currentScene]);
+    
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #fdc830 100%)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'white',
+          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+          zIndex: 2000,
+          padding: '40px',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '800px',
+            textAlign: 'center',
+            background: 'rgba(0, 0, 0, 0.6)',
+            padding: '60px',
+            borderRadius: '20px',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+          }}
+        >
+          <h2
+            style={{
+              fontSize: '28px',
+              lineHeight: '1.8',
+              marginBottom: '40px',
+              textShadow: '2px 2px 4px rgba(0, 0, 0, 0.8)',
+              minHeight: '120px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {scenes[currentScene].text}
+          </h2>
+          
+          <div
+            style={{
+              display: 'flex',
+              gap: '20px',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginTop: '30px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                gap: '10px',
+              }}
+            >
+              {scenes.map((_, index) => (
+                <div
+                  key={index}
+                  style={{
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '50%',
+                    background: index === currentScene ? '#fdc830' : 'rgba(255, 255, 255, 0.3)',
+                    transition: 'all 0.3s ease',
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+          
           <button
             onClick={() => {
               setGameState((prev) => ({ ...prev, gamePhase: "playing" }));
               document.body.requestPointerLock();
             }}
             style={{
-              padding: "20px 40px",
-              fontSize: "24px",
-              fontWeight: "bold",
-              background: "#4CAF50",
-              color: "white",
-              border: "none",
-              borderRadius: "12px",
-              cursor: "pointer",
+              marginTop: '40px',
+              padding: '12px 30px',
+              fontSize: '18px',
+              fontWeight: 'bold',
+              background: 'rgba(255, 255, 255, 0.2)',
+              color: 'white',
+              border: '2px solid white',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+            }}
+            onMouseEnter={(e) => {
+              (e.target as HTMLButtonElement).style.background = 'rgba(255, 255, 255, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLButtonElement).style.background = 'rgba(255, 255, 255, 0.2)';
             }}
           >
-            START GAME
+            Skip Cutscene
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Victory Screen
+  if (gameState.gamePhase === "victory") {
+    const currencyEarned = Math.floor(gameState.score / 100);
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #fdc830 100%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+          zIndex: 1000,
+        }}
+      >
+        <div
+          style={{
+            textAlign: "center",
+            padding: "50px",
+            background: "rgba(0,0,0,0.6)",
+            borderRadius: "20px",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+            maxWidth: "700px",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "56px",
+              fontWeight: "bold",
+              marginBottom: "20px",
+              color: "#fdc830",
+              textShadow: "3px 3px 6px rgba(0,0,0,0.8)",
+            }}
+          >
+            🌭 VICTORY! 🌭
+          </h2>
+          <div style={{ fontSize: "24px", marginBottom: "30px", lineHeight: "1.6" }}>
+            <p style={{ marginBottom: "20px" }}>
+              Hayden has conquered all robot settlements<br/>
+              and rescued his parents from Mustard Mountain!
+            </p>
+            <p style={{ fontSize: "18px", opacity: 0.9 }}>
+              The hot dog family is reunited once more,<br/>
+              and peace returns to Hot Dog Haven!
+            </p>
+          </div>
+          <div style={{ marginBottom: "30px", fontSize: "18px" }}>
+            <div style={{ marginBottom: "10px" }}>
+              Final Score: <span style={{ color: "#fdc830", fontWeight: "bold" }}>{gameState.score}</span>
+            </div>
+            <div style={{ marginBottom: "10px" }}>
+              Allies Rescued: <span style={{ color: "#90EE90", fontWeight: "bold" }}>{gameState.story.alliesRescued}</span>
+            </div>
+            <div style={{ marginBottom: "10px" }}>
+              Settlements Conquered: <span style={{ color: "#FFD700", fontWeight: "bold" }}>{gameState.story.settlementsConquered.length}/{SETTLEMENTS.length}</span>
+            </div>
+            <div style={{ marginBottom: "10px" }}>
+              Currency Earned: <span style={{ color: "#4caf50", fontWeight: "bold" }}>{currencyEarned}</span>
+            </div>
+            {!gameState.user.isGuest && (
+              <div style={{ fontSize: "14px", opacity: 0.8, marginTop: "10px" }}>
+                Currency added to your account!
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+            <button
+              onClick={async () => {
+                const newCurrency = gameState.user.isGuest
+                  ? gameState.user.currency
+                  : gameState.user.currency + currencyEarned;
+
+                if (!gameState.user.isGuest && gameState.user.username) {
+                  try {
+                    await fetch("/api/update-currency", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        username: gameState.user.username,
+                        currency: newCurrency,
+                      }),
+                    });
+                  } catch (error) {
+                    console.error("Failed to save currency:", error);
+                  }
+                }
+
+                setGameState((prev) => ({
+                  ...prev,
+                  health: 100,
+                  ammo: 15,
+                  score: 0,
+                  gamePhase: "playing",
+                  enemies: [],
+                  bullets: [],
+                  lastDamageTime: 0,
+                  story: {
+                    currentSettlement: 0,
+                    alliesRescued: 0,
+                    settlementsConquered: [],
+                    totalKills: 0,
+                  },
+                  user: {
+                    ...prev.user,
+                    currency: newCurrency,
+                  },
+                }));
+                document.body.requestPointerLock();
+              }}
+              style={{
+                padding: "15px 30px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                background: "#fdc830",
+                color: "#333",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+                boxShadow: "0 8px 16px rgba(0,0,0,0.3)",
+              }}
+            >
+              PLAY AGAIN
+            </button>
+            <button
+              onClick={async () => {
+                const newCurrency = gameState.user.isGuest
+                  ? gameState.user.currency
+                  : gameState.user.currency + currencyEarned;
+
+                if (!gameState.user.isGuest && gameState.user.username) {
+                  try {
+                    await fetch("/api/update-currency", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        username: gameState.user.username,
+                        currency: newCurrency,
+                      }),
+                    });
+                  } catch (error) {
+                    console.error("Failed to save currency:", error);
+                  }
+                }
+
+                setGameState((prev) => ({
+                  ...prev,
+                  health: 100,
+                  ammo: 15,
+                  score: 0,
+                  gamePhase: "menu",
+                  enemies: [],
+                  bullets: [],
+                  lastDamageTime: 0,
+                  story: {
+                    currentSettlement: 0,
+                    alliesRescued: 0,
+                    settlementsConquered: [],
+                    totalKills: 0,
+                  },
+                  user: {
+                    ...prev.user,
+                    currency: newCurrency,
+                  },
+                }));
+              }}
+              style={{
+                padding: "15px 30px",
+                fontSize: "18px",
+                fontWeight: "bold",
+                background: "rgba(255,255,255,0.2)",
+                color: "white",
+                border: "2px solid white",
+                borderRadius: "8px",
+                cursor: "pointer",
+              }}
+            >
+              RETURN TO MENU
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1184,12 +1596,18 @@ function HUD({
                 setGameState((prev) => ({
                   ...prev,
                   health: 100,
-                  ammo: 30,
+                  ammo: 15,
                   score: 0,
                   gamePhase: "playing",
                   enemies: [],
                   bullets: [],
                   lastDamageTime: 0,
+                  story: {
+                    currentSettlement: 0,
+                    alliesRescued: 0,
+                    settlementsConquered: [],
+                    totalKills: 0,
+                  },
                   user: {
                     ...prev.user,
                     currency: newCurrency,
@@ -1235,12 +1653,18 @@ function HUD({
                 setGameState((prev) => ({
                   ...prev,
                   health: 100,
-                  ammo: 30,
+                  ammo: 15,
                   score: 0,
                   gamePhase: "menu",
                   enemies: [],
                   bullets: [],
                   lastDamageTime: 0,
+                  story: {
+                    currentSettlement: 0,
+                    alliesRescued: 0,
+                    settlementsConquered: [],
+                    totalKills: 0,
+                  },
                   user: {
                     ...prev.user,
                     currency: newCurrency,
@@ -1494,7 +1918,7 @@ function HUD({
         </div>
       </div>
 
-      {/* Score */}
+      {/* Score & Story Progress */}
       <div
         style={{
           position: "absolute",
@@ -1504,11 +1928,24 @@ function HUD({
           padding: "15px",
           borderRadius: "8px",
           color: "white",
-          border: "2px solid rgba(255,255,255,0.3)",
+          border: "2px solid rgba(255,215,0,0.5)",
+          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
         }}
       >
-        <div style={{ fontSize: "14px", fontWeight: "bold" }}>
+        <div style={{ fontSize: "14px", fontWeight: "bold", marginBottom: "8px" }}>
           SCORE: {gameState.score}
+        </div>
+        <div style={{ fontSize: "12px", color: "#fdc830", fontWeight: "bold", marginBottom: "4px" }}>
+          Current Mission:
+        </div>
+        <div style={{ fontSize: "11px", marginBottom: "8px" }}>
+          {SETTLEMENTS[gameState.story.currentSettlement] || "Final Rescue!"}
+        </div>
+        <div style={{ fontSize: "11px", color: "#90EE90" }}>
+          ✓ Allies Rescued: {gameState.story.alliesRescued}
+        </div>
+        <div style={{ fontSize: "11px", color: "#FFD700" }}>
+          ✓ Settlements: {gameState.story.settlementsConquered.length}/{SETTLEMENTS.length}
         </div>
       </div>
     </div>
@@ -1572,6 +2009,12 @@ function Game() {
       isGuest: false,
       currency: 0,
       cosmetics: [],
+    },
+    story: {
+      currentSettlement: 0,
+      alliesRescued: 0,
+      settlementsConquered: [],
+      totalKills: 0,
     },
     lastDamageTime: 0,
     currentWeapon: 1, // Start with pistol

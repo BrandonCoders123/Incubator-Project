@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 
-export type GameState = "menu" | "playing" | "paused" | "gameOver";
+export type GameState = "menu" | "introCutscene" | "playing" | "paused" | "gameOver" | "victory";
 
 export interface PlayerStats {
   health: number;
@@ -11,6 +11,20 @@ export interface PlayerStats {
   score: number;
   kills: number;
 }
+
+export interface StoryProgress {
+  currentSettlement: number;
+  totalSettlements: number;
+  alliesRescued: number;
+  settlementsConquered: string[];
+}
+
+export const SETTLEMENTS = [
+  "Bun Valley Outpost",
+  "Condiment Creek Base",
+  "Relish Ridge Fortress",
+  "Mustard Mountain Stronghold"
+];
 
 export interface Enemy {
   id: string;
@@ -32,6 +46,7 @@ export interface Bullet {
 interface FPSState {
   gameState: GameState;
   playerStats: PlayerStats;
+  storyProgress: StoryProgress;
   enemies: Enemy[];
   bullets: Bullet[];
   isPointerLocked: boolean;
@@ -39,6 +54,8 @@ interface FPSState {
   // Actions
   setGameState: (state: GameState) => void;
   startGame: () => void;
+  startIntroCutscene: () => void;
+  skipCutscene: () => void;
   pauseGame: () => void;
   resumeGame: () => void;
   endGame: () => void;
@@ -49,6 +66,10 @@ interface FPSState {
   shoot: () => boolean;
   reload: () => void;
   addScore: (points: number) => void;
+  
+  // Story actions
+  rescueAlly: () => void;
+  conquerSettlement: () => void;
   
   // Enemy actions
   spawnEnemy: (position: [number, number, number]) => void;
@@ -75,11 +96,25 @@ export const useFPS = create<FPSState>()(
       score: 0,
       kills: 0,
     },
+    storyProgress: {
+      currentSettlement: 0,
+      totalSettlements: SETTLEMENTS.length,
+      alliesRescued: 0,
+      settlementsConquered: [],
+    },
     enemies: [],
     bullets: [],
     isPointerLocked: false,
     
     setGameState: (state) => set({ gameState: state }),
+    
+    startIntroCutscene: () => {
+      set({ gameState: "introCutscene" });
+    },
+    
+    skipCutscene: () => {
+      set({ gameState: "playing" });
+    },
     
     startGame: () => {
       set({
@@ -91,6 +126,12 @@ export const useFPS = create<FPSState>()(
           maxAmmo: 30,
           score: 0,
           kills: 0,
+        },
+        storyProgress: {
+          currentSettlement: 0,
+          totalSettlements: SETTLEMENTS.length,
+          alliesRescued: 0,
+          settlementsConquered: [],
         },
         enemies: [],
         bullets: [],
@@ -171,6 +212,43 @@ export const useFPS = create<FPSState>()(
           kills: state.playerStats.kills + 1
         }
       }));
+    },
+    
+    rescueAlly: () => {
+      set((state) => ({
+        storyProgress: {
+          ...state.storyProgress,
+          alliesRescued: state.storyProgress.alliesRescued + 1
+        }
+      }));
+    },
+    
+    conquerSettlement: () => {
+      set((state) => {
+        const nextSettlement = state.storyProgress.currentSettlement + 1;
+        const settlementName = SETTLEMENTS[state.storyProgress.currentSettlement];
+        const newConquered = [...state.storyProgress.settlementsConquered, settlementName];
+        
+        // Check if all settlements are conquered (victory condition)
+        if (nextSettlement >= SETTLEMENTS.length) {
+          return {
+            storyProgress: {
+              ...state.storyProgress,
+              currentSettlement: nextSettlement,
+              settlementsConquered: newConquered
+            },
+            gameState: "victory" as GameState
+          };
+        }
+        
+        return {
+          storyProgress: {
+            ...state.storyProgress,
+            currentSettlement: nextSettlement,
+            settlementsConquered: newConquered
+          }
+        };
+      });
     },
     
     spawnEnemy: (position) => {
