@@ -1,5 +1,9 @@
 {
   "user_data": {
+    "12345": {
+      "currency": 1000,
+      "cosmetics": []
+    },
     "Weegee700": {
       "currency": 1015,
       "cosmetics": []

@@ -4,6 +4,11 @@
       "username": "Weegee700",
       "password": "first",
       "id": 1
+    },
+    {
+      "username": "12345",
+      "password": "12345",
+      "id": 2
     }
   ]
 }
