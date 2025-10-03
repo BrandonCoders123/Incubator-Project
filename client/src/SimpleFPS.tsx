@@ -86,23 +86,76 @@ const LEVELS = [
   },
 ];
 
+// Enemy types and archetypes
+type EnemyType = "melee" | "ranged";
+
+interface Enemy {
+  id: string;
+  type: EnemyType;
+  position: [number, number, number];
+  velocity: [number, number, number];
+  health: number;
+  nextAttackAt: number;
+}
+
+interface EnemyArchetype {
+  health: number;
+  moveSpeed: number;
+  damage: number;
+  attackInterval: number;
+  color: string;
+}
+
+const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
+  melee: {
+    health: 100,
+    moveSpeed: 3,
+    damage: 10,
+    attackInterval: 1000,
+    color: "#ff0000",
+  },
+  ranged: {
+    health: 100,
+    moveSpeed: 2,
+    damage: 10,
+    attackInterval: 2000, // Medium fire rate
+    color: "#ff6600",
+  },
+};
+
+interface Wall {
+  position: [number, number, number];
+  size: [number, number, number];
+}
+
+interface Ramp {
+  position: [number, number, number];
+  rotation: number;
+  width: number;
+  length: number;
+}
+
 // Simple game state
 interface GameState {
   health: number;
   ammo: number;
   coins: number; // Changed from score to coins
   gamePhase: "login" | "register" | "menu" | "leaderboard" | "settings" | "profile" | "shop" | "introCutscene" | "playing" | "paused" | "gameover" | "victory" | "levelTransition";
-  enemies: Array<{
-    id: string;
-    position: [number, number, number];
-    health: number;
-  }>;
+  enemies: Enemy[];
   bullets: Array<{
     id: string;
     position: [number, number, number];
     direction: [number, number, number];
     damage: number;
   }>;
+  enemyProjectiles: Array<{
+    id: string;
+    position: [number, number, number];
+    direction: [number, number, number];
+    damage: number;
+  }>;
+  walls: Wall[];
+  ramps: Ramp[];
   user: {
     username: string | null;
     isGuest: boolean;
@@ -638,13 +691,15 @@ function Enemy({
   gameState,
   setGameState,
 }: {
-  enemy: { id: string; position: [number, number, number]; health: number };
+  enemy: Enemy;
   gameState: GameState;
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
 }) {
   const enemyRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
   const [isAttacking, setIsAttacking] = useState(false);
+
+  const archetype = ENEMY_ARCHETYPES[enemy.type];
 
   useFrame((state, deltaTime) => {
     // Only update during gameplay
@@ -657,16 +712,36 @@ function Enemy({
       cameraPos.y = enemyPos.y; // Keep same Y level to prevent tilting
       enemyRef.current.lookAt(cameraPos);
 
-      // AI Movement - move towards player
+      // AI Movement - different behavior for melee vs ranged
       const playerPos = camera.position.clone();
       const direction = new THREE.Vector3().subVectors(playerPos, enemyPos);
       direction.y = 0; // Keep movement on horizontal plane
+      const distanceToPlayer = direction.length();
       direction.normalize();
 
-      const moveSpeed = 3; // Enemy movement speed (50% faster)
-      const newPos = enemyPos.add(
-        direction.multiplyScalar(moveSpeed * deltaTime),
-      );
+      let newPos = enemyPos.clone();
+
+      if (enemy.type === "melee") {
+        // Melee: Always move towards player
+        newPos = enemyPos.add(
+          direction.multiplyScalar(archetype.moveSpeed * deltaTime),
+        );
+      } else if (enemy.type === "ranged") {
+        // Ranged: Keep distance of 8-12 units
+        const idealDistance = 10;
+        if (distanceToPlayer < 8) {
+          // Too close, back away
+          newPos = enemyPos.add(
+            direction.multiplyScalar(-archetype.moveSpeed * deltaTime),
+          );
+        } else if (distanceToPlayer > 12) {
+          // Too far, move closer
+          newPos = enemyPos.add(
+            direction.multiplyScalar(archetype.moveSpeed * deltaTime),
+          );
+        }
+        // If in ideal range (8-12), don't move much
+      }
 
       // Update enemy position in game state
       setGameState((prev) => ({
@@ -685,28 +760,50 @@ function Enemy({
         ),
       }));
 
-      // Check contact damage (melee attack) - only if still playing
-      const distanceToPlayer = enemyPos.distanceTo(playerPos);
-      
-      // Trigger attack animation when close
+      // Attack logic
       setIsAttacking(distanceToPlayer < 2.5);
       
-      if (distanceToPlayer < 1.5 && gameState.gamePhase === "playing") {
-        // Contact range
+      if (enemy.type === "melee") {
+        // Melee: Contact damage
+        if (distanceToPlayer < 1.5 && gameState.gamePhase === "playing") {
+          const currentTime = Date.now();
+          setGameState((prev) => {
+            if (currentTime - prev.lastDamageTime > archetype.attackInterval && prev.gamePhase === "playing") {
+              const newHealth = Math.max(0, prev.health - archetype.damage);
+              return {
+                ...prev,
+                health: newHealth,
+                lastDamageTime: currentTime,
+                gamePhase: newHealth <= 0 ? "gameover" : prev.gamePhase,
+              };
+            }
+            return prev;
+          });
+        }
+      } else if (enemy.type === "ranged") {
+        // Ranged: Shoot projectiles
         const currentTime = Date.now();
-        setGameState((prev) => {
-          // Only damage if 1 second has passed since last damage and still playing
-          if (currentTime - prev.lastDamageTime > 1000 && prev.gamePhase === "playing") {
-            const newHealth = Math.max(0, prev.health - 10);
-            return {
-              ...prev,
-              health: newHealth,
-              lastDamageTime: currentTime,
-              gamePhase: newHealth <= 0 ? "gameover" : prev.gamePhase,
-            };
-          }
-          return prev;
-        });
+        if (currentTime >= enemy.nextAttackAt && distanceToPlayer < 20) {
+          // Spawn enemy projectile
+          const projectileDir = direction.clone();
+          setGameState((prev) => ({
+            ...prev,
+            enemies: prev.enemies.map((e) =>
+              e.id === enemy.id
+                ? { ...e, nextAttackAt: currentTime + archetype.attackInterval }
+                : e,
+            ),
+            enemyProjectiles: [
+              ...prev.enemyProjectiles,
+              {
+                id: `enemyproj_${Date.now()}_${Math.random()}`,
+                position: [enemyPos.x, enemyPos.y + 1, enemyPos.z],
+                direction: [projectileDir.x, projectileDir.y, projectileDir.z],
+                damage: archetype.damage,
+              },
+            ],
+          }));
+        }
       }
     }
 
@@ -787,7 +884,20 @@ function Enemy({
 
   return (
     <group ref={enemyRef} position={enemy.position}>
-      <RobotModel isAttacking={isAttacking} />
+      {/* Simple colored cube for enemy - color based on type */}
+      <mesh>
+        <boxGeometry args={[0.8, 1.5, 0.8]} />
+        <meshStandardMaterial color={archetype.color} />
+      </mesh>
+      {/* Health bar above enemy */}
+      <mesh position={[0, 2, 0]}>
+        <planeGeometry args={[1, 0.1]} />
+        <meshBasicMaterial 
+          color={enemy.health > 50 ? "#00ff00" : "#ff0000"} 
+          opacity={0.8}
+          transparent
+        />
+      </mesh>
     </group>
   );
 }
@@ -802,6 +912,90 @@ function Bullet({
     <mesh position={bullet.position}>
       <sphereGeometry args={[0.05]} />
       <meshBasicMaterial transparent opacity={0} />
+    </mesh>
+  );
+}
+
+// Enemy Projectile Component (visible and slow)
+function EnemyProjectile({
+  projectile,
+  gameState,
+  setGameState,
+}: {
+  projectile: {
+    id: string;
+    position: [number, number, number];
+    direction: [number, number, number];
+    damage: number;
+  };
+  gameState: GameState;
+  setGameState: React.Dispatch<React.SetStateAction<GameState>>;
+}) {
+  const projectileRef = useRef<THREE.Mesh>(null);
+  const { camera } = useThree();
+
+  useFrame((state, deltaTime) => {
+    if (gameState.gamePhase !== "playing") return;
+
+    const projectileSpeed = 8; // Slow, visible speed
+    const currentPos = new THREE.Vector3(...projectile.position);
+    const direction = new THREE.Vector3(...projectile.direction);
+
+    const newPos = currentPos.add(
+      direction.multiplyScalar(projectileSpeed * deltaTime),
+    );
+
+    // Update projectile position
+    setGameState((prev) => ({
+      ...prev,
+      enemyProjectiles: prev.enemyProjectiles.map((p) =>
+        p.id === projectile.id
+          ? {
+              ...p,
+              position: [newPos.x, newPos.y, newPos.z] as [
+                number,
+                number,
+                number,
+              ],
+            }
+          : p,
+      ),
+    }));
+
+    // Check collision with player
+    const playerPos = camera.position;
+    const distanceToPlayer = currentPos.distanceTo(playerPos);
+
+    if (distanceToPlayer < 1) {
+      // Hit player
+      setGameState((prev) => {
+        const newHealth = Math.max(0, prev.health - projectile.damage);
+        return {
+          ...prev,
+          health: newHealth,
+          enemyProjectiles: prev.enemyProjectiles.filter(
+            (p) => p.id !== projectile.id,
+          ),
+          gamePhase: newHealth <= 0 ? "gameover" : prev.gamePhase,
+        };
+      });
+    }
+
+    // Remove if out of bounds
+    if (newPos.length() > 50) {
+      setGameState((prev) => ({
+        ...prev,
+        enemyProjectiles: prev.enemyProjectiles.filter(
+          (p) => p.id !== projectile.id,
+        ),
+      }));
+    }
+  });
+
+  return (
+    <mesh ref={projectileRef} position={projectile.position}>
+      <sphereGeometry args={[0.2]} />
+      <meshBasicMaterial color="#ff6600" emissive="#ff6600" />
     </mesh>
   );
 }
@@ -2743,14 +2937,27 @@ function GameLogic({
       const x = Math.sin(angle) * distance;
       const z = Math.cos(angle) * distance;
 
+      // Choose enemy type based on level
+      // Level 0 (Bun Valley): melee only
+      // Level 1+ (Robot Factory, Palace): 50% melee, 50% ranged
+      let enemyType: EnemyType = "melee";
+      if (gameState.level.currentLevel >= 1) {
+        enemyType = Math.random() < 0.5 ? "melee" : "ranged";
+      }
+
+      const archetype = ENEMY_ARCHETYPES[enemyType];
+
       setGameState((prev) => ({
         ...prev,
         enemies: [
           ...prev.enemies,
           {
-            id: `enemy_${Date.now()}`,
+            id: `enemy_${Date.now()}_${Math.random()}`,
+            type: enemyType,
             position: [x, 1, z],
-            health: 50,
+            velocity: [0, 0, 0],
+            health: archetype.health,
+            nextAttackAt: 0,
           },
         ],
       }));
@@ -2771,6 +2978,9 @@ function Game() {
     gamePhase: "login",
     enemies: [],
     bullets: [],
+    enemyProjectiles: [],
+    walls: [],
+    ramps: [],
     user: {
       username: null,
       isGuest: false,
@@ -2829,6 +3039,15 @@ function Game() {
 
           {gameState.bullets.map((bullet) => (
             <Bullet key={bullet.id} bullet={bullet} />
+          ))}
+
+          {gameState.enemyProjectiles.map((projectile) => (
+            <EnemyProjectile
+              key={projectile.id}
+              projectile={projectile}
+              gameState={gameState}
+              setGameState={setGameState}
+            />
           ))}
 
           <GameLogic gameState={gameState} setGameState={setGameState} />
