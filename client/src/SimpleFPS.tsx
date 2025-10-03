@@ -235,6 +235,69 @@ function checkWallCollision(
   return false;
 }
 
+// Ramp collision detection helper
+function checkRampCollision(
+  position: THREE.Vector3,
+  ramps: Ramp[],
+  radius: number = 0.5
+): boolean {
+  for (const ramp of ramps) {
+    const [rx, ry, rz] = ramp.position;
+    // Treat ramp as a simple box for collision (horizontal check)
+    const halfWidth = ramp.width / 2;
+    const halfLength = ramp.length / 2;
+    
+    if (
+      position.x + radius > rx - halfWidth &&
+      position.x - radius < rx + halfWidth &&
+      position.z + radius > rz - halfLength &&
+      position.z - radius < rz + halfLength &&
+      position.y < ry + 2 // Check if player is at ramp height
+    ) {
+      return true; // Collision detected
+    }
+  }
+  return false;
+}
+
+// Block/platform collision detection helper
+function checkBlockCollision(
+  position: THREE.Vector3,
+  radius: number = 0.5
+): boolean {
+  // Central platform at [0, 0.5, 0] with size [8, 1, 8]
+  const blockX = 0;
+  const blockY = 0.5;
+  const blockZ = 0;
+  const halfWidth = 8 / 2;
+  const halfHeight = 1 / 2;
+  const halfDepth = 8 / 2;
+  
+  if (
+    position.x + radius > blockX - halfWidth &&
+    position.x - radius < blockX + halfWidth &&
+    position.z + radius > blockZ - halfDepth &&
+    position.z - radius < blockZ + halfDepth &&
+    position.y + radius > blockY - halfHeight &&
+    position.y - radius < blockY + halfHeight
+  ) {
+    return true; // Collision detected
+  }
+  
+  return false;
+}
+
+// Get ramps for current level
+function getRampsForLevel(level: number): Ramp[] {
+  if (level >= 1) {
+    return [
+      { position: [-15, 1, -20], rotation: 0, width: 4, length: 8 },
+      { position: [15, 1, 20], rotation: Math.PI, width: 4, length: 8 },
+    ];
+  }
+  return [];
+}
+
 // Get walls for current level
 function getWallsForLevel(level: number): { position: number[]; size: number[] }[] {
   if (level === 0) {
@@ -624,19 +687,32 @@ function Player({
 
       // Wall collision detection
       const walls = getWallsForLevel(gameState.level.currentLevel);
-      if (checkWallCollision(newPos, walls, 0.5)) {
+      const ramps = getRampsForLevel(gameState.level.currentLevel);
+      
+      const hasWallCollision = checkWallCollision(newPos, walls, 0.5);
+      const hasRampCollision = checkRampCollision(newPos, ramps, 0.5);
+      const hasBlockCollision = checkBlockCollision(newPos, 0.5);
+      
+      if (hasWallCollision || hasRampCollision || hasBlockCollision) {
         // Collision detected, don't move in that direction
-        // Try sliding along walls - check X and Z separately
+        // Try sliding along obstacles - check X and Z separately
         const xOnly = playerRef.current.position.clone();
         xOnly.x = newPos.x;
         const zOnly = playerRef.current.position.clone();
         zOnly.z = newPos.z;
 
-        if (!checkWallCollision(xOnly, walls, 0.5)) {
+        const canMoveX = !checkWallCollision(xOnly, walls, 0.5) && 
+                        !checkRampCollision(xOnly, ramps, 0.5) && 
+                        !checkBlockCollision(xOnly, 0.5);
+        const canMoveZ = !checkWallCollision(zOnly, walls, 0.5) && 
+                        !checkRampCollision(zOnly, ramps, 0.5) && 
+                        !checkBlockCollision(zOnly, 0.5);
+
+        if (canMoveX) {
           // Can move in X direction
           newPos.x = xOnly.x;
           newPos.z = playerRef.current.position.z;
-        } else if (!checkWallCollision(zOnly, walls, 0.5)) {
+        } else if (canMoveZ) {
           // Can move in Z direction
           newPos.z = zOnly.z;
           newPos.x = playerRef.current.position.x;
@@ -1074,6 +1150,7 @@ function Enemy({
             level: {
               currentLevel: prev.level.currentLevel,
               killsThisLevel: newLevelKills,
+              giantsSpawnedThisLevel: prev.level.giantsSpawnedThisLevel,
             },
             gamePhase: nextPhase,
           };
@@ -2577,6 +2654,7 @@ function HUD({
                   level: {
                     currentLevel: 0,
                     killsThisLevel: 0,
+                    giantsSpawnedThisLevel: 0,
                   },
                   unlockedWeapons: [1],
                   inventory: [],
@@ -2641,6 +2719,7 @@ function HUD({
                   level: {
                     currentLevel: 0,
                     killsThisLevel: 0,
+                    giantsSpawnedThisLevel: 0,
                   },
                   user: {
                     ...prev.user,
@@ -2764,6 +2843,7 @@ function HUD({
                   level: {
                     currentLevel: 0,
                     killsThisLevel: 0,
+                    giantsSpawnedThisLevel: 0,
                   },
                   unlockedWeapons: [1],
                   inventory: [],
@@ -2828,6 +2908,7 @@ function HUD({
                   level: {
                     currentLevel: 0,
                     killsThisLevel: 0,
+                    giantsSpawnedThisLevel: 0,
                   },
                   user: {
                     ...prev.user,
