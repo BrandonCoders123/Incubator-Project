@@ -61,12 +61,37 @@ const SETTLEMENTS = [
   "Mustard Mountain Stronghold"
 ];
 
+// Level definitions
+const LEVELS = [
+  {
+    id: 1,
+    name: "Bun Valley Outpost",
+    description: "The journey begins at the outer settlements",
+    killsRequired: 15,
+    spawnRate: 3,
+  },
+  {
+    id: 2,
+    name: "Robot Factory",
+    description: "The source of the mechanical menace",
+    killsRequired: 25,
+    spawnRate: 2.5,
+  },
+  {
+    id: 3,
+    name: "Palace of the Robot King",
+    description: "Final showdown - rescue your parents!",
+    killsRequired: 30,
+    spawnRate: 2,
+  },
+];
+
 // Simple game state
 interface GameState {
   health: number;
   ammo: number;
-  score: number;
-  gamePhase: "login" | "register" | "menu" | "leaderboard" | "settings" | "profile" | "shop" | "introCutscene" | "playing" | "paused" | "gameover" | "victory";
+  coins: number; // Changed from score to coins
+  gamePhase: "login" | "register" | "menu" | "leaderboard" | "settings" | "profile" | "shop" | "introCutscene" | "playing" | "paused" | "gameover" | "victory" | "levelTransition";
   enemies: Array<{
     id: string;
     position: [number, number, number];
@@ -89,6 +114,10 @@ interface GameState {
     alliesRescued: number;
     settlementsConquered: string[];
     totalKills: number;
+  };
+  level: {
+    currentLevel: number;
+    killsThisLevel: number;
   };
   lastDamageTime: number;
   currentWeapon: number;
@@ -688,10 +717,11 @@ function Enemy({
         // Hit enemy
         setGameState((prev) => {
           const enemyKilled = enemy.health - bullet.damage <= 0;
-          const newScore = enemyKilled ? prev.score + 100 : prev.score;
+          const newCoins = enemyKilled ? prev.coins + 1 : prev.coins; // 1 coin per kill
           
           // Increment kill counter only if enemy died
           const newKills = enemyKilled ? prev.story.totalKills + 1 : prev.story.totalKills;
+          const newLevelKills = enemyKilled ? prev.level.killsThisLevel + 1 : prev.level.killsThisLevel;
           
           // Every 10 kills = conquer a settlement
           const newSettlementIndex = Math.floor(newKills / 10);
@@ -711,6 +741,12 @@ function Enemy({
           // Check victory condition - all settlements conquered
           const allConquered = newSettlementIndex >= SETTLEMENTS.length;
           
+          // Check level progression
+          const currentLevelData = LEVELS[prev.level.currentLevel];
+          const shouldLevelUp = currentLevelData && newLevelKills >= currentLevelData.killsRequired;
+          const nextLevel = prev.level.currentLevel + 1;
+          const hasNextLevel = nextLevel < LEVELS.length;
+          
           return {
             ...prev,
             bullets: prev.bullets.filter((b) => b.id !== bullet.id),
@@ -721,14 +757,18 @@ function Enemy({
                   : e,
               )
               .filter((e) => e.health > 0),
-            score: newScore,
+            coins: newCoins,
             story: {
               currentSettlement: Math.min(newSettlementIndex, SETTLEMENTS.length - 1),
               alliesRescued: newAlliesRescued,
               settlementsConquered: newSettlementsConquered,
               totalKills: newKills,
             },
-            gamePhase: allConquered ? "victory" : prev.gamePhase,
+            level: {
+              currentLevel: prev.level.currentLevel,
+              killsThisLevel: newLevelKills,
+            },
+            gamePhase: shouldLevelUp && hasNextLevel ? "levelTransition" : (allConquered ? "victory" : prev.gamePhase),
           };
         });
       }
@@ -1820,9 +1860,111 @@ function HUD({
     );
   }
 
+  // Level Transition Cutscene
+  if (gameState.gamePhase === "levelTransition") {
+    const completedLevel = LEVELS[gameState.level.currentLevel];
+    const nextLevel = LEVELS[gameState.level.currentLevel + 1];
+    
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+          zIndex: 1000,
+        }}
+      >
+        <div
+          style={{
+            textAlign: "center",
+            padding: "50px",
+            background: "rgba(0,0,0,0.7)",
+            borderRadius: "20px",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+            maxWidth: "700px",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "48px",
+              fontWeight: "bold",
+              marginBottom: "20px",
+              color: "#4caf50",
+              textShadow: "3px 3px 6px rgba(0,0,0,0.8)",
+            }}
+          >
+            ✅ LEVEL COMPLETE!
+          </h2>
+          <div style={{ fontSize: "20px", marginBottom: "30px", lineHeight: "1.8" }}>
+            <p style={{ marginBottom: "15px", color: "#ffeb3b" }}>
+              You've conquered <strong>{completedLevel?.name}</strong>!
+            </p>
+            <p style={{ fontSize: "18px", opacity: 0.9, marginBottom: "20px" }}>
+              Coins Earned: <span style={{ color: "#fdc830", fontWeight: "bold" }}>{gameState.level.killsThisLevel}</span>
+            </p>
+          </div>
+          
+          {nextLevel && (
+            <div style={{ marginBottom: "30px", padding: "20px", background: "rgba(255,215,0,0.1)", borderRadius: "10px" }}>
+              <h3 style={{ fontSize: "24px", color: "#fdc830", marginBottom: "10px" }}>
+                🎯 NEXT MISSION
+              </h3>
+              <p style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "5px" }}>
+                {nextLevel.name}
+              </p>
+              <p style={{ fontSize: "16px", opacity: 0.8 }}>
+                {nextLevel.description}
+              </p>
+            </div>
+          )}
+          
+          <button
+            onClick={() => {
+              setGameState((prev) => ({
+                ...prev,
+                gamePhase: "playing",
+                health: 100,
+                ammo: weapons[prev.currentWeapon].maxAmmo,
+                enemies: [],
+                bullets: [],
+                level: {
+                  currentLevel: prev.level.currentLevel + 1,
+                  killsThisLevel: 0,
+                },
+              }));
+              document.body.requestPointerLock();
+            }}
+            style={{
+              padding: "20px 40px",
+              fontSize: "24px",
+              fontWeight: "bold",
+              background: "#fdc830",
+              color: "#333",
+              border: "none",
+              borderRadius: "12px",
+              cursor: "pointer",
+              boxShadow: "0 8px 16px rgba(0,0,0,0.3)",
+              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+            }}
+          >
+            CONTINUE ADVENTURE →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Victory Screen
   if (gameState.gamePhase === "victory") {
-    const currencyEarned = Math.floor(gameState.score / 100);
+    const currencyEarned = gameState.coins;
     return (
       <div
         style={{
@@ -1873,7 +2015,7 @@ function HUD({
           </div>
           <div style={{ marginBottom: "30px", fontSize: "18px" }}>
             <div style={{ marginBottom: "10px" }}>
-              Final Score: <span style={{ color: "#fdc830", fontWeight: "bold" }}>{gameState.score}</span>
+              Total Coins: <span style={{ color: "#fdc830", fontWeight: "bold" }}>{gameState.coins}</span>
             </div>
             <div style={{ marginBottom: "10px" }}>
               Allies Rescued: <span style={{ color: "#90EE90", fontWeight: "bold" }}>{gameState.story.alliesRescued}</span>
@@ -1916,7 +2058,7 @@ function HUD({
                   ...prev,
                   health: 100,
                   ammo: 15,
-                  score: 0,
+                  coins: 0,
                   gamePhase: "playing",
                   enemies: [],
                   bullets: [],
@@ -1926,6 +2068,10 @@ function HUD({
                     alliesRescued: 0,
                     settlementsConquered: [],
                     totalKills: 0,
+                  },
+                  level: {
+                    currentLevel: 0,
+                    killsThisLevel: 0,
                   },
                   user: {
                     ...prev.user,
@@ -1973,7 +2119,7 @@ function HUD({
                   ...prev,
                   health: 100,
                   ammo: 15,
-                  score: 0,
+                  coins: 0,
                   gamePhase: "menu",
                   enemies: [],
                   bullets: [],
@@ -1983,6 +2129,10 @@ function HUD({
                     alliesRescued: 0,
                     settlementsConquered: [],
                     totalKills: 0,
+                  },
+                  level: {
+                    currentLevel: 0,
+                    killsThisLevel: 0,
                   },
                   user: {
                     ...prev.user,
@@ -2011,7 +2161,7 @@ function HUD({
 
   // Game Over Screen
   if (gameState.gamePhase === "gameover") {
-    const currencyEarned = Math.floor(gameState.score / 100);
+    const currencyEarned = gameState.coins;
     return (
       <div
         style={{
@@ -2050,8 +2200,8 @@ function HUD({
           </h2>
           <div style={{ marginBottom: "30px", fontSize: "20px" }}>
             <div style={{ marginBottom: "10px" }}>
-              Final Score:{" "}
-              <span style={{ color: "#ffeb3b" }}>{gameState.score}</span>
+              Total Coins:{" "}
+              <span style={{ color: "#ffeb3b" }}>{gameState.coins}</span>
             </div>
             <div style={{ marginBottom: "10px" }}>
               Currency Earned:{" "}
@@ -2092,7 +2242,7 @@ function HUD({
                   ...prev,
                   health: 100,
                   ammo: 15,
-                  score: 0,
+                  coins: 0,
                   gamePhase: "playing",
                   enemies: [],
                   bullets: [],
@@ -2102,6 +2252,10 @@ function HUD({
                     alliesRescued: 0,
                     settlementsConquered: [],
                     totalKills: 0,
+                  },
+                  level: {
+                    currentLevel: 0,
+                    killsThisLevel: 0,
                   },
                   user: {
                     ...prev.user,
@@ -2149,7 +2303,7 @@ function HUD({
                   ...prev,
                   health: 100,
                   ammo: 15,
-                  score: 0,
+                  coins: 0,
                   gamePhase: "menu",
                   enemies: [],
                   bullets: [],
@@ -2159,6 +2313,10 @@ function HUD({
                     alliesRescued: 0,
                     settlementsConquered: [],
                     totalKills: 0,
+                  },
+                  level: {
+                    currentLevel: 0,
+                    killsThisLevel: 0,
                   },
                   user: {
                     ...prev.user,
@@ -2249,7 +2407,7 @@ function HUD({
                   gamePhase: "login",
                   health: 100,
                   ammo: 30,
-                  score: 0,
+                  coins: 0,
                   enemies: [],
                   bullets: [],
                   user: {
@@ -2413,7 +2571,7 @@ function HUD({
         </div>
       </div>
 
-      {/* Score & Story Progress */}
+      {/* Coins & Level Progress */}
       <div
         style={{
           position: "absolute",
@@ -2427,14 +2585,14 @@ function HUD({
           fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
         }}
       >
-        <div style={{ fontSize: "14px", fontWeight: "bold", marginBottom: "8px" }}>
-          SCORE: {gameState.score}
+        <div style={{ fontSize: "14px", fontWeight: "bold", marginBottom: "8px", color: "#fdc830" }}>
+          💰 COINS: {gameState.coins}
         </div>
-        <div style={{ fontSize: "12px", color: "#fdc830", fontWeight: "bold", marginBottom: "4px" }}>
-          Current Mission:
+        <div style={{ fontSize: "12px", color: "#ffeb3b", fontWeight: "bold", marginBottom: "4px" }}>
+          {LEVELS[gameState.level.currentLevel]?.name || "Final Level"}
         </div>
         <div style={{ fontSize: "11px", marginBottom: "8px" }}>
-          {SETTLEMENTS[gameState.story.currentSettlement] || "Final Rescue!"}
+          Kills: {gameState.level.killsThisLevel}/{LEVELS[gameState.level.currentLevel]?.killsRequired || "∞"}
         </div>
         <div style={{ fontSize: "11px", color: "#90EE90" }}>
           ✓ Allies Rescued: {gameState.story.alliesRescued}
@@ -2460,10 +2618,13 @@ function GameLogic({
   useFrame((state) => {
     if (gameState.gamePhase !== "playing") return;
 
-    // Spawn enemies
+    // Spawn enemies with level-based spawn rate
     const currentTime = state.clock.elapsedTime;
+    const currentLevelData = LEVELS[gameState.level.currentLevel];
+    const spawnRate = currentLevelData?.spawnRate || 3; // Default 3 seconds if no level
+    
     if (
-      currentTime - lastSpawnTime.current > 3 &&
+      currentTime - lastSpawnTime.current > spawnRate &&
       gameState.enemies.length < 10
     ) {
       const angle = Math.random() * Math.PI * 2;
@@ -2495,7 +2656,7 @@ function Game() {
   const [gameState, setGameState] = useState<GameState>({
     health: 100,
     ammo: 15, // Start with pistol ammo
-    score: 0,
+    coins: 0, // Changed from score to coins
     gamePhase: "login",
     enemies: [],
     bullets: [],
@@ -2510,6 +2671,10 @@ function Game() {
       alliesRescued: 0,
       settlementsConquered: [],
       totalKills: 0,
+    },
+    level: {
+      currentLevel: 0,
+      killsThisLevel: 0,
     },
     lastDamageTime: 0,
     currentWeapon: 1, // Start with pistol
