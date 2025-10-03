@@ -66,7 +66,7 @@ interface GameState {
   health: number;
   ammo: number;
   score: number;
-  gamePhase: "login" | "register" | "menu" | "introCutscene" | "playing" | "paused" | "gameover" | "victory";
+  gamePhase: "login" | "register" | "menu" | "leaderboard" | "settings" | "profile" | "shop" | "introCutscene" | "playing" | "paused" | "gameover" | "victory";
   enemies: Array<{
     id: string;
     position: [number, number, number];
@@ -1396,42 +1396,150 @@ function HUD({
             Help Hayden the hot dog rescue his parents from the robot hot dogs!<br/>
             Conquer settlements and make allies along the way.
           </p>
-          <div style={{ marginBottom: "30px", fontSize: "16px", lineHeight: "1.8" }}>
-            <div>
-              <strong>WASD</strong> - Move around
-            </div>
-            <div>
-              <strong>MOUSE</strong> - Look around
-            </div>
-            <div>
-              <strong>CLICK</strong> - Shoot
-            </div>
-            <div>
-              <strong>R</strong> - Reload
-            </div>
-            <div>
-              <strong>1-4</strong> - Switch weapons
-            </div>
+          
+          {/* Navigation Grid */}
+          <div style={{ 
+            display: "grid", 
+            gridTemplateColumns: "1fr 1fr", 
+            gap: "15px", 
+            marginBottom: "20px" 
+          }}>
+            <button
+              onClick={() => {
+                setGameState((prev) => ({ ...prev, gamePhase: "introCutscene" }));
+              }}
+              style={{
+                padding: "20px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                background: "#fdc830",
+                color: "#333",
+                border: "none",
+                borderRadius: "12px",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                transition: "transform 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1.05)";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1)";
+              }}
+            >
+              🎮 PLAY GAME
+            </button>
+            
+            <button
+              onClick={() => {
+                setGameState((prev) => ({ ...prev, gamePhase: "leaderboard" }));
+              }}
+              style={{
+                padding: "20px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                background: "#4CAF50",
+                color: "white",
+                border: "none",
+                borderRadius: "12px",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                transition: "transform 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1.05)";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1)";
+              }}
+            >
+              🏆 LEADERBOARD
+            </button>
+            
+            <button
+              onClick={() => {
+                setGameState((prev) => ({ ...prev, gamePhase: "profile" }));
+              }}
+              style={{
+                padding: "20px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                background: "#2196F3",
+                color: "white",
+                border: "none",
+                borderRadius: "12px",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                transition: "transform 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1.05)";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1)";
+              }}
+            >
+              👤 PROFILE
+            </button>
+            
+            <button
+              onClick={() => {
+                setGameState((prev) => ({ ...prev, gamePhase: "shop" }));
+              }}
+              style={{
+                padding: "20px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                background: "#9C27B0",
+                color: "white",
+                border: "none",
+                borderRadius: "12px",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                transition: "transform 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1.05)";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1)";
+              }}
+            >
+              🛒 SHOP
+            </button>
+            
+            <button
+              onClick={() => {
+                setGameState((prev) => ({ ...prev, gamePhase: "settings" }));
+              }}
+              style={{
+                padding: "20px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                background: "#FF9800",
+                color: "white",
+                border: "none",
+                borderRadius: "12px",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                gridColumn: "1 / -1",
+                transition: "transform 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1.05)";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1)";
+              }}
+            >
+              ⚙️ SETTINGS
+            </button>
           </div>
-          <button
-            onClick={() => {
-              setGameState((prev) => ({ ...prev, gamePhase: "introCutscene" }));
-            }}
-            style={{
-              padding: "20px 40px",
-              fontSize: "24px",
-              fontWeight: "bold",
-              background: "#fdc830",
-              color: "#333",
-              border: "none",
-              borderRadius: "12px",
-              cursor: "pointer",
-              boxShadow: "0 8px 16px rgba(0,0,0,0.3)",
-              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-            }}
-          >
-            START ADVENTURE
-          </button>
         </div>
       </div>
     );
@@ -1440,6 +1548,276 @@ function HUD({
   // Intro Cutscene
   if (gameState.gamePhase === "introCutscene") {
     return <IntroCutscene setGameState={setGameState} />;
+  }
+
+  // Leaderboard Page
+  if (gameState.gamePhase === "leaderboard") {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "linear-gradient(135deg, #4CAF50 0%, #2e7d32 100%)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+          zIndex: 1000,
+        }}
+      >
+        <div
+          style={{
+            textAlign: "center",
+            padding: "50px",
+            background: "rgba(0,0,0,0.6)",
+            borderRadius: "20px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+            maxWidth: "800px",
+          }}
+        >
+          <h1
+            style={{
+              fontSize: "48px",
+              marginBottom: "30px",
+              textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
+            }}
+          >
+            🏆 LEADERBOARD
+          </h1>
+          <p style={{ fontSize: "20px", marginBottom: "40px" }}>
+            Coming soon! Track top players and compete for the highest scores.
+          </p>
+          <button
+            onClick={() => {
+              setGameState((prev) => ({ ...prev, gamePhase: "menu" }));
+            }}
+            style={{
+              padding: "15px 40px",
+              fontSize: "20px",
+              fontWeight: "bold",
+              background: "#fdc830",
+              color: "#333",
+              border: "none",
+              borderRadius: "12px",
+              cursor: "pointer",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+            }}
+          >
+            BACK TO MENU
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Settings Page
+  if (gameState.gamePhase === "settings") {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "linear-gradient(135deg, #FF9800 0%, #F57C00 100%)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+          zIndex: 1000,
+        }}
+      >
+        <div
+          style={{
+            textAlign: "center",
+            padding: "50px",
+            background: "rgba(0,0,0,0.6)",
+            borderRadius: "20px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+            maxWidth: "800px",
+          }}
+        >
+          <h1
+            style={{
+              fontSize: "48px",
+              marginBottom: "30px",
+              textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
+            }}
+          >
+            ⚙️ SETTINGS
+          </h1>
+          <p style={{ fontSize: "20px", marginBottom: "40px" }}>
+            Coming soon! Adjust game settings, controls, and preferences.
+          </p>
+          <button
+            onClick={() => {
+              setGameState((prev) => ({ ...prev, gamePhase: "menu" }));
+            }}
+            style={{
+              padding: "15px 40px",
+              fontSize: "20px",
+              fontWeight: "bold",
+              background: "#fdc830",
+              color: "#333",
+              border: "none",
+              borderRadius: "12px",
+              cursor: "pointer",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+            }}
+          >
+            BACK TO MENU
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Profile Page
+  if (gameState.gamePhase === "profile") {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "linear-gradient(135deg, #2196F3 0%, #1976D2 100%)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+          zIndex: 1000,
+        }}
+      >
+        <div
+          style={{
+            textAlign: "center",
+            padding: "50px",
+            background: "rgba(0,0,0,0.6)",
+            borderRadius: "20px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+            maxWidth: "800px",
+          }}
+        >
+          <h1
+            style={{
+              fontSize: "48px",
+              marginBottom: "30px",
+              textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
+            }}
+          >
+            👤 PROFILE
+          </h1>
+          <p style={{ fontSize: "20px", marginBottom: "20px" }}>
+            Player: {gameState.user.username}
+          </p>
+          <p style={{ fontSize: "18px", marginBottom: "40px" }}>
+            Coming soon! View your stats, achievements, and game history.
+          </p>
+          <button
+            onClick={() => {
+              setGameState((prev) => ({ ...prev, gamePhase: "menu" }));
+            }}
+            style={{
+              padding: "15px 40px",
+              fontSize: "20px",
+              fontWeight: "bold",
+              background: "#fdc830",
+              color: "#333",
+              border: "none",
+              borderRadius: "12px",
+              cursor: "pointer",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+            }}
+          >
+            BACK TO MENU
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Shop Page
+  if (gameState.gamePhase === "shop") {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+          zIndex: 1000,
+        }}
+      >
+        <div
+          style={{
+            textAlign: "center",
+            padding: "50px",
+            background: "rgba(0,0,0,0.6)",
+            borderRadius: "20px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+            maxWidth: "800px",
+          }}
+        >
+          <h1
+            style={{
+              fontSize: "48px",
+              marginBottom: "30px",
+              textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
+            }}
+          >
+            🛒 SHOP
+          </h1>
+          <p style={{ fontSize: "20px", marginBottom: "20px" }}>
+            Currency: {gameState.user.currency}
+          </p>
+          <p style={{ fontSize: "18px", marginBottom: "40px" }}>
+            Coming soon! Purchase weapons, skins, and power-ups.
+          </p>
+          <button
+            onClick={() => {
+              setGameState((prev) => ({ ...prev, gamePhase: "menu" }));
+            }}
+            style={{
+              padding: "15px 40px",
+              fontSize: "20px",
+              fontWeight: "bold",
+              background: "#fdc830",
+              color: "#333",
+              border: "none",
+              borderRadius: "12px",
+              cursor: "pointer",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+            }}
+          >
+            BACK TO MENU
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Victory Screen
