@@ -87,7 +87,7 @@ const LEVELS = [
 ];
 
 // Enemy types and archetypes
-type EnemyType = "melee" | "ranged";
+type EnemyType = "melee" | "ranged" | "giant";
 
 interface Enemy {
   id: string;
@@ -104,6 +104,7 @@ interface EnemyArchetype {
   damage: number;
   attackInterval: number;
   color: string;
+  size?: number; // Optional size multiplier (default 1)
 }
 
 const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
@@ -120,6 +121,14 @@ const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     damage: 10,
     attackInterval: 2000, // Medium fire rate
     color: "#ff6600",
+  },
+  giant: {
+    health: 400,
+    moveSpeed: 1.5,
+    damage: 25,
+    attackInterval: 1500,
+    color: "#990000",
+    size: 2, // 2x larger than normal enemies
   },
 };
 
@@ -171,6 +180,7 @@ interface GameState {
   level: {
     currentLevel: number;
     killsThisLevel: number;
+    giantsSpawnedThisLevel: number;
   };
   unlockedWeapons: number[]; // Array of weapon IDs that are unlocked
   inventory: string[]; // Items purchased (like "token")
@@ -2414,6 +2424,7 @@ function HUD({
                   level: {
                     currentLevel: prev.level.currentLevel + 1,
                     killsThisLevel: 0,
+                    giantsSpawnedThisLevel: 0,
                   },
                   unlockedWeapons: newUnlockedWeapons,
                 };
@@ -3133,10 +3144,21 @@ function GameLogic({
 
       // Choose enemy type based on level
       // Level 0 (Bun Valley): melee only
-      // Level 1+ (Robot Factory, Palace): 50% melee, 50% ranged
+      // Level 1 (Robot Factory): 60% melee, 40% ranged
+      // Level 2 (Palace): 40% melee, 30% ranged, 30% giant (max 3 giants)
       let enemyType: EnemyType = "melee";
-      if (gameState.level.currentLevel >= 1) {
-        enemyType = Math.random() < 0.5 ? "melee" : "ranged";
+      if (gameState.level.currentLevel === 1) {
+        enemyType = Math.random() < 0.6 ? "melee" : "ranged";
+      } else if (gameState.level.currentLevel === 2) {
+        const roll = Math.random();
+        // Try to spawn a giant if we haven't hit the limit
+        if (roll < 0.3 && gameState.level.giantsSpawnedThisLevel < 3) {
+          enemyType = "giant";
+        } else if (roll < 0.7) {
+          enemyType = "melee";
+        } else {
+          enemyType = "ranged";
+        }
       }
 
       const archetype = ENEMY_ARCHETYPES[enemyType];
@@ -3154,6 +3176,10 @@ function GameLogic({
             nextAttackAt: 0,
           },
         ],
+        level: {
+          ...prev.level,
+          giantsSpawnedThisLevel: enemyType === "giant" ? prev.level.giantsSpawnedThisLevel + 1 : prev.level.giantsSpawnedThisLevel,
+        },
       }));
 
       lastSpawnTime.current = currentTime;
@@ -3190,6 +3216,7 @@ function Game() {
     level: {
       currentLevel: 0,
       killsThisLevel: 0,
+      giantsSpawnedThisLevel: 0,
     },
     unlockedWeapons: [1], // Start with pistol only
     inventory: [], // No items purchased yet
