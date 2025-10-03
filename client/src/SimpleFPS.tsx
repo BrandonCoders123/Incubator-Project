@@ -69,6 +69,7 @@ const LEVELS = [
     description: "The journey begins at the outer settlements",
     killsRequired: 15,
     spawnRate: 3,
+    maxEnemies: 10,
   },
   {
     id: 2,
@@ -76,13 +77,31 @@ const LEVELS = [
     description: "The source of the mechanical menace",
     killsRequired: 25,
     spawnRate: 2.5,
+    maxEnemies: 12,
   },
   {
     id: 3,
     name: "Palace of the Robot King",
-    description: "Final showdown - rescue your parents!",
+    description: "The throne room awaits",
     killsRequired: 30,
     spawnRate: 2,
+    maxEnemies: 12,
+  },
+  {
+    id: 4,
+    name: "Crimson Battlefield",
+    description: "The robots launch their counter-attack",
+    killsRequired: 50,
+    spawnRate: 1.8,
+    maxEnemies: 18,
+  },
+  {
+    id: 5,
+    name: "Mustard Mountain Summit",
+    description: "Final showdown - rescue your parents!",
+    killsRequired: 50,
+    spawnRate: 1.5,
+    maxEnemies: 20,
   },
 ];
 
@@ -110,21 +129,21 @@ interface EnemyArchetype {
 const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
   melee: {
     health: 100,
-    moveSpeed: 3,
+    moveSpeed: 5,
     damage: 10,
     attackInterval: 1000,
     color: "#ff0000",
   },
   ranged: {
     health: 100,
-    moveSpeed: 2,
+    moveSpeed: 4,
     damage: 10,
     attackInterval: 2000, // Medium fire rate
     color: "#ff6600",
   },
   giant: {
     health: 400,
-    moveSpeed: 1.5,
+    moveSpeed: 3,
     damage: 25,
     attackInterval: 1500,
     color: "#990000",
@@ -147,6 +166,7 @@ interface Ramp {
 // Simple game state
 interface GameState {
   health: number;
+  maxHealth: number; // Added for token health buffs
   ammo: number;
   coins: number; // Changed from score to coins
   gamePhase: "login" | "register" | "menu" | "leaderboard" | "settings" | "profile" | "shop" | "introCutscene" | "playing" | "paused" | "gameover" | "victory" | "levelTransition";
@@ -184,6 +204,7 @@ interface GameState {
   };
   unlockedWeapons: number[]; // Array of weapon IDs that are unlocked
   inventory: string[]; // Items purchased (like "token")
+  tokensPurchased: number; // Track number of health buff tokens purchased
   lastDamageTime: number;
   currentWeapon: number;
   isReloading: boolean;
@@ -263,10 +284,23 @@ function checkRampCollision(
 
 // Get ramps for current level
 function getRampsForLevel(level: number): Ramp[] {
-  if (level >= 1) {
+  if (level === 1 || level === 2) {
     return [
       { position: [-15, 1, -20], rotation: 0, width: 4, length: 8 },
       { position: [15, 1, 20], rotation: Math.PI, width: 4, length: 8 },
+    ];
+  } else if (level === 3) {
+    return [
+      { position: [-20, 1, 20], rotation: Math.PI / 4, width: 4, length: 8 },
+      { position: [20, 1, -20], rotation: -Math.PI / 4, width: 4, length: 8 },
+      { position: [0, 1, 22], rotation: Math.PI / 2, width: 4, length: 6 },
+    ];
+  } else if (level === 4) {
+    return [
+      { position: [-22, 1, 0], rotation: 0, width: 4, length: 8 },
+      { position: [22, 1, 0], rotation: Math.PI, width: 4, length: 8 },
+      { position: [0, 1, -22], rotation: Math.PI / 2, width: 4, length: 8 },
+      { position: [0, 1, 22], rotation: -Math.PI / 2, width: 4, length: 8 },
     ];
   }
   return [];
@@ -306,6 +340,32 @@ function getWallsForLevel(level: number): { position: number[]; size: number[] }
       { position: [18, 5, -15], size: [12, 10, 1] },
       { position: [0, 5, -20], size: [20, 10, 1] },
     ];
+  } else if (level === 3) {
+    return [
+      { position: [30, 5, 0], size: [1, 10, 60] },
+      { position: [-30, 5, 0], size: [1, 10, 60] },
+      { position: [0, 5, 30], size: [60, 10, 1] },
+      { position: [0, 5, -30], size: [60, 10, 1] },
+      { position: [-15, 5, 10], size: [15, 10, 1] },
+      { position: [15, 5, -10], size: [15, 10, 1] },
+      { position: [5, 5, 0], size: [1, 10, 25] },
+      { position: [-5, 5, -15], size: [1, 10, 15] },
+      { position: [20, 5, 15], size: [10, 10, 1] },
+      { position: [-20, 5, -15], size: [10, 10, 1] },
+    ];
+  } else if (level === 4) {
+    return [
+      { position: [30, 5, 0], size: [1, 10, 60] },
+      { position: [-30, 5, 0], size: [1, 10, 60] },
+      { position: [0, 5, 30], size: [60, 10, 1] },
+      { position: [0, 5, -30], size: [60, 10, 1] },
+      { position: [0, 5, 15], size: [30, 10, 1] },
+      { position: [0, 5, -15], size: [30, 10, 1] },
+      { position: [15, 5, 0], size: [1, 10, 30] },
+      { position: [-15, 5, 0], size: [1, 10, 30] },
+      { position: [22, 5, 22], size: [8, 10, 8] },
+      { position: [-22, 5, -22], size: [8, 10, 8] },
+    ];
   }
   return [];
 }
@@ -319,67 +379,9 @@ function Environment({ gameState }: { gameState: GameState }) {
   grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
   grassTexture.repeat.set(10, 10);
 
-  // Different wall layouts for each level
-  const getWalls = () => {
-    if (gameState.level.currentLevel === 0) {
-      // Level 1 (Bun Valley): Simple outdoor arena with minimal walls
-      return [
-        // Outer boundary walls
-        { position: [30, 5, 0], size: [1, 10, 60] },
-        { position: [-30, 5, 0], size: [1, 10, 60] },
-        { position: [0, 5, 30], size: [60, 10, 1] },
-        { position: [0, 5, -30], size: [60, 10, 1] },
-      ];
-    } else if (gameState.level.currentLevel === 1) {
-      // Level 2 (Robot Factory): Indoor with rooms and corridors
-      return [
-        // Outer boundary walls
-        { position: [30, 5, 0], size: [1, 10, 60] },
-        { position: [-30, 5, 0], size: [1, 10, 60] },
-        { position: [0, 5, 30], size: [60, 10, 1] },
-        { position: [0, 5, -30], size: [60, 10, 1] },
-        
-        // Room dividers - creating a factory layout
-        { position: [0, 5, 0], size: [20, 10, 1] }, // Center wall
-        { position: [-10, 5, 15], size: [1, 10, 10] }, // Left room divider
-        { position: [10, 5, -15], size: [1, 10, 10] }, // Right room divider
-        { position: [-15, 5, -10], size: [10, 10, 1] }, // Bottom left wall
-        { position: [15, 5, 10], size: [10, 10, 1] }, // Top right wall
-      ];
-    } else if (gameState.level.currentLevel === 2) {
-      // Level 3 (Palace): Complex multi-room layout
-      return [
-        // Outer boundary walls
-        { position: [30, 5, 0], size: [1, 10, 60] },
-        { position: [-30, 5, 0], size: [1, 10, 60] },
-        { position: [0, 5, 30], size: [60, 10, 1] },
-        { position: [0, 5, -30], size: [60, 10, 1] },
-        
-        // Palace layout - throne room and corridors
-        { position: [0, 5, 10], size: [25, 10, 1] }, // Main hall divider
-        { position: [-12, 5, 0], size: [1, 10, 20] }, // Left corridor wall
-        { position: [12, 5, 0], size: [1, 10, 20] }, // Right corridor wall
-        { position: [-18, 5, -15], size: [12, 10, 1] }, // Left chamber wall
-        { position: [18, 5, -15], size: [12, 10, 1] }, // Right chamber wall
-        { position: [0, 5, -20], size: [20, 10, 1] }, // Throne room entrance
-      ];
-    }
-    return [];
-  };
-
-  // Ramps for vertical movement
-  const getRamps = () => {
-    if (gameState.level.currentLevel >= 1) {
-      return [
-        { position: [-15, 1, -20], rotation: 0, width: 4, length: 8 },
-        { position: [15, 1, 20], rotation: Math.PI, width: 4, length: 8 },
-      ];
-    }
-    return [];
-  };
-
-  const walls = getWalls();
-  const ramps = getRamps();
+  // Different wall layouts for each level - use the shared function
+  const walls = getWallsForLevel(gameState.level.currentLevel);
+  const ramps = getRampsForLevel(gameState.level.currentLevel);
 
   return (
     <>
@@ -449,6 +451,8 @@ function Player({
         0: [0, 1, 0],      // Level 1: Center is safe
         1: [0, 1, -15],    // Level 2 (Robot Factory): Spawn away from center wall
         2: [0, 1, 20],     // Level 3 (Palace): Spawn in safe area
+        3: [-10, 1, -10],  // Level 4 (Crimson Battlefield): Spawn in corner
+        4: [0, 1, 0],      // Level 5 (Mustard Mountain): Center spawn
       };
       
       const spawnPoint = spawnPoints[gameState.level.currentLevel] || [0, 1, 0];
@@ -2339,11 +2343,10 @@ function HUD({
       weaponUnlock = { id: 2, name: weapons[2].name }; // Rifle after level 1
     } else if (gameState.level.currentLevel === 1) {
       weaponUnlock = { id: 3, name: weapons[3].name }; // Assault Rifle after level 2
-    } else if (gameState.level.currentLevel === 2) {
-      weaponUnlock = { id: 4, name: weapons[4].name }; // LMG on final level
+    } else if (gameState.level.currentLevel === 3) {
+      weaponUnlock = { id: 4, name: weapons[4].name }; // LMG after level 4
     }
     
-    const hasToken = gameState.inventory.includes("token");
     const canAffordToken = gameState.coins >= 2;
     
     return (
@@ -2420,36 +2423,43 @@ function HUD({
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
                 <div style={{ textAlign: "left" }}>
                   <div style={{ fontSize: "18px", fontWeight: "bold", marginBottom: "5px" }}>
-                    ⭐ Lucky Token
+                    💚 Health Buff Token
                   </div>
                   <div style={{ fontSize: "14px", opacity: 0.7 }}>
-                    A mysterious token... (Coming soon)
+                    Permanently increases max health by +10 HP (stackable!)
                   </div>
+                  {gameState.tokensPurchased > 0 && (
+                    <div style={{ fontSize: "13px", color: "#4caf50", marginTop: "5px" }}>
+                      Owned: {gameState.tokensPurchased} | Max Health: {gameState.maxHealth} HP
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={() => {
-                    if (!hasToken && canAffordToken) {
+                    if (canAffordToken) {
                       setGameState((prev) => ({
                         ...prev,
                         coins: prev.coins - 2,
-                        inventory: [...prev.inventory, "token"],
+                        maxHealth: prev.maxHealth + 10,
+                        health: Math.min(prev.health + 10, prev.maxHealth + 10),
+                        tokensPurchased: prev.tokensPurchased + 1,
                       }));
                     }
                   }}
-                  disabled={hasToken || !canAffordToken}
+                  disabled={!canAffordToken}
                   style={{
                     padding: "10px 20px",
                     fontSize: "16px",
                     fontWeight: "bold",
-                    background: hasToken ? "#666" : (canAffordToken ? "#fdc830" : "#444"),
-                    color: hasToken ? "#aaa" : (canAffordToken ? "#333" : "#666"),
+                    background: canAffordToken ? "#4caf50" : "#444",
+                    color: canAffordToken ? "white" : "#666",
                     border: "none",
                     borderRadius: "8px",
-                    cursor: hasToken || !canAffordToken ? "not-allowed" : "pointer",
+                    cursor: canAffordToken ? "pointer" : "not-allowed",
                     fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
                   }}
                 >
-                  {hasToken ? "OWNED" : `BUY - 2 💰`}
+                  BUY - 2 💰
                 </button>
               </div>
             </div>
@@ -2480,7 +2490,7 @@ function HUD({
                 return {
                   ...prev,
                   gamePhase: "playing",
-                  health: 100,
+                  health: prev.maxHealth,
                   ammo: weapons[prev.currentWeapon].maxAmmo,
                   enemies: [],
                   bullets: [],
@@ -3071,18 +3081,19 @@ function HUD({
           style={{ marginBottom: "8px", fontSize: "14px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "10px" }}
         >
           HEALTH
-          {gameState.inventory.includes("token") && (
+          {gameState.tokensPurchased > 0 && (
             <div
               style={{
-                fontSize: "18px",
-                background: "rgba(255,215,0,0.3)",
-                padding: "4px 8px",
+                fontSize: "13px",
+                background: "rgba(76,175,80,0.3)",
+                padding: "3px 7px",
                 borderRadius: "4px",
-                border: "1px solid #fdc830",
+                border: "1px solid #4caf50",
+                color: "#4caf50",
               }}
-              title="Lucky Token"
+              title={`Health Buff Tokens: ${gameState.tokensPurchased}`}
             >
-              ⭐
+              💚 +{gameState.tokensPurchased * 10}
             </div>
           )}
         </div>
@@ -3097,15 +3108,15 @@ function HUD({
         >
           <div
             style={{
-              width: `${gameState.health}%`,
+              width: `${(gameState.health / gameState.maxHealth) * 100}%`,
               height: "100%",
-              background: gameState.health > 30 ? "#00ff00" : "#ff0000",
+              background: gameState.health > (gameState.maxHealth * 0.3) ? "#00ff00" : "#ff0000",
               transition: "width 0.3s ease",
             }}
           />
         </div>
         <div style={{ marginTop: "4px", fontSize: "12px" }}>
-          {gameState.health} / 100
+          {gameState.health} / {gameState.maxHealth}
         </div>
       </div>
 
@@ -3200,10 +3211,11 @@ function GameLogic({
     const currentTime = state.clock.elapsedTime;
     const currentLevelData = LEVELS[gameState.level.currentLevel];
     const spawnRate = currentLevelData?.spawnRate || 3; // Default 3 seconds if no level
+    const maxEnemies = currentLevelData?.maxEnemies || 10; // Use level-based max enemies
     
     if (
       currentTime - lastSpawnTime.current > spawnRate &&
-      gameState.enemies.length < 10
+      gameState.enemies.length < maxEnemies
     ) {
       const angle = Math.random() * Math.PI * 2;
       const distance = 15 + Math.random() * 8;
@@ -3214,13 +3226,36 @@ function GameLogic({
       // Level 0 (Bun Valley): melee only
       // Level 1 (Robot Factory): 60% melee, 40% ranged
       // Level 2 (Palace): 40% melee, 30% ranged, 30% giant (max 3 giants)
+      // Level 3 (Crimson Battlefield): 30% melee, 30% ranged, 40% giant (max 8 giants)
+      // Level 4 (Mustard Mountain): 30% melee, 30% ranged, 40% giant (max 10 giants)
       let enemyType: EnemyType = "melee";
-      if (gameState.level.currentLevel === 1) {
+      const currentLevel = gameState.level.currentLevel;
+      
+      if (currentLevel === 0) {
+        enemyType = "melee";
+      } else if (currentLevel === 1) {
         enemyType = Math.random() < 0.6 ? "melee" : "ranged";
-      } else if (gameState.level.currentLevel === 2) {
+      } else if (currentLevel === 2) {
         const roll = Math.random();
-        // Try to spawn a giant if we haven't hit the limit
         if (roll < 0.3 && gameState.level.giantsSpawnedThisLevel < 3) {
+          enemyType = "giant";
+        } else if (roll < 0.7) {
+          enemyType = "melee";
+        } else {
+          enemyType = "ranged";
+        }
+      } else if (currentLevel === 3) {
+        const roll = Math.random();
+        if (roll < 0.4 && gameState.level.giantsSpawnedThisLevel < 8) {
+          enemyType = "giant";
+        } else if (roll < 0.7) {
+          enemyType = "melee";
+        } else {
+          enemyType = "ranged";
+        }
+      } else if (currentLevel === 4) {
+        const roll = Math.random();
+        if (roll < 0.4 && gameState.level.giantsSpawnedThisLevel < 10) {
           enemyType = "giant";
         } else if (roll < 0.7) {
           enemyType = "melee";
@@ -3261,6 +3296,7 @@ function GameLogic({
 function Game() {
   const [gameState, setGameState] = useState<GameState>({
     health: 100,
+    maxHealth: 100, // Start with 100 max health
     ammo: 12, // Start with pistol ammo (updated)
     coins: 0, // Changed from score to coins
     gamePhase: "login",
@@ -3288,6 +3324,7 @@ function Game() {
     },
     unlockedWeapons: [1], // Start with pistol only
     inventory: [], // No items purchased yet
+    tokensPurchased: 0, // No health buff tokens purchased yet
     lastDamageTime: 0,
     currentWeapon: 1, // Start with pistol
     isReloading: false,
