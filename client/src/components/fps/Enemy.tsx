@@ -32,7 +32,7 @@ export default function Enemy({ enemy }: EnemyProps) {
     if (!enemy.isAlive || !enemyRef.current) return;
     
     const enemyPosition = new THREE.Vector3(...enemy.position);
-    const enemySize = 1; // Enemy is a 1x1x1 cube
+    const enemySize = 3; // Enemy is a 1x1x1 cube
     
     bullets.forEach(bullet => {
       const bulletPosition = new THREE.Vector3(...bullet.position);

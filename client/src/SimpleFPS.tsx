@@ -497,6 +497,110 @@ function Player({
   );
 }
 
+// Robot Model Component
+function RobotModel({ isAttacking }: { isAttacking: boolean }) {
+  const leftArmRef = useRef<THREE.Group>(null);
+  const rightArmRef = useRef<THREE.Group>(null);
+  
+  useFrame((state) => {
+    if (isAttacking && leftArmRef.current && rightArmRef.current) {
+      // Attack animation - swing arms forward
+      const attackSpeed = 10;
+      const swingAngle = Math.sin(state.clock.elapsedTime * attackSpeed) * 0.5;
+      leftArmRef.current.rotation.x = swingAngle;
+      rightArmRef.current.rotation.x = swingAngle;
+    } else if (leftArmRef.current && rightArmRef.current) {
+      // Idle animation - slight bobbing
+      const idleSpeed = 2;
+      const bobAngle = Math.sin(state.clock.elapsedTime * idleSpeed) * 0.1;
+      leftArmRef.current.rotation.x = bobAngle;
+      rightArmRef.current.rotation.x = bobAngle;
+    }
+  });
+
+  return (
+    <group>
+      {/* Body - main torso */}
+      <mesh position={[0, 0.8, 0]}>
+        <boxGeometry args={[0.6, 0.8, 0.4]} />
+        <meshStandardMaterial color="#444444" metalness={0.8} roughness={0.2} />
+      </mesh>
+
+      {/* Head */}
+      <mesh position={[0, 1.5, 0]}>
+        <boxGeometry args={[0.5, 0.4, 0.4]} />
+        <meshStandardMaterial color="#666666" metalness={0.7} roughness={0.3} />
+      </mesh>
+
+      {/* Eyes - glowing red */}
+      <mesh position={[-0.15, 1.55, 0.21]}>
+        <sphereGeometry args={[0.08]} />
+        <meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={2} />
+      </mesh>
+      <mesh position={[0.15, 1.55, 0.21]}>
+        <sphereGeometry args={[0.08]} />
+        <meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={2} />
+      </mesh>
+
+      {/* Antenna */}
+      <mesh position={[0, 1.8, 0]}>
+        <cylinderGeometry args={[0.03, 0.03, 0.3]} />
+        <meshStandardMaterial color="#888888" metalness={0.9} roughness={0.1} />
+      </mesh>
+      <mesh position={[0, 2.0, 0]}>
+        <sphereGeometry args={[0.08]} />
+        <meshStandardMaterial color="#ff4444" emissive="#ff4444" emissiveIntensity={1} />
+      </mesh>
+
+      {/* Left Arm */}
+      <group ref={leftArmRef} position={[-0.4, 0.9, 0]}>
+        <mesh position={[0, -0.25, 0]}>
+          <cylinderGeometry args={[0.12, 0.12, 0.6]} />
+          <meshStandardMaterial color="#555555" metalness={0.7} roughness={0.3} />
+        </mesh>
+        {/* Left Hand/Claw */}
+        <mesh position={[0, -0.6, 0]}>
+          <boxGeometry args={[0.15, 0.15, 0.15]} />
+          <meshStandardMaterial color="#333333" metalness={0.8} roughness={0.2} />
+        </mesh>
+      </group>
+
+      {/* Right Arm */}
+      <group ref={rightArmRef} position={[0.4, 0.9, 0]}>
+        <mesh position={[0, -0.25, 0]}>
+          <cylinderGeometry args={[0.12, 0.12, 0.6]} />
+          <meshStandardMaterial color="#555555" metalness={0.7} roughness={0.3} />
+        </mesh>
+        {/* Right Hand/Claw */}
+        <mesh position={[0, -0.6, 0]}>
+          <boxGeometry args={[0.15, 0.15, 0.15]} />
+          <meshStandardMaterial color="#333333" metalness={0.8} roughness={0.2} />
+        </mesh>
+      </group>
+
+      {/* Legs */}
+      <mesh position={[-0.2, 0.2, 0]}>
+        <cylinderGeometry args={[0.12, 0.12, 0.5]} />
+        <meshStandardMaterial color="#444444" metalness={0.7} roughness={0.3} />
+      </mesh>
+      <mesh position={[0.2, 0.2, 0]}>
+        <cylinderGeometry args={[0.12, 0.12, 0.5]} />
+        <meshStandardMaterial color="#444444" metalness={0.7} roughness={0.3} />
+      </mesh>
+
+      {/* Feet */}
+      <mesh position={[-0.2, -0.05, 0.1]}>
+        <boxGeometry args={[0.15, 0.1, 0.25]} />
+        <meshStandardMaterial color="#333333" metalness={0.8} roughness={0.2} />
+      </mesh>
+      <mesh position={[0.2, -0.05, 0.1]}>
+        <boxGeometry args={[0.15, 0.1, 0.25]} />
+        <meshStandardMaterial color="#333333" metalness={0.8} roughness={0.2} />
+      </mesh>
+    </group>
+  );
+}
+
 // Enemy Component
 function Enemy({
   enemy,
@@ -507,8 +611,9 @@ function Enemy({
   gameState: GameState;
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
 }) {
-  const enemyRef = useRef<THREE.Mesh>(null);
+  const enemyRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
+  const [isAttacking, setIsAttacking] = useState(false);
 
   useFrame((state, deltaTime) => {
     // Only update during gameplay
@@ -551,6 +656,10 @@ function Enemy({
 
       // Check contact damage (melee attack) - only if still playing
       const distanceToPlayer = enemyPos.distanceTo(playerPos);
+      
+      // Trigger attack animation when close
+      setIsAttacking(distanceToPlayer < 2.5);
+      
       if (distanceToPlayer < 1.5 && gameState.gamePhase === "playing") {
         // Contact range
         const currentTime = Date.now();
@@ -627,10 +736,9 @@ function Enemy({
   });
 
   return (
-    <mesh ref={enemyRef} position={enemy.position}>
-      <planeGeometry args={[1, 2]} />
-      <meshBasicMaterial color="#ff4444" side={THREE.DoubleSide} />
-    </mesh>
+    <group ref={enemyRef} position={enemy.position}>
+      <RobotModel isAttacking={isAttacking} />
+    </group>
   );
 }
 
