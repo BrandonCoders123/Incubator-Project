@@ -260,32 +260,6 @@ function checkRampCollision(
   return false;
 }
 
-// Block/platform collision detection helper
-function checkBlockCollision(
-  position: THREE.Vector3,
-  radius: number = 0.5
-): boolean {
-  // Central platform at [0, 0.5, 0] with size [8, 1, 8]
-  const blockX = 0;
-  const blockY = 0.5;
-  const blockZ = 0;
-  const halfWidth = 8 / 2;
-  const halfHeight = 1 / 2;
-  const halfDepth = 8 / 2;
-  
-  if (
-    position.x + radius > blockX - halfWidth &&
-    position.x - radius < blockX + halfWidth &&
-    position.z + radius > blockZ - halfDepth &&
-    position.z - radius < blockZ + halfDepth &&
-    position.y + radius > blockY - halfHeight &&
-    position.y - radius < blockY + halfHeight
-  ) {
-    return true; // Collision detected
-  }
-  
-  return false;
-}
 
 // Get ramps for current level
 function getRampsForLevel(level: number): Ramp[] {
@@ -691,9 +665,8 @@ function Player({
       
       const hasWallCollision = checkWallCollision(newPos, walls, 0.5);
       const hasRampCollision = checkRampCollision(newPos, ramps, 0.5);
-      const hasBlockCollision = checkBlockCollision(newPos, 0.5);
       
-      if (hasWallCollision || hasRampCollision || hasBlockCollision) {
+      if (hasWallCollision || hasRampCollision) {
         // Collision detected, don't move in that direction
         // Try sliding along obstacles - check X and Z separately
         const xOnly = playerRef.current.position.clone();
@@ -702,11 +675,9 @@ function Player({
         zOnly.z = newPos.z;
 
         const canMoveX = !checkWallCollision(xOnly, walls, 0.5) && 
-                        !checkRampCollision(xOnly, ramps, 0.5) && 
-                        !checkBlockCollision(xOnly, 0.5);
+                        !checkRampCollision(xOnly, ramps, 0.5);
         const canMoveZ = !checkWallCollision(zOnly, walls, 0.5) && 
-                        !checkRampCollision(zOnly, ramps, 0.5) && 
-                        !checkBlockCollision(zOnly, 0.5);
+                        !checkRampCollision(zOnly, ramps, 0.5);
 
         if (canMoveX) {
           // Can move in X direction
