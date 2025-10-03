@@ -869,35 +869,51 @@ function Enemy({
       const distanceToPlayer = direction.length();
       direction.normalize();
 
+      // Preserve original position before movement
+      const originalPos = enemyPos.clone();
       let newPos = enemyPos.clone();
 
       if (enemy.type === "melee") {
         // Melee: Always move towards player
-        newPos = enemyPos.add(
-          direction.multiplyScalar(archetype.moveSpeed * deltaTime),
+        newPos = newPos.add(
+          direction.clone().multiplyScalar(archetype.moveSpeed * deltaTime),
         );
       } else if (enemy.type === "ranged") {
         // Ranged: Keep distance of 8-12 units
         const idealDistance = 10;
         if (distanceToPlayer < 8) {
           // Too close, back away
-          newPos = enemyPos.add(
-            direction.multiplyScalar(-archetype.moveSpeed * deltaTime),
+          newPos = newPos.add(
+            direction.clone().multiplyScalar(-archetype.moveSpeed * deltaTime),
           );
         } else if (distanceToPlayer > 12) {
           // Too far, move closer
-          newPos = enemyPos.add(
-            direction.multiplyScalar(archetype.moveSpeed * deltaTime),
+          newPos = newPos.add(
+            direction.clone().multiplyScalar(archetype.moveSpeed * deltaTime),
           );
         }
         // If in ideal range (8-12), don't move much
       }
 
-      // Wall collision detection for enemies
+      // Wall collision detection for enemies with sliding
       const walls = getWallsForLevel(gameState.level.currentLevel);
       if (checkWallCollision(newPos, walls, 0.4)) {
-        // Enemy hit a wall, revert to current position
-        newPos.copy(enemyPos);
+        // Enemy hit a wall, try sliding along walls
+        const xOnly = originalPos.clone();
+        xOnly.x = newPos.x;
+        const zOnly = originalPos.clone();
+        zOnly.z = newPos.z;
+
+        if (!checkWallCollision(xOnly, walls, 0.4)) {
+          // Can move in X direction
+          newPos.copy(xOnly);
+        } else if (!checkWallCollision(zOnly, walls, 0.4)) {
+          // Can move in Z direction
+          newPos.copy(zOnly);
+        } else {
+          // Can't move at all, revert to original position
+          newPos.copy(originalPos);
+        }
       }
 
       // Update enemy position in game state
