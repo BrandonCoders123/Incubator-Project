@@ -632,7 +632,7 @@ function Enemy({
       direction.y = 0; // Keep movement on horizontal plane
       direction.normalize();
 
-      const moveSpeed = 2; // Enemy movement speed
+      const moveSpeed = 3; // Enemy movement speed (50% faster)
       const newPos = enemyPos.add(
         direction.multiplyScalar(moveSpeed * deltaTime),
       );
@@ -2464,7 +2464,7 @@ function GameLogic({
     const currentTime = state.clock.elapsedTime;
     if (
       currentTime - lastSpawnTime.current > 3 &&
-      gameState.enemies.length < 5
+      gameState.enemies.length < 10
     ) {
       const angle = Math.random() * Math.PI * 2;
       const distance = 15 + Math.random() * 8;
