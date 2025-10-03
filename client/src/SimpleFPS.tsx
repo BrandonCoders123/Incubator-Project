@@ -196,6 +196,73 @@ const controls = [
   { name: "weapon4", keys: ["Digit4"] },
 ];
 
+// Wall collision detection helper - AABB collision
+function checkWallCollision(
+  position: THREE.Vector3,
+  walls: { position: number[]; size: number[] }[],
+  radius: number = 0.5
+): boolean {
+  for (const wall of walls) {
+    const [wx, wy, wz] = wall.position;
+    const [ww, wh, wd] = wall.size;
+
+    // AABB collision check
+    const halfWidth = ww / 2;
+    const halfDepth = wd / 2;
+    const halfHeight = wh / 2;
+
+    if (
+      position.x + radius > wx - halfWidth &&
+      position.x - radius < wx + halfWidth &&
+      position.z + radius > wz - halfDepth &&
+      position.z - radius < wz + halfDepth &&
+      position.y + radius > wy - halfHeight &&
+      position.y - radius < wy + halfHeight
+    ) {
+      return true; // Collision detected
+    }
+  }
+  return false;
+}
+
+// Get walls for current level
+function getWallsForLevel(level: number): { position: number[]; size: number[] }[] {
+  if (level === 0) {
+    return [
+      { position: [30, 5, 0], size: [1, 10, 60] },
+      { position: [-30, 5, 0], size: [1, 10, 60] },
+      { position: [0, 5, 30], size: [60, 10, 1] },
+      { position: [0, 5, -30], size: [60, 10, 1] },
+    ];
+  } else if (level === 1) {
+    return [
+      { position: [30, 5, 0], size: [1, 10, 60] },
+      { position: [-30, 5, 0], size: [1, 10, 60] },
+      { position: [0, 5, 30], size: [60, 10, 1] },
+      { position: [0, 5, -30], size: [60, 10, 1] },
+      { position: [0, 5, 0], size: [20, 10, 1] },
+      { position: [-10, 5, 15], size: [1, 10, 10] },
+      { position: [10, 5, -15], size: [1, 10, 10] },
+      { position: [-15, 5, -10], size: [10, 10, 1] },
+      { position: [15, 5, 10], size: [10, 10, 1] },
+    ];
+  } else if (level === 2) {
+    return [
+      { position: [30, 5, 0], size: [1, 10, 60] },
+      { position: [-30, 5, 0], size: [1, 10, 60] },
+      { position: [0, 5, 30], size: [60, 10, 1] },
+      { position: [0, 5, -30], size: [60, 10, 1] },
+      { position: [0, 5, 10], size: [25, 10, 1] },
+      { position: [-12, 5, 0], size: [1, 10, 20] },
+      { position: [12, 5, 0], size: [1, 10, 20] },
+      { position: [-18, 5, -15], size: [12, 10, 1] },
+      { position: [18, 5, -15], size: [12, 10, 1] },
+      { position: [0, 5, -20], size: [20, 10, 1] },
+    ];
+  }
+  return [];
+}
+
 // Environment Component
 function Environment({ gameState }: { gameState: GameState }) {
   const grassTexture = useTexture("/textures/grass.png");
@@ -528,10 +595,29 @@ function Player({
         isOnGroundRef.current = true;
       }
 
-      // Boundary
-      const boundary = 24;
-      newPos.x = THREE.MathUtils.clamp(newPos.x, -boundary, boundary);
-      newPos.z = THREE.MathUtils.clamp(newPos.z, -boundary, boundary);
+      // Wall collision detection
+      const walls = getWallsForLevel(gameState.level.currentLevel);
+      if (checkWallCollision(newPos, walls, 0.5)) {
+        // Collision detected, don't move in that direction
+        // Try sliding along walls - check X and Z separately
+        const xOnly = playerRef.current.position.clone();
+        xOnly.x = newPos.x;
+        const zOnly = playerRef.current.position.clone();
+        zOnly.z = newPos.z;
+
+        if (!checkWallCollision(xOnly, walls, 0.5)) {
+          // Can move in X direction
+          newPos.x = xOnly.x;
+          newPos.z = playerRef.current.position.z;
+        } else if (!checkWallCollision(zOnly, walls, 0.5)) {
+          // Can move in Z direction
+          newPos.z = zOnly.z;
+          newPos.x = playerRef.current.position.x;
+        } else {
+          // Can't move at all, revert to current position
+          newPos.copy(playerRef.current.position);
+        }
+      }
 
       playerRef.current.position.copy(newPos);
     }
@@ -805,6 +891,13 @@ function Enemy({
           );
         }
         // If in ideal range (8-12), don't move much
+      }
+
+      // Wall collision detection for enemies
+      const walls = getWallsForLevel(gameState.level.currentLevel);
+      if (checkWallCollision(newPos, walls, 0.4)) {
+        // Enemy hit a wall, revert to current position
+        newPos.copy(enemyPos);
       }
 
       // Update enemy position in game state
