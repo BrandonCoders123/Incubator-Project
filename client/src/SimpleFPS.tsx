@@ -738,14 +738,22 @@ function Enemy({
             }
           }
           
-          // Check victory condition - all settlements conquered
-          const allConquered = newSettlementIndex >= SETTLEMENTS.length;
-          
           // Check level progression
           const currentLevelData = LEVELS[prev.level.currentLevel];
           const shouldLevelUp = currentLevelData && newLevelKills >= currentLevelData.killsRequired;
           const nextLevel = prev.level.currentLevel + 1;
           const hasNextLevel = nextLevel < LEVELS.length;
+          
+          // Check victory condition - completed final level
+          const completedFinalLevel = shouldLevelUp && !hasNextLevel;
+          
+          // Determine next game phase
+          let nextPhase = prev.gamePhase;
+          if (completedFinalLevel) {
+            nextPhase = "victory";
+          } else if (shouldLevelUp && hasNextLevel) {
+            nextPhase = "levelTransition";
+          }
           
           return {
             ...prev,
@@ -768,7 +776,7 @@ function Enemy({
               currentLevel: prev.level.currentLevel,
               killsThisLevel: newLevelKills,
             },
-            gamePhase: shouldLevelUp && hasNextLevel ? "levelTransition" : (allConquered ? "victory" : prev.gamePhase),
+            gamePhase: nextPhase,
           };
         });
       }
