@@ -197,13 +197,75 @@ const controls = [
 ];
 
 // Environment Component
-function Environment() {
+function Environment({ gameState }: { gameState: GameState }) {
   const grassTexture = useTexture("/textures/grass.png");
   const asphaltTexture = useTexture("/textures/asphalt.png");
   const woodTexture = useTexture("/textures/wood.jpg");
 
   grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
   grassTexture.repeat.set(10, 10);
+
+  // Different wall layouts for each level
+  const getWalls = () => {
+    if (gameState.level.currentLevel === 0) {
+      // Level 1 (Bun Valley): Simple outdoor arena with minimal walls
+      return [
+        // Outer boundary walls
+        { position: [30, 5, 0], size: [1, 10, 60] },
+        { position: [-30, 5, 0], size: [1, 10, 60] },
+        { position: [0, 5, 30], size: [60, 10, 1] },
+        { position: [0, 5, -30], size: [60, 10, 1] },
+      ];
+    } else if (gameState.level.currentLevel === 1) {
+      // Level 2 (Robot Factory): Indoor with rooms and corridors
+      return [
+        // Outer boundary walls
+        { position: [30, 5, 0], size: [1, 10, 60] },
+        { position: [-30, 5, 0], size: [1, 10, 60] },
+        { position: [0, 5, 30], size: [60, 10, 1] },
+        { position: [0, 5, -30], size: [60, 10, 1] },
+        
+        // Room dividers - creating a factory layout
+        { position: [0, 5, 0], size: [20, 10, 1] }, // Center wall
+        { position: [-10, 5, 15], size: [1, 10, 10] }, // Left room divider
+        { position: [10, 5, -15], size: [1, 10, 10] }, // Right room divider
+        { position: [-15, 5, -10], size: [10, 10, 1] }, // Bottom left wall
+        { position: [15, 5, 10], size: [10, 10, 1] }, // Top right wall
+      ];
+    } else if (gameState.level.currentLevel === 2) {
+      // Level 3 (Palace): Complex multi-room layout
+      return [
+        // Outer boundary walls
+        { position: [30, 5, 0], size: [1, 10, 60] },
+        { position: [-30, 5, 0], size: [1, 10, 60] },
+        { position: [0, 5, 30], size: [60, 10, 1] },
+        { position: [0, 5, -30], size: [60, 10, 1] },
+        
+        // Palace layout - throne room and corridors
+        { position: [0, 5, 10], size: [25, 10, 1] }, // Main hall divider
+        { position: [-12, 5, 0], size: [1, 10, 20] }, // Left corridor wall
+        { position: [12, 5, 0], size: [1, 10, 20] }, // Right corridor wall
+        { position: [-18, 5, -15], size: [12, 10, 1] }, // Left chamber wall
+        { position: [18, 5, -15], size: [12, 10, 1] }, // Right chamber wall
+        { position: [0, 5, -20], size: [20, 10, 1] }, // Throne room entrance
+      ];
+    }
+    return [];
+  };
+
+  // Ramps for vertical movement
+  const getRamps = () => {
+    if (gameState.level.currentLevel >= 1) {
+      return [
+        { position: [-15, 1, -20], rotation: 0, width: 4, length: 8 },
+        { position: [15, 1, 20], rotation: Math.PI, width: 4, length: 8 },
+      ];
+    }
+    return [];
+  };
+
+  const walls = getWalls();
+  const ramps = getRamps();
 
   return (
     <>
@@ -213,23 +275,25 @@ function Environment() {
         <meshLambertMaterial map={grassTexture} />
       </mesh>
 
-      {/* Walls */}
-      <mesh position={[25, 5, 0]}>
-        <boxGeometry args={[1, 10, 50]} />
-        <meshLambertMaterial map={woodTexture} />
-      </mesh>
-      <mesh position={[-25, 5, 0]}>
-        <boxGeometry args={[1, 10, 50]} />
-        <meshLambertMaterial map={woodTexture} />
-      </mesh>
-      <mesh position={[0, 5, 25]}>
-        <boxGeometry args={[50, 10, 1]} />
-        <meshLambertMaterial map={woodTexture} />
-      </mesh>
-      <mesh position={[0, 5, -25]}>
-        <boxGeometry args={[50, 10, 1]} />
-        <meshLambertMaterial map={woodTexture} />
-      </mesh>
+      {/* Render walls */}
+      {walls.map((wall, index) => (
+        <mesh key={`wall-${index}`} position={wall.position as [number, number, number]}>
+          <boxGeometry args={wall.size as [number, number, number]} />
+          <meshLambertMaterial map={woodTexture} color="#8B4513" />
+        </mesh>
+      ))}
+
+      {/* Render ramps */}
+      {ramps.map((ramp, index) => (
+        <mesh
+          key={`ramp-${index}`}
+          position={ramp.position as [number, number, number]}
+          rotation={[0, ramp.rotation, Math.PI / 6]}
+        >
+          <boxGeometry args={[ramp.width, 0.5, ramp.length]} />
+          <meshLambertMaterial map={asphaltTexture} color="#666666" />
+        </mesh>
+      ))}
 
       {/* Central platform */}
       <mesh position={[0, 0.5, 0]}>
@@ -994,8 +1058,8 @@ function EnemyProjectile({
 
   return (
     <mesh ref={projectileRef} position={projectile.position}>
-      <sphereGeometry args={[0.2]} />
-      <meshBasicMaterial color="#ff6600" emissive="#ff6600" />
+      <sphereGeometry args={[0.3]} />
+      <meshStandardMaterial color="#ff6600" emissive="#ff4400" emissiveIntensity={0.8} />
     </mesh>
   );
 }
@@ -2220,6 +2284,7 @@ function HUD({
                   ammo: weapons[prev.currentWeapon].maxAmmo,
                   enemies: [],
                   bullets: [],
+                  enemyProjectiles: [],
                   level: {
                     currentLevel: prev.level.currentLevel + 1,
                     killsThisLevel: 0,
@@ -2407,11 +2472,12 @@ function HUD({
                 setGameState((prev) => ({
                   ...prev,
                   health: 100,
-                  ammo: 15,
+                  ammo: 12,
                   coins: 0,
                   gamePhase: "menu",
                   enemies: [],
                   bullets: [],
+                  enemyProjectiles: [],
                   lastDamageTime: 0,
                   story: {
                     currentSettlement: 0,
@@ -2593,11 +2659,12 @@ function HUD({
                 setGameState((prev) => ({
                   ...prev,
                   health: 100,
-                  ammo: 15,
+                  ammo: 12,
                   coins: 0,
                   gamePhase: "menu",
                   enemies: [],
                   bullets: [],
+                  enemyProjectiles: [],
                   lastDamageTime: 0,
                   story: {
                     currentSettlement: 0,
@@ -2697,10 +2764,11 @@ function HUD({
                   ...prev,
                   gamePhase: "login",
                   health: 100,
-                  ammo: 30,
+                  ammo: 12,
                   coins: 0,
                   enemies: [],
                   bullets: [],
+                  enemyProjectiles: [],
                   user: {
                     username: null,
                     isGuest: false,
@@ -3024,7 +3092,7 @@ function Game() {
         <directionalLight position={[50, 50, 25]} intensity={1} />
 
         <Suspense fallback={null}>
-          <Environment />
+          <Environment gameState={gameState} />
           <Player gameState={gameState} setGameState={setGameState} />
           <WeaponSprite gameState={gameState} />
 
