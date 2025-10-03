@@ -21,36 +21,36 @@ interface Weapon {
 const weapons: Record<number, Weapon> = {
   1: {
     name: "Pistol",
-    maxAmmo: 15,
-    damage: 25,
-    reloadTime: 3000,
-    fireRate: 0,
-    bulletsPerKill: 3,
-  }, // 25 * 3 = 75 damage
+    maxAmmo: 12,
+    damage: 50,
+    reloadTime: 2000,
+    fireRate: 0, // semi-auto
+    bulletsPerKill: 1,
+  },
   2: {
     name: "Rifle",
-    maxAmmo: 20,
-    damage: 37.5,
-    reloadTime: 5000,
-    fireRate: 0,
-    bulletsPerKill: 2,
-  }, // 37.5 * 2 = 75 damage
+    maxAmmo: 8,
+    damage: 75,
+    reloadTime: 3000,
+    fireRate: 0, // semi-auto
+    bulletsPerKill: 1,
+  },
   3: {
     name: "Assault Rifle",
-    maxAmmo: 40,
-    damage: 18.75,
-    reloadTime: 3000,
-    fireRate: 8,
-    bulletsPerKill: 4,
-  }, // 18.75 * 4 = 75 damage
+    maxAmmo: 30,
+    damage: 30,
+    reloadTime: 2500,
+    fireRate: 10, // 10 shots per second
+    bulletsPerKill: 2,
+  },
   4: {
     name: "LMG",
-    maxAmmo: 100,
-    damage: 10000,
-    reloadTime: 1000,
-    fireRate: 1000,
-    bulletsPerKill: 3,
-  }, // 25 * 3 = 75 damage
+    maxAmmo: 60,
+    damage: 40,
+    reloadTime: 4000,
+    fireRate: 12, // 12 shots per second
+    bulletsPerKill: 2,
+  },
 };
 
 // Story elements
@@ -119,6 +119,8 @@ interface GameState {
     currentLevel: number;
     killsThisLevel: number;
   };
+  unlockedWeapons: number[]; // Array of weapon IDs that are unlocked
+  inventory: string[]; // Items purchased (like "token")
   lastDamageTime: number;
   currentWeapon: number;
   isReloading: boolean;
@@ -417,8 +419,8 @@ function Player({
       playerRef.current.position.copy(newPos);
     }
 
-    // Weapon switching
-    if (keys.weapon1 && gameState.currentWeapon !== 1) {
+    // Weapon switching (only unlocked weapons)
+    if (keys.weapon1 && gameState.currentWeapon !== 1 && gameState.unlockedWeapons.includes(1)) {
       weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
       setGameState((prev) => ({
         ...prev,
@@ -427,7 +429,7 @@ function Player({
         isReloading: false,
       }));
     }
-    if (keys.weapon2 && gameState.currentWeapon !== 2) {
+    if (keys.weapon2 && gameState.currentWeapon !== 2 && gameState.unlockedWeapons.includes(2)) {
       weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
       setGameState((prev) => ({
         ...prev,
@@ -436,7 +438,7 @@ function Player({
         isReloading: false,
       }));
     }
-    if (keys.weapon3 && gameState.currentWeapon !== 3) {
+    if (keys.weapon3 && gameState.currentWeapon !== 3 && gameState.unlockedWeapons.includes(3)) {
       weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
       setGameState((prev) => ({
         ...prev,
@@ -445,7 +447,7 @@ function Player({
         isReloading: false,
       }));
     }
-    if (keys.weapon4 && gameState.currentWeapon !== 4) {
+    if (keys.weapon4 && gameState.currentWeapon !== 4 && gameState.unlockedWeapons.includes(4)) {
       weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
       setGameState((prev) => ({
         ...prev,
@@ -1868,10 +1870,23 @@ function HUD({
     );
   }
 
-  // Level Transition Cutscene
+  // Level Transition Cutscene with Shop
   if (gameState.gamePhase === "levelTransition") {
     const completedLevel = LEVELS[gameState.level.currentLevel];
     const nextLevel = LEVELS[gameState.level.currentLevel + 1];
+    
+    // Determine weapon unlock for this level
+    let weaponUnlock = null;
+    if (gameState.level.currentLevel === 0) {
+      weaponUnlock = { id: 2, name: weapons[2].name }; // Rifle after level 1
+    } else if (gameState.level.currentLevel === 1) {
+      weaponUnlock = { id: 3, name: weapons[3].name }; // Assault Rifle after level 2
+    } else if (gameState.level.currentLevel === 2) {
+      weaponUnlock = { id: 4, name: weapons[4].name }; // LMG on final level
+    }
+    
+    const hasToken = gameState.inventory.includes("token");
+    const canAffordToken = gameState.coins >= 2;
     
     return (
       <div
@@ -1888,6 +1903,7 @@ function HUD({
           color: "white",
           fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
           zIndex: 1000,
+          overflow: "auto",
         }}
       >
         <div
@@ -1897,7 +1913,8 @@ function HUD({
             background: "rgba(0,0,0,0.7)",
             borderRadius: "20px",
             boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
-            maxWidth: "700px",
+            maxWidth: "800px",
+            margin: "20px",
           }}
         >
           <h2
@@ -1911,17 +1928,77 @@ function HUD({
           >
             ✅ LEVEL COMPLETE!
           </h2>
-          <div style={{ fontSize: "20px", marginBottom: "30px", lineHeight: "1.8" }}>
+          <div style={{ fontSize: "20px", marginBottom: "20px", lineHeight: "1.8" }}>
             <p style={{ marginBottom: "15px", color: "#ffeb3b" }}>
               You've conquered <strong>{completedLevel?.name}</strong>!
             </p>
-            <p style={{ fontSize: "18px", opacity: 0.9, marginBottom: "20px" }}>
-              Coins Earned: <span style={{ color: "#fdc830", fontWeight: "bold" }}>{gameState.level.killsThisLevel}</span>
+            <p style={{ fontSize: "18px", opacity: 0.9 }}>
+              Coins: <span style={{ color: "#fdc830", fontWeight: "bold" }}>{gameState.coins}</span>
             </p>
           </div>
           
+          {weaponUnlock && (
+            <div style={{ marginBottom: "20px", padding: "15px", background: "rgba(76,175,80,0.2)", borderRadius: "10px", border: "2px solid #4caf50" }}>
+              <h3 style={{ fontSize: "20px", color: "#4caf50", marginBottom: "5px" }}>
+                🔓 WEAPON UNLOCKED!
+              </h3>
+              <p style={{ fontSize: "18px", fontWeight: "bold" }}>
+                {weaponUnlock.name}
+              </p>
+            </div>
+          )}
+          
+          {/* Shop Section */}
+          <div style={{ marginBottom: "20px", padding: "20px", background: "rgba(156,39,176,0.2)", borderRadius: "10px", border: "2px solid #9C27B0" }}>
+            <h3 style={{ fontSize: "24px", color: "#9C27B0", marginBottom: "15px" }}>
+              🛒 SHOPKEEPER
+            </h3>
+            <p style={{ fontSize: "14px", opacity: 0.8, marginBottom: "15px", fontStyle: "italic" }}>
+              "Traveler! I have something for you..."
+            </p>
+            
+            {/* Token Item */}
+            <div style={{ padding: "15px", background: "rgba(0,0,0,0.4)", borderRadius: "8px", marginBottom: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+                <div style={{ textAlign: "left" }}>
+                  <div style={{ fontSize: "18px", fontWeight: "bold", marginBottom: "5px" }}>
+                    ⭐ Lucky Token
+                  </div>
+                  <div style={{ fontSize: "14px", opacity: 0.7 }}>
+                    A mysterious token... (Coming soon)
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!hasToken && canAffordToken) {
+                      setGameState((prev) => ({
+                        ...prev,
+                        coins: prev.coins - 2,
+                        inventory: [...prev.inventory, "token"],
+                      }));
+                    }
+                  }}
+                  disabled={hasToken || !canAffordToken}
+                  style={{
+                    padding: "10px 20px",
+                    fontSize: "16px",
+                    fontWeight: "bold",
+                    background: hasToken ? "#666" : (canAffordToken ? "#fdc830" : "#444"),
+                    color: hasToken ? "#aaa" : (canAffordToken ? "#333" : "#666"),
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: hasToken || !canAffordToken ? "not-allowed" : "pointer",
+                    fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                  }}
+                >
+                  {hasToken ? "OWNED" : `BUY - 2 💰`}
+                </button>
+              </div>
+            </div>
+          </div>
+          
           {nextLevel && (
-            <div style={{ marginBottom: "30px", padding: "20px", background: "rgba(255,215,0,0.1)", borderRadius: "10px" }}>
+            <div style={{ marginBottom: "20px", padding: "20px", background: "rgba(255,215,0,0.1)", borderRadius: "10px" }}>
               <h3 style={{ fontSize: "24px", color: "#fdc830", marginBottom: "10px" }}>
                 🎯 NEXT MISSION
               </h3>
@@ -1936,18 +2013,26 @@ function HUD({
           
           <button
             onClick={() => {
-              setGameState((prev) => ({
-                ...prev,
-                gamePhase: "playing",
-                health: 100,
-                ammo: weapons[prev.currentWeapon].maxAmmo,
-                enemies: [],
-                bullets: [],
-                level: {
-                  currentLevel: prev.level.currentLevel + 1,
-                  killsThisLevel: 0,
-                },
-              }));
+              setGameState((prev) => {
+                // Add weapon unlock
+                const newUnlockedWeapons = weaponUnlock && !prev.unlockedWeapons.includes(weaponUnlock.id)
+                  ? [...prev.unlockedWeapons, weaponUnlock.id]
+                  : prev.unlockedWeapons;
+                
+                return {
+                  ...prev,
+                  gamePhase: "playing",
+                  health: 100,
+                  ammo: weapons[prev.currentWeapon].maxAmmo,
+                  enemies: [],
+                  bullets: [],
+                  level: {
+                    currentLevel: prev.level.currentLevel + 1,
+                    killsThisLevel: 0,
+                  },
+                  unlockedWeapons: newUnlockedWeapons,
+                };
+              });
               document.body.requestPointerLock();
             }}
             style={{
@@ -2065,7 +2150,7 @@ function HUD({
                 setGameState((prev) => ({
                   ...prev,
                   health: 100,
-                  ammo: 15,
+                  ammo: 12,
                   coins: 0,
                   gamePhase: "playing",
                   enemies: [],
@@ -2081,6 +2166,8 @@ function HUD({
                     currentLevel: 0,
                     killsThisLevel: 0,
                   },
+                  unlockedWeapons: [1],
+                  inventory: [],
                   user: {
                     ...prev.user,
                     currency: newCurrency,
@@ -2249,7 +2336,7 @@ function HUD({
                 setGameState((prev) => ({
                   ...prev,
                   health: 100,
-                  ammo: 15,
+                  ammo: 12,
                   coins: 0,
                   gamePhase: "playing",
                   enemies: [],
@@ -2265,6 +2352,8 @@ function HUD({
                     currentLevel: 0,
                     killsThisLevel: 0,
                   },
+                  unlockedWeapons: [1],
+                  inventory: [],
                   user: {
                     ...prev.user,
                     currency: newCurrency,
@@ -2512,9 +2601,23 @@ function HUD({
         }}
       >
         <div
-          style={{ marginBottom: "8px", fontSize: "14px", fontWeight: "bold" }}
+          style={{ marginBottom: "8px", fontSize: "14px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "10px" }}
         >
           HEALTH
+          {gameState.inventory.includes("token") && (
+            <div
+              style={{
+                fontSize: "18px",
+                background: "rgba(255,215,0,0.3)",
+                padding: "4px 8px",
+                borderRadius: "4px",
+                border: "1px solid #fdc830",
+              }}
+              title="Lucky Token"
+            >
+              ⭐
+            </div>
+          )}
         </div>
         <div
           style={{
@@ -2663,7 +2766,7 @@ function GameLogic({
 function Game() {
   const [gameState, setGameState] = useState<GameState>({
     health: 100,
-    ammo: 15, // Start with pistol ammo
+    ammo: 12, // Start with pistol ammo (updated)
     coins: 0, // Changed from score to coins
     gamePhase: "login",
     enemies: [],
@@ -2684,6 +2787,8 @@ function Game() {
       currentLevel: 0,
       killsThisLevel: 0,
     },
+    unlockedWeapons: [1], // Start with pistol only
+    inventory: [], // No items purchased yet
     lastDamageTime: 0,
     currentWeapon: 1, // Start with pistol
     isReloading: false,
