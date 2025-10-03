@@ -394,6 +394,23 @@ function Player({
     4: 100,
   });
 
+  // Reset player position when level changes to prevent getting stuck in walls
+  useEffect(() => {
+    if (playerRef.current) {
+      // Level-specific safe spawn points
+      const spawnPoints: Record<number, [number, number, number]> = {
+        0: [0, 1, 0],      // Level 1: Center is safe
+        1: [0, 1, -15],    // Level 2 (Robot Factory): Spawn away from center wall
+        2: [0, 1, 20],     // Level 3 (Palace): Spawn in safe area
+      };
+      
+      const spawnPoint = spawnPoints[gameState.level.currentLevel] || [0, 1, 0];
+      playerRef.current.position.set(...spawnPoint);
+      velocityRef.current.set(0, 0, 0);
+      rotationRef.current = { x: 0, y: 0 };
+    }
+  }, [gameState.level.currentLevel]);
+
   // Mouse controls - simplified approach
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
