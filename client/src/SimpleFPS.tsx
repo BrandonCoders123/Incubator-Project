@@ -1148,6 +1148,19 @@ function EnemyProjectile({
       direction.multiplyScalar(projectileSpeed * deltaTime),
     );
 
+    // Check wall collision for projectiles
+    const walls = getWallsForLevel(gameState.level.currentLevel);
+    if (checkWallCollision(newPos, walls, 0.3)) {
+      // Hit a wall, remove projectile
+      setGameState((prev) => ({
+        ...prev,
+        enemyProjectiles: prev.enemyProjectiles.filter(
+          (p) => p.id !== projectile.id,
+        ),
+      }));
+      return;
+    }
+
     // Update projectile position
     setGameState((prev) => ({
       ...prev,
