@@ -900,8 +900,8 @@ function Enemy({
       const originalPos = enemyPos.clone();
       let newPos = enemyPos.clone();
 
-      if (enemy.type === "melee") {
-        // Melee: Always move towards player
+      if (enemy.type === "melee" || enemy.type === "giant") {
+        // Melee and Giant: Always move towards player
         newPos = newPos.add(
           direction.clone().multiplyScalar(archetype.moveSpeed * deltaTime),
         );
@@ -963,8 +963,8 @@ function Enemy({
       // Attack logic
       setIsAttacking(distanceToPlayer < 2.5);
       
-      if (enemy.type === "melee") {
-        // Melee: Contact damage
+      if (enemy.type === "melee" || enemy.type === "giant") {
+        // Melee and Giant: Contact damage
         if (distanceToPlayer < 1.5 && gameState.gamePhase === "playing") {
           const currentTime = Date.now();
           setGameState((prev) => {
@@ -1082,18 +1082,21 @@ function Enemy({
     });
   });
 
+  const enemySize = archetype.size || 1;
+  const healthBarYPosition = enemySize > 1 ? 3 : 2;
+
   return (
     <group ref={enemyRef} position={enemy.position}>
-      {/* Simple colored cube for enemy - color based on type */}
+      {/* Simple colored cube for enemy - color based on type, size based on archetype */}
       <mesh>
-        <boxGeometry args={[0.8, 1.5, 0.8]} />
+        <boxGeometry args={[0.8 * enemySize, 1.5 * enemySize, 0.8 * enemySize]} />
         <meshStandardMaterial color={archetype.color} />
       </mesh>
       {/* Health bar above enemy */}
-      <mesh position={[0, 2, 0]}>
-        <planeGeometry args={[1, 0.1]} />
+      <mesh position={[0, healthBarYPosition, 0]}>
+        <planeGeometry args={[1 * enemySize, 0.1]} />
         <meshBasicMaterial 
-          color={enemy.health > 50 ? "#00ff00" : "#ff0000"} 
+          color={enemy.health > (archetype.health / 2) ? "#00ff00" : "#ff0000"} 
           opacity={0.8}
           transparent
         />
