@@ -4,6 +4,7 @@ hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
 channel = "stable-24_05"
+packages = ["php", "php82Packages.composer"]
 
 [deployment]
 deploymentTarget = "autoscale"
@@ -13,10 +14,6 @@ run = ["npm", "run", "start"]
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 35467
-externalPort = 4200
 
 [[ports]]
 localPort = 38625
