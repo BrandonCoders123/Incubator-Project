@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { setupPhpHandler } from "./php-handler";
 
 const app = express();
 app.use(express.json());
@@ -46,6 +47,9 @@ app.use((req, res, next) => {
     res.status(status).json({ message });
     throw err;
   });
+
+  // Setup PHP handler before Vite/static serving
+  setupPhpHandler(app);
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
