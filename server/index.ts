@@ -48,6 +48,11 @@ app.use((req, res, next) => {
     throw err;
   });
 
+  // Redirect root to index.php
+  app.get("/", (_req, res) => {
+    res.redirect("/index.php");
+  });
+
   // Setup PHP handler before Vite/static serving
   setupPhpHandler(app);
 

@@ -227,9 +227,9 @@
             <?php endif; ?>
         </form>
 
-        <form method="POST" action="/game.php">
-            <button type="submit" name="guest" class="btn guest-btn">Play as Guest</button>
-        </form>
+        <a href="/game.php?guest=1" style="text-decoration: none;">
+            <button type="button" class="btn guest-btn">Play as Guest</button>
+        </a>
 
         <div class="toggle-form">
             <?php if ($isRegister): ?>

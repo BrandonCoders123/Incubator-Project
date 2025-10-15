@@ -3299,7 +3299,7 @@ function Game() {
     maxHealth: 100, // Start with 100 max health
     ammo: 12, // Start with pistol ammo (updated)
     coins: 0, // Changed from score to coins
-    gamePhase: "login",
+    gamePhase: "menu", // Start at menu (PHP handles login)
     enemies: [],
     bullets: [],
     enemyProjectiles: [],
