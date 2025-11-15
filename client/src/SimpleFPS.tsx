@@ -1,11 +1,6 @@
-import React, { useState, useRef, Suspense } from "react";
+import React, { Suspense, useRef, useEffect, useState, useCallback } from "react";
 import { Canvas } from "@react-three/fiber";
-import {
-  KeyboardControls,
-  useKeyboardControls,
-  useTexture,
-} from "@react-three/drei";
-import { Suspense, useRef, useEffect, useState, useCallback } from "react";
+import { Environment, KeyboardControls, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import "@fontsource/inter";
 
@@ -372,10 +367,11 @@ function getWallsForLevel(level: number): { position: number[]; size: number[] }
 }
 
 // Environment Component
-function Environment({ gameState }: { gameState: GameState }) {
-  const grassTexture = useTexture("/textures/grass.png");
-  const asphaltTexture = useTexture("/textures/asphalt.png");
-  const woodTexture = useTexture("/textures/wood.jpg");
+  function GameEnvironment({ gameState }: { gameState: GameState }) {
+    const grassTexture = useTexture("/textures/grass.png");
+    const asphaltTexture = useTexture("/textures/asphalt.png");
+    const woodTexture = useTexture("/textures/wood.jpg");
+
 
   grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
   grassTexture.repeat.set(10, 10);
@@ -1530,11 +1526,12 @@ function RegistrationForm({ setGameState }: { setGameState: any }) {
 
   const handleRegister = async () => {
     try {
-      const res = await fetch("http://localhost:4000/api/register", {
+      fetch("https://73cf0a43-86fe-4392-b5cd-074f45b14e50-00-39r0jlgvktgq4.picard.replit.dev/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, email, password }),
-      });
+      })
+
 
       const data = await res.json();
       if (!res.ok) {
@@ -1552,7 +1549,7 @@ function RegistrationForm({ setGameState }: { setGameState: any }) {
 
   return (
     <div style={{ color: "white", textAlign: "center", paddingTop: "100px" }}>
-      <h2>Create Account</h2>
+      <h2>Create New Account</h2>
       {error && <div style={{ color: "red" }}>{error}</div>}
       {success && <div style={{ color: "green" }}>{success}</div>}
       <input
@@ -1801,7 +1798,7 @@ function HUD({
             FPS ARENA
           </h1>
           <h2 style={{ fontSize: "24px", marginBottom: "20px" }}>
-            Create Account
+            Create B Account
           </h2>
           <div
             style={{

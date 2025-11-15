@@ -1,5 +1,9 @@
 {
   "user_data": {
+    "1212": {
+      "currency": 1000,
+      "cosmetics": []
+    },
     "12345": {
       "currency": 1269,
       "cosmetics": []
@@ -33,6 +37,42 @@
       "cosmetics": []
     },
     "testing, testing": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "can you hear me": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "why": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "you": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "testuser": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "alice": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "Are": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "work": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "kill": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "f": {
       "currency": 1000,
       "cosmetics": []
     }
