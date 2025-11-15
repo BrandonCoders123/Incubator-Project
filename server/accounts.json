@@ -2,18 +2,23 @@
   "users": [
     {
       "username": "Weegee700",
-      "password": "first",
+      "password": "First",
       "id": 1
     },
     {
-      "username": "12345",
-      "password": "12345",
+      "username": "Weegee",
+      "password": "First",
       "id": 2
     },
     {
-      "username": "Ri0t",
-      "password": "Password123!",
+      "username": "testing",
+      "password": "1212",
       "id": 3
+    },
+    {
+      "username": "testing, testing",
+      "password": "1212can you hear me",
+      "id": 4
     }
   ]
 }

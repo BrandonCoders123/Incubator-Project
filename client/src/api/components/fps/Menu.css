@@ -1,0 +1,17 @@
+/* Menu.css */
+.menu-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: url('./bd21744a-e6b1-46ab-80a4-e61471a39378.png') no-repeat center center; /* Use relative path to the image */
+    background-size: cover;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-family: 'Inter, sans-serif';
+    z-index: 1000;
+}

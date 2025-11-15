@@ -1,14 +1,38 @@
 {
   "user_data": {
     "12345": {
-      "currency": 1262,
+      "currency": 1269,
+      "cosmetics": []
+    },
+    "123456789": {
+      "currency": 1000,
       "cosmetics": []
     },
     "Weegee700": {
-      "currency": 1015,
+      "currency": 1000,
       "cosmetics": []
     },
     "Ri0t": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "Ri0tAlt": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "weegee": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "Weegee": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "testing": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "testing, testing": {
       "currency": 1000,
       "cosmetics": []
     }

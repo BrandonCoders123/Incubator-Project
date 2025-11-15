@@ -1,4 +1,5 @@
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import React, { useState, useRef, Suspense } from "react";
+import { Canvas } from "@react-three/fiber";
 import {
   KeyboardControls,
   useKeyboardControls,
@@ -1518,6 +1519,66 @@ function IntroCutscene({
   );
 }
 
+// RegistrationForm Component
+// ---------------------
+function RegistrationForm({ setGameState }: { setGameState: any }) {
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const handleRegister = async () => {
+    try {
+      const res = await fetch("http://localhost:4000/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, email, password }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message);
+        return;
+      }
+
+      setSuccess("Registration successful! You can now log in.");
+      setError("");
+      setGameState((prev: any) => ({ ...prev, gamePhase: "login" }));
+    } catch (err) {
+      setError("Network error");
+    }
+  };
+
+  return (
+    <div style={{ color: "white", textAlign: "center", paddingTop: "100px" }}>
+      <h2>Create Account</h2>
+      {error && <div style={{ color: "red" }}>{error}</div>}
+      {success && <div style={{ color: "green" }}>{success}</div>}
+      <input
+        placeholder="Username"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+      />
+      <input
+        placeholder="Email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+      <input
+        type="password"
+        placeholder="Password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      <button onClick={handleRegister}>Register</button>
+      <button onClick={() => setGameState((prev: any) => ({ ...prev, gamePhase: "login" }))}>
+        Back to Login
+      </button>
+    </div>
+  );
+}
+
 // HUD Component
 function HUD({
   gameState,
@@ -1567,7 +1628,7 @@ function HUD({
               marginBottom: "30px",
             }}
           >
-            FPS ARENA
+            FPS ARENA 
           </h1>
           <h2 style={{ fontSize: "24px", marginBottom: "20px" }}>Login</h2>
           <div
