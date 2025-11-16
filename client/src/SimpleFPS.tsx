@@ -1526,16 +1526,15 @@ function RegistrationForm({ setGameState }: { setGameState: any }) {
 
   const handleRegister = async () => {
     try {
-            fetch("https://73cf0a43-86fe-4392-b5cd-074f45b14e50-00-39r0jlgvktgq4.picard.replit.dev/api/register", {
+      const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, email, password }),
-      })
-
+      });
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.message);
+        setError(data.error || "Registration failed");
         return;
       }
 
