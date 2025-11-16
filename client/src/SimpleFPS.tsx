@@ -1,6 +1,6 @@
 import React, { Suspense, useRef, useEffect, useState, useCallback } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Environment, KeyboardControls, useTexture } from "@react-three/drei";
+import { Environment, KeyboardControls, useKeyboardControls, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import "@fontsource/inter";
 
