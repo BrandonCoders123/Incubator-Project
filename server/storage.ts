@@ -2,6 +2,7 @@ import { users, type User, type InsertUser } from "@shared/schema";
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import mysql from 'mysql2/promise';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -122,4 +123,64 @@ export class FileStorage implements IStorage {
   }
 }
 
-export const storage = new FileStorage();
+// MySQL storage implementation
+export class MySQLStorage implements IStorage {
+  private pool: mysql.Pool;
+
+  constructor() {
+    this.pool = mysql.createPool({
+      host: process.env.MYSQL_HOST,
+      user: process.env.MYSQL_USER,
+      password: process.env.MYSQL_PASSWORD,
+      database: process.env.MYSQL_DATABASE,
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0
+    });
+  }
+
+  async getUser(id: number): Promise<User | undefined> {
+    const [rows] = await this.pool.execute(
+      'SELECT user_id as id, username, password_hash as password, email FROM accounts WHERE user_id = ?',
+      [id]
+    );
+    const users = rows as any[];
+    return users[0];
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [rows] = await this.pool.execute(
+      'SELECT user_id as id, username, password_hash as password, email FROM accounts WHERE username = ?',
+      [username]
+    );
+    const users = rows as any[];
+    return users[0];
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [result] = await this.pool.execute(
+      'INSERT INTO accounts (username, password_hash, email, created_at, last_login, is_blocked) VALUES (?, ?, ?, NOW(), NOW(), 0)',
+      [insertUser.username, insertUser.password, insertUser.email]
+    );
+    const insertResult = result as any;
+    return {
+      id: insertResult.insertId,
+      username: insertUser.username,
+      password: insertUser.password,
+      email: insertUser.email
+    };
+  }
+
+  async updateUserCurrency(username: string, currency: number): Promise<void> {
+    // This would require a separate table for user data in MySQL
+    // For now, we'll skip this since the accounts table doesn't have currency
+  }
+
+  async getUserData(username: string): Promise<{currency: number, cosmetics: string[]} | undefined> {
+    // This would require a separate table for user data in MySQL
+    // For now, return default values
+    return { currency: 1000, cosmetics: [] };
+  }
+}
+
+export const storage = new MySQLStorage();
