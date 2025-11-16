@@ -1585,6 +1585,7 @@ function HUD({
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
 
   // Login Page
   if (gameState.gamePhase === "login") {
@@ -1797,7 +1798,7 @@ function HUD({
             FPS ARENA
           </h1>
           <h2 style={{ fontSize: "24px", marginBottom: "20px" }}>
-            Create B Account
+            Create Account
           </h2>
           <div
             style={{
@@ -1812,6 +1813,20 @@ function HUD({
               placeholder="Username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              style={{
+                padding: "12px",
+                fontSize: "16px",
+                borderRadius: "8px",
+                border: "none",
+                outline: "none",
+                color: "black",
+              }}
+            />
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               style={{
                 padding: "12px",
                 fontSize: "16px",
@@ -1845,7 +1860,7 @@ function HUD({
                   const response = await fetch("/api/register", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ username, password }),
+                    body: JSON.stringify({ username, email, password }),
                   });
 
                   if (response.ok) {

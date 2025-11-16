@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import mysql from 'mysql2/promise';
+import bcrypt from 'bcrypt';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -128,6 +129,14 @@ export class MySQLStorage implements IStorage {
   private pool: mysql.Pool;
 
   constructor() {
+    // Validate required environment variables
+    const requiredEnvVars = ['MYSQL_HOST', 'MYSQL_USER', 'MYSQL_PASSWORD', 'MYSQL_DATABASE'];
+    const missing = requiredEnvVars.filter(varName => !process.env[varName]);
+    
+    if (missing.length > 0) {
+      throw new Error(`Missing required MySQL environment variables: ${missing.join(', ')}`);
+    }
+
     this.pool = mysql.createPool({
       host: process.env.MYSQL_HOST,
       user: process.env.MYSQL_USER,
@@ -158,15 +167,18 @@ export class MySQLStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(insertUser.password, saltRounds);
+    
     const [result] = await this.pool.execute(
       'INSERT INTO accounts (username, password_hash, email, created_at, last_login, is_blocked) VALUES (?, ?, ?, NOW(), NOW(), 0)',
-      [insertUser.username, insertUser.password, insertUser.email]
+      [insertUser.username, hashedPassword, insertUser.email]
     );
     const insertResult = result as any;
     return {
       id: insertResult.insertId,
       username: insertUser.username,
-      password: insertUser.password,
+      password: hashedPassword,
       email: insertUser.email
     };
   }
