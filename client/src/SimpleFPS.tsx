@@ -1,6 +1,6 @@
 import React, { Suspense, useRef, useEffect, useState, useCallback } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Environment, KeyboardControls, useKeyboardControls, useTexture } from "@react-three/drei";
+import { KeyboardControls, useKeyboardControls, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import "@fontsource/inter";
 
@@ -3422,7 +3422,7 @@ function Game() {
         <directionalLight position={[50, 50, 25]} intensity={1} />
 
         <Suspense fallback={null}>
-          <Environment gameState={gameState} />
+          <GameEnvironment gameState={gameState} />
           <Player gameState={gameState} setGameState={setGameState} />
           <WeaponSprite gameState={gameState} />
 
