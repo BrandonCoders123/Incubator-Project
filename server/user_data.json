@@ -75,6 +75,14 @@
     "f": {
       "currency": 1000,
       "cosmetics": []
+    },
+    "bobby": {
+      "currency": 1000,
+      "cosmetics": []
+    },
+    "function": {
+      "currency": 1000,
+      "cosmetics": []
     }
   }
 }
