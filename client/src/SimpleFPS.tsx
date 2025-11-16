@@ -439,6 +439,12 @@ function Player({
     3: 40,
     4: 100,
   });
+  const gameStateRef = useRef(gameState);
+  
+  // Keep gameStateRef in sync
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
 
   // Reset player position when level changes to prevent getting stuck in walls
   useEffect(() => {
@@ -459,10 +465,10 @@ function Player({
     }
   }, [gameState.level.currentLevel]);
 
-  // Mouse controls - simplified approach
+  // Mouse controls - optimized to prevent re-attachment on every state change
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
-      if (document.pointerLockElement && gameState.gamePhase === "playing") {
+      if (document.pointerLockElement && gameStateRef.current.gamePhase === "playing") {
         const sensitivity = 0.002;
         rotationRef.current.y -= event.movementX * sensitivity;
         rotationRef.current.x -= event.movementY * sensitivity;
@@ -475,17 +481,18 @@ function Player({
 
     const handleMouseDown = () => {
       mouseDownRef.current = true;
+      const currentState = gameStateRef.current;
       // Fire immediately for semi-auto weapons (single click)
       if (
-        gameState.gamePhase === "playing" &&
-        gameState.ammo > 0 &&
-        !gameState.isReloading
+        currentState.gamePhase === "playing" &&
+        currentState.ammo > 0 &&
+        !currentState.isReloading
       ) {
-        const currentWeapon = weapons[gameState.currentWeapon];
+        const currentWeapon = weapons[currentState.currentWeapon];
         if (currentWeapon.fireRate === 0) {
           // Semi-automatic
           const now = Date.now();
-          if (now - gameState.lastShotTime >= 100) {
+          if (now - currentState.lastShotTime >= 100) {
             // Minimum delay for semi-auto
             // Shoot bullet
             const direction = new THREE.Vector3(
@@ -499,7 +506,7 @@ function Player({
               .add(direction.clone().multiplyScalar(1));
 
             // Update weapon ammo ref
-            weaponAmmo.current[gameState.currentWeapon] = gameState.ammo - 1;
+            weaponAmmo.current[currentState.currentWeapon] = currentState.ammo - 1;
 
             setGameState((prev) => ({
               ...prev,
@@ -535,7 +542,7 @@ function Player({
       window.removeEventListener("mousedown", handleMouseDown);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [gameState.gamePhase, gameState.ammo, camera, setGameState]);
+  }, [camera, setGameState]);
 
   useFrame((state, deltaTime) => {
     if (gameState.gamePhase !== "playing") return;
