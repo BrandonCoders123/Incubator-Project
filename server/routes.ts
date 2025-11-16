@@ -14,6 +14,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { username, password, email } = req.body;
       
+      console.log('Registration request:', { username, password: password ? '***' : undefined, email });
+      
+      // Validate required fields
+      if (!username || !password || !email) {
+        return res.status(400).json({ error: 'All fields are required' });
+      }
+      
       // Check if user already exists
       const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
