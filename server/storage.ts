@@ -16,6 +16,11 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUserCurrency(username: string, currency: number): Promise<void>;
   getUserData(username: string): Promise<{currency: number, cosmetics: string[]} | undefined>;
+  getUserProfile(userId: number): Promise<{username: string, email: string, profilePicture: string | null} | undefined>;
+  updateUsername(userId: number, newUsername: string): Promise<void>;
+  updatePassword(userId: number, newPasswordHash: string): Promise<void>;
+  updateProfilePicture(userId: number, profilePictureUrl: string): Promise<void>;
+  verifyPassword(userId: number, password: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -50,6 +55,26 @@ export class MemStorage implements IStorage {
   
   async getUserData(username: string): Promise<{currency: number, cosmetics: string[]} | undefined> {
     return { currency: 0, cosmetics: [] };
+  }
+  
+  async getUserProfile(userId: number): Promise<{username: string, email: string, profilePicture: string | null} | undefined> {
+    throw new Error('Not implemented in MemStorage');
+  }
+  
+  async updateUsername(userId: number, newUsername: string): Promise<void> {
+    throw new Error('Not implemented in MemStorage');
+  }
+  
+  async updatePassword(userId: number, newPasswordHash: string): Promise<void> {
+    throw new Error('Not implemented in MemStorage');
+  }
+  
+  async updateProfilePicture(userId: number, profilePictureUrl: string): Promise<void> {
+    throw new Error('Not implemented in MemStorage');
+  }
+  
+  async verifyPassword(userId: number, password: string): Promise<boolean> {
+    throw new Error('Not implemented in MemStorage');
   }
 }
 
@@ -122,6 +147,26 @@ export class FileStorage implements IStorage {
     const userData = await this.loadUserData();
     return userData.user_data[username];
   }
+  
+  async getUserProfile(userId: number): Promise<{username: string, email: string, profilePicture: string | null} | undefined> {
+    throw new Error('Not implemented in FileStorage');
+  }
+  
+  async updateUsername(userId: number, newUsername: string): Promise<void> {
+    throw new Error('Not implemented in FileStorage');
+  }
+  
+  async updatePassword(userId: number, newPasswordHash: string): Promise<void> {
+    throw new Error('Not implemented in FileStorage');
+  }
+  
+  async updateProfilePicture(userId: number, profilePictureUrl: string): Promise<void> {
+    throw new Error('Not implemented in FileStorage');
+  }
+  
+  async verifyPassword(userId: number, password: string): Promise<boolean> {
+    throw new Error('Not implemented in FileStorage');
+  }
 }
 
 // MySQL storage implementation
@@ -192,6 +237,57 @@ export class MySQLStorage implements IStorage {
     // This would require a separate table for user data in MySQL
     // For now, return default values
     return { currency: 1000, cosmetics: [] };
+  }
+
+  async getUserProfile(userId: number): Promise<{username: string, email: string, profilePicture: string | null} | undefined> {
+    const [rows] = await this.pool.execute(
+      'SELECT username, email, profile_picture as profilePicture FROM accounts WHERE user_id = ?',
+      [userId]
+    );
+    const profiles = rows as any[];
+    return profiles[0];
+  }
+
+  async updateUsername(userId: number, newUsername: string): Promise<void> {
+    // Check if username already exists
+    const [existing] = await this.pool.execute(
+      'SELECT user_id FROM accounts WHERE username = ? AND user_id != ?',
+      [newUsername, userId]
+    );
+    const existingUsers = existing as any[];
+    if (existingUsers.length > 0) {
+      throw new Error('Username already taken');
+    }
+    
+    await this.pool.execute(
+      'UPDATE accounts SET username = ? WHERE user_id = ?',
+      [newUsername, userId]
+    );
+  }
+
+  async updatePassword(userId: number, newPasswordHash: string): Promise<void> {
+    await this.pool.execute(
+      'UPDATE accounts SET password_hash = ? WHERE user_id = ?',
+      [newPasswordHash, userId]
+    );
+  }
+
+  async updateProfilePicture(userId: number, profilePictureUrl: string): Promise<void> {
+    await this.pool.execute(
+      'UPDATE accounts SET profile_picture = ? WHERE user_id = ?',
+      [profilePictureUrl, userId]
+    );
+  }
+
+  async verifyPassword(userId: number, password: string): Promise<boolean> {
+    const [rows] = await this.pool.execute(
+      'SELECT password_hash FROM accounts WHERE user_id = ?',
+      [userId]
+    );
+    const users = rows as any[];
+    if (users.length === 0) return false;
+    
+    return await bcrypt.compare(password, users[0].password_hash);
   }
 }
 
