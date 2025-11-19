@@ -241,7 +241,7 @@ export class MySQLStorage implements IStorage {
 
   async getUserProfile(userId: number): Promise<{username: string, email: string, profilePicture: string | null} | undefined> {
     const [rows] = await this.pool.execute(
-      'SELECT username, email, profile_picture as profilePicture FROM accounts WHERE user_id = ?',
+      'SELECT username, email, profile_pic as profilePicture FROM accounts WHERE user_id = ?',
       [userId]
     );
     const profiles = rows as any[];
@@ -274,7 +274,7 @@ export class MySQLStorage implements IStorage {
 
   async updateProfilePicture(userId: number, profilePictureUrl: string): Promise<void> {
     await this.pool.execute(
-      'UPDATE accounts SET profile_picture = ? WHERE user_id = ?',
+      'UPDATE accounts SET profile_pic = ? WHERE user_id = ?',
       [profilePictureUrl, userId]
     );
   }
