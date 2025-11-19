@@ -1,7 +1,60 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from 'bcrypt';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
+
+// Extend Express session type
+declare module 'express-session' {
+  interface SessionData {
+    userId: number;
+    username: string;
+  }
+}
+
+// Authentication middleware
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  next();
+}
+
+// Configure multer for profile picture uploads
+const uploadDir = path.join(process.cwd(), 'client', 'public', 'uploads', 'profiles');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+const profileStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueId = crypto.randomUUID();
+    const ext = path.extname(file.originalname);
+    cb(null, `profile-${uniqueId}${ext}`);
+  }
+});
+
+const upload = multer({ 
+  storage: profileStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'));
+    }
+  }
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // put application routes here
@@ -52,14 +105,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
       
-      const userData = await storage.getUserData(username);
-      res.json({ 
-        message: 'Login successful', 
-        user: { username: user.username, id: user.id },
-        currency: userData?.currency || 1000,
-        cosmetics: userData?.cosmetics || []
+      // Regenerate session to prevent session fixation attacks
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error('Session regeneration error:', err);
+          return res.status(500).json({ error: 'Login failed' });
+        }
+        
+        // Save user session
+        req.session.userId = user.id;
+        req.session.username = user.username;
+        
+        req.session.save((err) => {
+          if (err) {
+            console.error('Session save error:', err);
+            return res.status(500).json({ error: 'Login failed' });
+          }
+          
+          storage.getUserData(username).then(userData => {
+            res.json({ 
+              message: 'Login successful', 
+              user: { username: user.username, id: user.id },
+              currency: userData?.currency || 1000,
+              cosmetics: userData?.cosmetics || []
+            });
+          }).catch(() => {
+            res.json({ 
+              message: 'Login successful', 
+              user: { username: user.username, id: user.id },
+              currency: 1000,
+              cosmetics: []
+            });
+          });
+        });
       });
     } catch (error) {
+      console.error('Login error:', error);
       res.status(500).json({ error: 'Login failed' });
     }
   });
@@ -73,6 +154,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       res.status(500).json({ error: 'Failed to update currency' });
     }
+  });
+
+  // Profile endpoints - all require authentication
+  
+  // Get user profile
+  app.get('/api/profile', requireAuth, async (req, res) => {
+    try {
+      // Get the authenticated user's profile
+      const userId = req.session.userId!;
+      const profile = await storage.getUserProfile(userId);
+      
+      if (!profile) {
+        return res.status(404).json({ error: 'Profile not found' });
+      }
+      
+      res.json(profile);
+    } catch (error) {
+      console.error('Get profile error:', error);
+      res.status(500).json({ error: 'Failed to get profile' });
+    }
+  });
+  
+  // Update username
+  app.put('/api/profile/username', requireAuth, async (req, res) => {
+    try {
+      const { newUsername } = req.body;
+      const userId = req.session.userId!;
+      
+      if (!newUsername || typeof newUsername !== 'string' || newUsername.trim().length === 0) {
+        return res.status(400).json({ error: 'Valid username is required' });
+      }
+      
+      await storage.updateUsername(userId, newUsername.trim());
+      
+      // Update session username
+      req.session.username = newUsername.trim();
+      
+      res.json({ message: 'Username updated successfully', username: newUsername.trim() });
+    } catch (error: any) {
+      console.error('Update username error:', error);
+      if (error.message === 'Username already taken') {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: 'Failed to update username' });
+    }
+  });
+  
+  // Update password
+  app.put('/api/profile/password', requireAuth, async (req, res) => {
+    try {
+      const { oldPassword, newPassword, confirmPassword } = req.body;
+      const userId = req.session.userId!;
+      
+      if (!oldPassword || !newPassword || !confirmPassword) {
+        return res.status(400).json({ error: 'All password fields are required' });
+      }
+      
+      if (newPassword !== confirmPassword) {
+        return res.status(400).json({ error: 'New passwords do not match' });
+      }
+      
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'New password must be at least 6 characters' });
+      }
+      
+      // Verify old password
+      const isValidPassword = await storage.verifyPassword(userId, oldPassword);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+      
+      // Hash new password
+      const saltRounds = 10;
+      const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+      
+      // Update password
+      await storage.updatePassword(userId, hashedPassword);
+      res.json({ message: 'Password updated successfully' });
+    } catch (error) {
+      console.error('Update password error:', error);
+      res.status(500).json({ error: 'Failed to update password' });
+    }
+  });
+  
+  // Upload profile picture
+  app.post('/api/profile/picture', requireAuth, (req, res) => {
+    // Use multer middleware with error handling
+    upload.single('profilePicture')(req, res, async (err) => {
+      try {
+        if (err) {
+          if (err instanceof multer.MulterError) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+              return res.status(400).json({ error: 'File size too large. Maximum 5MB allowed' });
+            }
+            return res.status(400).json({ error: err.message });
+          }
+          return res.status(400).json({ error: err.message || 'File upload failed' });
+        }
+        
+        if (!req.file) {
+          return res.status(400).json({ error: 'No file uploaded' });
+        }
+        
+        const userId = req.session.userId!;
+        
+        // Generate the URL path for the uploaded file
+        const profilePictureUrl = `/uploads/profiles/${req.file.filename}`;
+        
+        // Update database with new profile picture URL
+        await storage.updateProfilePicture(userId, profilePictureUrl);
+        
+        res.json({ 
+          message: 'Profile picture updated successfully',
+          profilePictureUrl 
+        });
+      } catch (error) {
+        console.error('Upload profile picture error:', error);
+        res.status(500).json({ error: 'Failed to upload profile picture' });
+      }
+    });
+  });
+  
+  // Logout endpoint
+  app.post('/api/logout', (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ error: 'Failed to logout' });
+      }
+      res.json({ message: 'Logged out successfully' });
+    });
   });
 
   const httpServer = createServer(app);
