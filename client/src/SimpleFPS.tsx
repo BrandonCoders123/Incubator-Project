@@ -1582,6 +1582,478 @@ function RegistrationForm({ setGameState }: { setGameState: any }) {
   );
 }
 
+// Profile Component
+function ProfilePage({
+  gameState,
+  setGameState,
+}: {
+  gameState: GameState;
+  setGameState: React.Dispatch<React.SetStateAction<GameState>>;
+}) {
+  const [profile, setProfile] = useState<{ username: string; email: string; profilePicture: string | null } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  
+  // Edit states
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [newUsername, setNewUsername] = useState("");
+  
+  const [editingPassword, setEditingPassword] = useState(false);
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  
+  const [uploadingPicture, setUploadingPicture] = useState(false);
+
+  // Load profile on mount
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  // Auto-clear success/error messages after 5 seconds
+  useEffect(() => {
+    if (success || error) {
+      const timer = setTimeout(() => {
+        setSuccess("");
+        setError("");
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [success, error]);
+
+  const loadProfile = async () => {
+    try {
+      const res = await fetch("/api/profile", {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          setLoading(false);
+          setGameState((prev) => ({ ...prev, gamePhase: "login" }));
+          return;
+        }
+        throw new Error("Failed to load profile");
+      }
+      const data = await res.json();
+      setProfile(data);
+      setNewUsername(data.username);
+      setLoading(false);
+    } catch (err) {
+      setError("Failed to load profile");
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateUsername = async () => {
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch("/api/profile/username", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newUsername }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to update username");
+        return;
+      }
+      setSuccess("Username updated successfully!");
+      setProfile((prev) => prev ? { ...prev, username: data.username } : null);
+      setEditingUsername(false);
+    } catch (err) {
+      setError("Network error");
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    setError("");
+    setSuccess("");
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+    try {
+      const res = await fetch("/api/profile/password", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldPassword, newPassword, confirmPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to update password");
+        return;
+      }
+      setSuccess("Password updated successfully!");
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setEditingPassword(false);
+    } catch (err) {
+      setError("Network error");
+    }
+  };
+
+  const handleUploadPicture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setError("");
+    setSuccess("");
+    setUploadingPicture(true);
+
+    const formData = new FormData();
+    formData.append("profilePicture", file);
+
+    try {
+      const res = await fetch("/api/profile/picture", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to upload picture");
+        setUploadingPicture(false);
+        return;
+      }
+      setSuccess("Profile picture updated!");
+      setProfile((prev) => prev ? { ...prev, profilePicture: data.profilePictureUrl } : null);
+      setUploadingPicture(false);
+    } catch (err) {
+      setError("Network error");
+      setUploadingPicture(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontSize: "24px",
+          zIndex: 1000,
+        }}
+      >
+        Loading profile...
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100vh",
+        background: "linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        paddingTop: "40px",
+        color: "white",
+        fontFamily: "Inter, sans-serif",
+        zIndex: 1000,
+        overflowY: "auto",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: "600px",
+          width: "100%",
+          padding: "30px",
+          background: "rgba(0,0,0,0.3)",
+          borderRadius: "20px",
+          boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
+        }}
+      >
+        <h1 style={{ fontSize: "36px", marginBottom: "30px", textAlign: "center" }}>
+          Profile
+        </h1>
+
+        {error && (
+          <div
+            style={{
+              background: "rgba(255,0,0,0.2)",
+              border: "1px solid #ff5555",
+              borderRadius: "8px",
+              padding: "10px",
+              marginBottom: "15px",
+              color: "#ffcccc",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div
+            style={{
+              background: "rgba(0,255,0,0.2)",
+              border: "1px solid #55ff55",
+              borderRadius: "8px",
+              padding: "10px",
+              marginBottom: "15px",
+              color: "#ccffcc",
+            }}
+          >
+            {success}
+          </div>
+        )}
+
+        {/* Profile Picture Section */}
+        <div style={{ textAlign: "center", marginBottom: "30px" }}>
+          <div
+            style={{
+              width: "150px",
+              height: "150px",
+              borderRadius: "50%",
+              margin: "0 auto 15px",
+              background: profile?.profilePicture
+                ? `url(${profile.profilePicture})`
+                : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              border: "4px solid white",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "48px",
+              fontWeight: "bold",
+            }}
+          >
+            {!profile?.profilePicture && (profile?.username.charAt(0).toUpperCase() || "?")}
+          </div>
+          <label
+            style={{
+              background: "rgba(255,255,255,0.2)",
+              padding: "8px 16px",
+              borderRadius: "8px",
+              cursor: uploadingPicture ? "wait" : "pointer",
+              border: "1px solid white",
+              display: "inline-block",
+            }}
+          >
+            {uploadingPicture ? "Uploading..." : "Change Picture"}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleUploadPicture}
+              disabled={uploadingPicture}
+              style={{ display: "none" }}
+            />
+          </label>
+        </div>
+
+        {/* Username Section */}
+        <div style={{ marginBottom: "25px" }}>
+          <h3 style={{ fontSize: "18px", marginBottom: "10px" }}>Username</h3>
+          {!editingUsername ? (
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <span style={{ fontSize: "16px", flex: 1 }}>{profile?.username}</span>
+              <button
+                onClick={() => setEditingUsername(true)}
+                style={{
+                  background: "rgba(255,255,255,0.2)",
+                  border: "1px solid white",
+                  borderRadius: "8px",
+                  padding: "8px 16px",
+                  color: "white",
+                  cursor: "pointer",
+                }}
+              >
+                Edit
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <input
+                type="text"
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value)}
+                placeholder="New username"
+                style={{
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: "none",
+                  fontSize: "16px",
+                }}
+              />
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  onClick={handleUpdateUsername}
+                  style={{
+                    flex: 1,
+                    background: "#4CAF50",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "10px",
+                    color: "white",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingUsername(false);
+                    setNewUsername(profile?.username || "");
+                  }}
+                  style={{
+                    flex: 1,
+                    background: "rgba(255,255,255,0.2)",
+                    border: "1px solid white",
+                    borderRadius: "8px",
+                    padding: "10px",
+                    color: "white",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Email Section */}
+        <div style={{ marginBottom: "25px" }}>
+          <h3 style={{ fontSize: "18px", marginBottom: "10px" }}>Email</h3>
+          <span style={{ fontSize: "16px" }}>{profile?.email}</span>
+        </div>
+
+        {/* Password Section */}
+        <div style={{ marginBottom: "30px" }}>
+          <h3 style={{ fontSize: "18px", marginBottom: "10px" }}>Password</h3>
+          {!editingPassword ? (
+            <button
+              onClick={() => setEditingPassword(true)}
+              style={{
+                background: "rgba(255,255,255,0.2)",
+                border: "1px solid white",
+                borderRadius: "8px",
+                padding: "10px 20px",
+                color: "white",
+                cursor: "pointer",
+              }}
+            >
+              Change Password
+            </button>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <input
+                type="password"
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+                placeholder="Current password"
+                style={{
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: "none",
+                  fontSize: "16px",
+                }}
+              />
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="New password"
+                style={{
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: "none",
+                  fontSize: "16px",
+                }}
+              />
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                style={{
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: "none",
+                  fontSize: "16px",
+                }}
+              />
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  onClick={handleUpdatePassword}
+                  style={{
+                    flex: 1,
+                    background: "#4CAF50",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "10px",
+                    color: "white",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  Update Password
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingPassword(false);
+                    setOldPassword("");
+                    setNewPassword("");
+                    setConfirmPassword("");
+                  }}
+                  style={{
+                    flex: 1,
+                    background: "rgba(255,255,255,0.2)",
+                    border: "1px solid white",
+                    borderRadius: "8px",
+                    padding: "10px",
+                    color: "white",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Back to Menu */}
+        <button
+          onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))}
+          style={{
+            width: "100%",
+            background: "rgba(255,255,255,0.2)",
+            border: "2px solid white",
+            borderRadius: "12px",
+            padding: "12px",
+            color: "white",
+            fontSize: "18px",
+            cursor: "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          Back to Menu
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // HUD Component
 function HUD({
   gameState,
@@ -1925,6 +2397,11 @@ function HUD({
     );
   }
 
+  // Profile Page
+  if (gameState.gamePhase === "profile") {
+    return <ProfilePage gameState={gameState} setGameState={setGameState} />;
+  }
+
   if (gameState.gamePhase === "menu") {
     return (
       <div
@@ -2248,75 +2725,6 @@ function HUD({
           </h1>
           <p style={{ fontSize: "20px", marginBottom: "40px" }}>
             Coming soon! Adjust game settings, controls, and preferences.
-          </p>
-          <button
-            onClick={() => {
-              setGameState((prev) => ({ ...prev, gamePhase: "menu" }));
-            }}
-            style={{
-              padding: "15px 40px",
-              fontSize: "20px",
-              fontWeight: "bold",
-              background: "#fdc830",
-              color: "#333",
-              border: "none",
-              borderRadius: "12px",
-              cursor: "pointer",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-            }}
-          >
-            BACK TO MENU
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Profile Page
-  if (gameState.gamePhase === "profile") {
-    return (
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100vw",
-          height: "100vh",
-          background: "linear-gradient(135deg, #2196F3 0%, #1976D2 100%)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "white",
-          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-          zIndex: 1000,
-        }}
-      >
-        <div
-          style={{
-            textAlign: "center",
-            padding: "50px",
-            background: "rgba(0,0,0,0.6)",
-            borderRadius: "20px",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
-            maxWidth: "800px",
-          }}
-        >
-          <h1
-            style={{
-              fontSize: "48px",
-              marginBottom: "30px",
-              textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
-            }}
-          >
-            👤 PROFILE
-          </h1>
-          <p style={{ fontSize: "20px", marginBottom: "20px" }}>
-            Player: {gameState.user.username}
-          </p>
-          <p style={{ fontSize: "18px", marginBottom: "40px" }}>
-            Coming soon! View your stats, achievements, and game history.
           </p>
           <button
             onClick={() => {
