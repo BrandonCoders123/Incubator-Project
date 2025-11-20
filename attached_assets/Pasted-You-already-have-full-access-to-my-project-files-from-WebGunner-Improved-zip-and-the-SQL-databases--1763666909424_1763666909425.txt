@@ -1,0 +1,39 @@
+You already have full access to my project files from WebGunner-Improved.zip and the SQL databases (u237055794_game.sql and information_schema.sql). 
+I’m getting an error saying: **“Failed to create user”** whenever I try to register or make a new user account.
+
+Your task:
+1. **Find and fix the root cause** of this error in my code.
+2. **Ensure new users can be successfully created and stored in the MySQL database.**
+
+### Investigation steps
+- Review the user registration or signup logic (likely in files such as `register.php`, `signup.php`, or any equivalent backend script).
+- Check for:
+  - Missing or incorrect SQL INSERT statements.
+  - Database connection issues (wrong credentials or missing connection include).
+  - Field name mismatches between PHP variables and MySQL columns.
+  - Validation issues causing the code to trigger the failure condition even when inputs are valid.
+  - Error suppression (e.g., missing `mysqli_error()` or `PDOException` output) hiding the true cause.
+- Test whether the form correctly submits and data reaches the SQL query.
+- Examine the `account` or `users` table in `u237055794_game.sql` to ensure the expected columns exist (username, password, etc.) and match what the PHP script expects.
+
+### Required Fix
+- Correct whatever causes the “Failed to create user” message.
+- If the issue is SQL-related:
+  - Fix the `INSERT INTO` query so it matches the actual column names in the `account` table.
+  - Use prepared statements for security.
+- If the issue is with database connectivity:
+  - Ensure the correct credentials, host, and database are loaded from the config file or environment variables.
+- If it’s input validation or missing data:
+  - Adjust the logic to provide proper error handling and informative feedback messages (not just a generic “Failed to create user”).
+
+### Deliverables
+- Show me the **fixed PHP file(s)** with the corrected logic.
+- Include a short explanation in comments at the top of the file explaining:
+  - What caused the original “Failed to create user” error.
+  - What was changed to fix it.
+- After your fix, I should be able to:
+  - Enter a username and password in the registration form.
+  - Submit successfully.
+  - See the new user row appear in the MySQL `account` table.
+
+Make sure to test and confirm user creation works before returning the code.
