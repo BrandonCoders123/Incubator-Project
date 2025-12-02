@@ -325,6 +325,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Update profile picture from URL
+  app.post("/api/profile/picture-url", requireAuth, async (req, res) => {
+    try {
+      const { imageUrl } = req.body;
+      const userId = req.session.userId!;
+
+      if (!imageUrl || typeof imageUrl !== "string") {
+        return res.status(400).json({ error: "Valid image URL is required" });
+      }
+
+      const trimmedUrl = imageUrl.trim();
+
+      // Basic URL validation
+      try {
+        new URL(trimmedUrl);
+      } catch {
+        return res.status(400).json({ error: "Invalid URL format" });
+      }
+
+      // Update database with new profile picture URL
+      await storage.updateProfilePicture(userId, trimmedUrl);
+
+      res.json({
+        message: "Profile picture updated successfully",
+        profilePictureUrl: trimmedUrl,
+      });
+    } catch (error) {
+      console.error("Update profile picture from URL error:", error);
+      res.status(500).json({ error: "Failed to update profile picture" });
+    }
+  });
+
   // Logout endpoint
   app.post("/api/logout", (req, res) => {
     req.session.destroy((err) => {

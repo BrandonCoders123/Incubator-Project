@@ -1926,6 +1926,7 @@ function ProfilePage({
                   fontSize: "14px",
                   width: "100%",
                   boxSizing: "border-box",
+                  color: "black",
                 }}
               />
               <div style={{ display: "flex", gap: "10px" }}>
