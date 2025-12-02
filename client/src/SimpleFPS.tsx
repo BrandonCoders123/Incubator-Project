@@ -1605,6 +1605,11 @@ function ProfilePage({
   const [confirmPassword, setConfirmPassword] = useState("");
   
   const [uploadingPicture, setUploadingPicture] = useState(false);
+  
+  // URL picture upload states
+  const [pictureUrl, setPictureUrl] = useState("");
+  const [loadingUrlPicture, setLoadingUrlPicture] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
 
   // Load profile on mount
   useEffect(() => {
@@ -1729,6 +1734,40 @@ function ProfilePage({
     }
   };
 
+  const handleUpdatePictureFromUrl = async () => {
+    if (!pictureUrl.trim()) {
+      setError("Please enter an image URL");
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setLoadingUrlPicture(true);
+
+    try {
+      const res = await fetch("/api/profile/picture-url", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: pictureUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to update picture");
+        setLoadingUrlPicture(false);
+        return;
+      }
+      setSuccess("Profile picture updated from URL!");
+      setProfile((prev) => prev ? { ...prev, profilePicture: pictureUrl.trim() } : null);
+      setPictureUrl("");
+      setShowUrlInput(false);
+      setLoadingUrlPicture(false);
+    } catch (err) {
+      setError("Network error");
+      setLoadingUrlPicture(false);
+    }
+  };
+
   if (loading) {
     return (
       <div
@@ -1838,25 +1877,94 @@ function ProfilePage({
           >
             {!profile?.profilePicture && (profile?.username.charAt(0).toUpperCase() || "?")}
           </div>
-          <label
-            style={{
-              background: "rgba(255,255,255,0.2)",
-              padding: "8px 16px",
-              borderRadius: "8px",
-              cursor: uploadingPicture ? "wait" : "pointer",
-              border: "1px solid white",
-              display: "inline-block",
-            }}
-          >
-            {uploadingPicture ? "Uploading..." : "Change Picture"}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleUploadPicture}
-              disabled={uploadingPicture}
-              style={{ display: "none" }}
-            />
-          </label>
+          <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginBottom: "15px" }}>
+            <label
+              style={{
+                background: "rgba(255,255,255,0.2)",
+                padding: "8px 16px",
+                borderRadius: "8px",
+                cursor: uploadingPicture ? "wait" : "pointer",
+                border: "1px solid white",
+                display: "inline-block",
+              }}
+            >
+              {uploadingPicture ? "Uploading..." : "Change Picture"}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleUploadPicture}
+                disabled={uploadingPicture}
+                style={{ display: "none" }}
+              />
+            </label>
+            <button
+              onClick={() => setShowUrlInput(!showUrlInput)}
+              style={{
+                background: "rgba(255,255,255,0.2)",
+                padding: "8px 16px",
+                borderRadius: "8px",
+                border: "1px solid white",
+                color: "white",
+                cursor: "pointer",
+                display: "inline-block",
+              }}
+            >
+              Use URL
+            </button>
+          </div>
+          {showUrlInput && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "15px" }}>
+              <input
+                type="text"
+                value={pictureUrl}
+                onChange={(e) => setPictureUrl(e.target.value)}
+                placeholder="Enter image URL (e.g., https://example.com/image.jpg)"
+                style={{
+                  padding: "12px",
+                  borderRadius: "8px",
+                  border: "none",
+                  fontSize: "14px",
+                  width: "100%",
+                  boxSizing: "border-box",
+                }}
+              />
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  onClick={handleUpdatePictureFromUrl}
+                  disabled={loadingUrlPicture}
+                  style={{
+                    flex: 1,
+                    background: "#4CAF50",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "10px",
+                    color: "white",
+                    cursor: loadingUrlPicture ? "wait" : "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {loadingUrlPicture ? "Updating..." : "Update"}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowUrlInput(false);
+                    setPictureUrl("");
+                  }}
+                  style={{
+                    flex: 1,
+                    background: "rgba(255,255,255,0.2)",
+                    border: "1px solid white",
+                    borderRadius: "8px",
+                    padding: "10px",
+                    color: "white",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Username Section */}
