@@ -1,8 +1,17 @@
-import React, { Suspense, useRef, useEffect, useState, useCallback } from "react";
+import React, {
+  Suspense,
+  useRef,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { KeyboardControls, useKeyboardControls, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import "@fontsource/inter";
+
+import { useSettings } from "./lib/stores/useSettings";  // 👈 new
 
 // Weapon definitions
 interface Weapon {
@@ -208,20 +217,17 @@ interface GameState {
   lastShotTime: number;
 }
 
-// Controls configuration
-const controls = [
-  { name: "forward", keys: ["KeyW", "ArrowUp"] },
-  { name: "backward", keys: ["KeyS", "ArrowDown"] },
-  { name: "leftward", keys: ["KeyA", "ArrowLeft"] },
-  { name: "rightward", keys: ["KeyD", "ArrowRight"] },
-  { name: "jump", keys: ["Space"] },
-  { name: "reload", keys: ["KeyR"] },
-  { name: "pause", keys: ["Escape"] },
-  { name: "weapon1", keys: ["Digit1"] },
-  { name: "weapon2", keys: ["Digit2"] },
-  { name: "weapon3", keys: ["Digit3"] },
-  { name: "weapon4", keys: ["Digit4"] },
-];
+interface ShopItem {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  image_url: string | null;
+  rarity: string;
+  category: string;
+}
+
+
 
 // Wall collision detection helper - AABB collision
 function checkWallCollision(
@@ -3983,6 +3989,19 @@ function Game() {
 
 // Main App
 export default function SimpleFPS() {
+  // 👇 grab the current keybindings from your settings store
+  const { keybindings } = useSettings();
+
+  // 👇 convert { forward: ["KeyW"], ... } into the array that KeyboardControls expects
+  const controls = useMemo(
+    () =>
+      Object.entries(keybindings).map(([name, keys]) => ({
+        name,
+        keys,
+      })),
+    [keybindings]
+  );
+
   return (
     <div style={{ width: "100vw", height: "100vh", overflow: "hidden" }}>
       <KeyboardControls map={controls}>
@@ -3991,3 +4010,4 @@ export default function SimpleFPS() {
     </div>
   );
 }
+
