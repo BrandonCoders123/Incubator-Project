@@ -2181,6 +2181,53 @@ function HUD({
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
 
+  // Shop state hooks
+  const [shopItems, setShopItems] = useState<ShopItem[]>([]);
+  const [shopLoading, setShopLoading] = useState(false);
+  const [shopError, setShopError] = useState<string | null>(null);
+
+  // Fetch shop items when entering the shop
+  useEffect(() => {
+    if (gameState.gamePhase !== "shop") return;
+
+    setShopLoading(true);
+    setShopError(null);
+
+    fetch("/getItems.php")
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load shop");
+        return res.json();
+      })
+      .then((data: ShopItem[]) => {
+        setShopItems(data);
+      })
+      .catch((err) => {
+        console.error(err);
+        setShopError("Could not load shop items. Please try again.");
+      })
+      .finally(() => {
+        setShopLoading(false);
+      });
+  }, [gameState.gamePhase]);
+
+  // Handle item purchases
+  const handleBuyItem = (item: ShopItem) => {
+    if (gameState.user.currency < item.price) {
+      alert("Not enough currency!");
+      return;
+    }
+
+    setGameState((prev) => ({
+      ...prev,
+      user: {
+        ...prev.user,
+        currency: prev.user.currency - item.price,
+        cosmetics: [...prev.user.cosmetics, item.name],
+      },
+      inventory: [...prev.inventory, item.name],
+    }));
+  };
+
   // Login Page
   if (gameState.gamePhase === "login") {
     return (
@@ -2878,57 +2925,186 @@ function HUD({
           background: "linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%)",
           display: "flex",
           flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
           color: "white",
           fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
           zIndex: 1000,
+          padding: "20px",
         }}
       >
+        {/* Top Bar */}
         <div
           style={{
-            textAlign: "center",
-            padding: "50px",
-            background: "rgba(0,0,0,0.6)",
-            borderRadius: "20px",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
-            maxWidth: "800px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "20px",
+            padding: "15px 20px",
+            background: "rgba(0,0,0,0.4)",
+            borderRadius: "10px",
           }}
         >
-          <h1
-            style={{
-              fontSize: "48px",
-              marginBottom: "30px",
-              textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
-            }}
-          >
-            🛒 SHOP
-          </h1>
-          <p style={{ fontSize: "20px", marginBottom: "20px" }}>
-            Currency: {gameState.user.currency}
-          </p>
-          <p style={{ fontSize: "18px", marginBottom: "40px" }}>
-            Coming soon! Purchase weapons, skins, and power-ups.
-          </p>
-          <button
-            onClick={() => {
-              setGameState((prev) => ({ ...prev, gamePhase: "menu" }));
-            }}
-            style={{
-              padding: "15px 40px",
-              fontSize: "20px",
-              fontWeight: "bold",
-              background: "#fdc830",
-              color: "#333",
-              border: "none",
-              borderRadius: "12px",
-              cursor: "pointer",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-            }}
-          >
-            BACK TO MENU
-          </button>
+          <h1 style={{ fontSize: "36px", margin: 0 }}>🛒 SHOP</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+            <span style={{ fontSize: "20px", fontWeight: "bold" }}>
+              💰 {gameState.user.currency}
+            </span>
+            <button
+              onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))}
+              style={{
+                padding: "10px 20px",
+                fontSize: "16px",
+                fontWeight: "bold",
+                background: "#fdc830",
+                color: "#333",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+              }}
+            >
+              BACK
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+            gap: "20px",
+            padding: "20px",
+            background: "rgba(0,0,0,0.3)",
+            borderRadius: "10px",
+          }}
+        >
+          {shopLoading && (
+            <div style={{ gridColumn: "1 / -1", textAlign: "center", fontSize: "20px" }}>
+              Loading shop items...
+            </div>
+          )}
+
+          {shopError && (
+            <div
+              style={{
+                gridColumn: "1 / -1",
+                padding: "20px",
+                background: "rgba(255,0,0,0.3)",
+                borderRadius: "8px",
+                textAlign: "center",
+                fontSize: "18px",
+              }}
+            >
+              {shopError}
+            </div>
+          )}
+
+          {!shopLoading && shopItems.length === 0 && !shopError && (
+            <div style={{ gridColumn: "1 / -1", textAlign: "center", fontSize: "18px" }}>
+              No items available
+            </div>
+          )}
+
+          {shopItems.map((item) => {
+            const isOwned = gameState.inventory.includes(item.name);
+            const canAfford = gameState.user.currency >= item.price;
+
+            // Rarity-based styling
+            const rarityColors: Record<string, string> = {
+              common: "#808080",
+              uncommon: "#2ecc71",
+              rare: "#3498db",
+              epic: "#9b59b6",
+              legendary: "#f39c12",
+            };
+
+            return (
+              <div
+                key={item.id}
+                style={{
+                  padding: "15px",
+                  background: "rgba(0,0,0,0.5)",
+                  borderRadius: "8px",
+                  border: `2px solid ${rarityColors[item.rarity] || "#fff"}`,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}
+              >
+                {item.image_url && (
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "120px",
+                      backgroundImage: `url(${item.image_url})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                      borderRadius: "6px",
+                    }}
+                  />
+                )}
+                <div>
+                  <h3 style={{ margin: "0 0 5px 0", fontSize: "16px" }}>
+                    {item.name}
+                  </h3>
+                  <p
+                    style={{
+                      margin: "0 0 10px 0",
+                      fontSize: "12px",
+                      opacity: 0.8,
+                      minHeight: "30px",
+                    }}
+                  >
+                    {item.description}
+                  </p>
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      color: rarityColors[item.rarity] || "#fff",
+                      marginBottom: "10px",
+                      textTransform: "capitalize",
+                    }}
+                  >
+                    {item.rarity}
+                  </div>
+                </div>
+                {isOwned ? (
+                  <button
+                    disabled
+                    style={{
+                      padding: "10px",
+                      fontSize: "14px",
+                      background: "#666",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: "not-allowed",
+                    }}
+                  >
+                    ✓ OWNED
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleBuyItem(item)}
+                    disabled={!canAfford}
+                    style={{
+                      padding: "10px",
+                      fontSize: "14px",
+                      background: canAfford ? "#4CAF50" : "#999",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: canAfford ? "pointer" : "not-allowed",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {canAfford ? `BUY ${item.price}` : "NOT ENOUGH"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     );

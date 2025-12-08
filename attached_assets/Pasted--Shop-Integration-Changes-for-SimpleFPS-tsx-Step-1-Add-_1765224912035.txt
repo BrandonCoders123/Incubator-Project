@@ -1,0 +1,133 @@
+# Shop Integration Changes for SimpleFPS.tsx
+
+## Step 1: Add ShopItem Interface (after line 179)
+
+Add this right after the `GameState` interface:
+
+```typescript
+// 👇 ADD ShopItem interface
+interface ShopItem {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  image_url: string | null;
+  rarity: string;
+  category: string;
+}
+```
+
+## Step 2: Add Shop State Hooks (inside SimpleFPS component, around line 2850)
+
+Find where the `Game()` function defines the `gameState` useState, and add these three new state hooks:
+
+```typescript
+// 👇 ADD these three shop state hooks
+const [shopItems, setShopItems] = useState<ShopItem[]>([]);
+const [shopLoading, setShopLoading] = useState(false);
+const [shopError, setShopError] = useState<string | null>(null);
+```
+
+## Step 3: Add Fetch Items useEffect (around line 2890)
+
+Add this useEffect hook to fetch shop items when entering the shop:
+
+```typescript
+// 👇 ADD this useEffect to fetch shop items
+useEffect(() => {
+  if (gameState.gamePhase !== "shop") return;
+
+  setShopLoading(true);
+  setShopError(null);
+
+  fetch("/getItems.php")
+    .then((res) => {
+      if (!res.ok) throw new Error("Failed to load shop");
+      return res.json();
+    })
+    .then((data: ShopItem[]) => {
+      setShopItems(data);
+    })
+    .catch((err) => {
+      console.error(err);
+      setShopError("Could not load shop items. Please try again.");
+    })
+    .finally(() => {
+      setShopLoading(false);
+    });
+}, [gameState.gamePhase]);
+```
+
+## Step 4: Add handleBuyItem Function (around line 2920)
+
+Add this function to handle item purchases:
+
+```typescript
+// 👇 ADD handleBuyItem function
+const handleBuyItem = (item: ShopItem) => {
+  // Check currency on the client
+  if (gameState.user.currency < item.price) {
+    alert("Not enough currency!");
+    return;
+  }
+
+  // Update game state: deduct currency and add to inventory/cosmetics
+  setGameState((prev) => ({
+    ...prev,
+    user: {
+      ...prev.user,
+      currency: prev.user.currency - item.price,
+      cosmetics: [...prev.user.cosmetics, item.name], // or use item.id
+    },
+    inventory: [...prev.inventory, item.name],
+  }));
+
+  // OPTIONAL: tell the backend about the purchase
+  // fetch("/purchaseItem.php", {
+  //   method: "POST",
+  //   headers: { "Content-Type": "application/json" },
+  //   body: JSON.stringify({ item_id: item.id, username: gameState.user.username }),
+  // }).catch((err) => console.error("Purchase log failed", err));
+};
+```
+
+## Step 5: Replace Shop Page JSX (around line 2862-2927)
+
+Find the existing shop page code that looks like this:
+
+```typescript
+// Shop Page
+if (gameState.gamePhase === "shop") {
+  return (
+    <div style={{...}}>
+      <div style={{...}}>
+        <h1>🛒 SHOP</h1>
+        <p>Currency: {gameState.user.currency}</p>
+        <p>Coming soon! Purchase weapons, skins, and power-ups.</p>
+        <button>BACK TO MENU</button>
+      </div>
+    </div>
+  );
+}
+```
+
+**REPLACE IT ENTIRELY** with this new shop UI (paste the entire new shop JSX from the document, lines starting with "// Shop Page" through the closing JSX tag).
+
+The new shop JSX includes:
+- Top bar with currency display and back button
+- Loading/error states
+- Scrollable grid of item cards
+- Buy buttons with owned/not enough currency states
+- Rarity-based styling
+
+---
+
+## Summary of Changes
+
+1. **Add ShopItem interface** - defines the shape of shop items from database
+2. **Add 3 state hooks** - shopItems, shopLoading, shopError
+3. **Add useEffect** - fetches items from /getItems.php when shop opens
+4. **Add handleBuyItem** - handles purchase logic
+5. **Replace Shop JSX** - replaces placeholder with full Fortnite-style shop
+
+After making these changes, upload the PHP files (db.php and getItems.php) to your server and create the items table in MySQL!
