@@ -127,11 +127,44 @@ class MySQLStorage implements IStorage {
   // doesn’t yet store per-user cosmetics/currency directly.)
 
   async updateUserCurrency(username: string, currency: number): Promise<void> {
-    // TODO: If you later add a dedicated table for currency,
-    // update this method to write to that table.
-    console.log(
-      `[updateUserCurrency] (stub) Would set ${username} currency to ${currency}`
-    );
+    try {
+      // Get user_id from accounts table
+      const [userRows] = await this.pool.execute(
+        `SELECT user_id FROM accounts WHERE username = ?`,
+        [username]
+      );
+      const users = userRows as any[];
+      if (users.length === 0) {
+        console.log(`[updateUserCurrency] User ${username} not found`);
+        return;
+      }
+      const userId = users[0].user_id;
+
+      // Check if user has any inventory entries
+      const [invRows] = await this.pool.execute(
+        `SELECT inventory_id FROM inventory WHERE user_id = ? LIMIT 1`,
+        [userId]
+      );
+      const invResult = invRows as any[];
+
+      if (invResult.length > 0) {
+        // Update gold for all user's inventory rows
+        await this.pool.execute(
+          `UPDATE inventory SET gold = ? WHERE user_id = ?`,
+          [currency, userId]
+        );
+      } else {
+        // Create initial inventory entry with gold (item_id 0 means no item, just currency)
+        await this.pool.execute(
+          `INSERT INTO inventory (user_id, item_id, acquired_at, gold) VALUES (?, 0, NOW(), ?)`,
+          [userId, currency]
+        );
+      }
+      console.log(`[updateUserCurrency] Set ${username} currency to ${currency}`);
+    } catch (err) {
+      console.error('Error updating user currency:', err);
+      throw err;
+    }
   }
 
   async getUserData(
@@ -155,7 +188,8 @@ class MySQLStorage implements IStorage {
         [userId]
       );
       const goldResult = goldRows as any[];
-      const currency = goldResult.length > 0 ? (goldResult[0].gold || 0) : 0;
+      // New users with no inventory get 1000 gold starting balance
+      const currency = goldResult.length > 0 ? (goldResult[0].gold || 0) : 1000;
 
       // Get owned cosmetics
       const [cosmeticRows] = await this.pool.execute(
