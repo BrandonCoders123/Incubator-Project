@@ -174,7 +174,7 @@ interface GameState {
   maxHealth: number; // Added for token health buffs
   ammo: number;
   coins: number; // Changed from score to coins
-  gamePhase: "login" | "register" | "menu" | "leaderboard" | "settings" | "profile" | "shop" | "introCutscene" | "playing" | "paused" | "gameover" | "victory" | "levelTransition";
+  gamePhase: "login" | "register" | "menu" | "leaderboard" | "settings" | "profile" | "shop" | "inventory" | "introCutscene" | "playing" | "paused" | "gameover" | "victory" | "levelTransition";
   enemies: Enemy[];
   bullets: Array<{
     id: string;
@@ -195,6 +195,7 @@ interface GameState {
     isGuest: boolean;
     currency: number;
     cosmetics: string[];
+    equippedSkin: string | null;
   };
   story: {
     currentSettlement: number;
@@ -2328,6 +2329,7 @@ function HUD({
                         isGuest: false,
                         currency: data.currency,
                         cosmetics: data.cosmetics || [],
+                        equippedSkin: null,
                       },
                     }));
                   } else {
@@ -2377,6 +2379,7 @@ function HUD({
                     isGuest: true,
                     currency: 0,
                     cosmetics: [],
+                    equippedSkin: null,
                   },
                 }));
               }}
@@ -2514,6 +2517,7 @@ function HUD({
                         isGuest: false,
                         currency: 1000,
                         cosmetics: [],
+                        equippedSkin: null,
                       },
                     }));
                   } else {
@@ -2562,6 +2566,200 @@ function HUD({
   // Profile Page
   if (gameState.gamePhase === "profile") {
     return <ProfilePage gameState={gameState} setGameState={setGameState} />;
+  }
+
+  // Inventory Page
+  if (gameState.gamePhase === "inventory") {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)",
+          display: "flex",
+          flexDirection: "column",
+          color: "white",
+          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+          zIndex: 1000,
+          padding: "20px",
+        }}
+      >
+        {/* Top Bar */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "20px",
+            padding: "15px 20px",
+            background: "rgba(0,0,0,0.4)",
+            borderRadius: "10px",
+          }}
+        >
+          <h1 style={{ fontSize: "36px", margin: 0 }}>🎒 INVENTORY</h1>
+          <button
+            onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))}
+            style={{
+              padding: "10px 20px",
+              fontSize: "16px",
+              fontWeight: "bold",
+              background: "#fdc830",
+              color: "#333",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer",
+            }}
+          >
+            BACK
+          </button>
+        </div>
+
+        {/* Inventory Content */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "20px",
+            padding: "20px",
+          }}
+        >
+          {/* Weapons Section */}
+          <div
+            style={{
+              background: "rgba(0,0,0,0.3)",
+              borderRadius: "10px",
+              padding: "20px",
+              border: "2px solid #FFC107",
+            }}
+          >
+            <h2 style={{ marginTop: 0, marginBottom: "15px", color: "#FFC107" }}>
+              ⚔️ WEAPONS
+            </h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {[1, 2, 3, 4].map((weaponId) => {
+                const isUnlocked = gameState.unlockedWeapons.includes(weaponId);
+                const isEquipped = gameState.currentWeapon === weaponId;
+                const weaponName = weapons[weaponId]?.name || `Weapon ${weaponId}`;
+
+                return (
+                  <div
+                    key={weaponId}
+                    style={{
+                      padding: "12px",
+                      background: isEquipped ? "rgba(76, 175, 80, 0.5)" : "rgba(255,255,255,0.1)",
+                      borderRadius: "6px",
+                      border: isEquipped ? "2px solid #4CAF50" : "1px solid rgba(255,255,255,0.3)",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div>
+                      <p style={{ margin: "0 0 5px 0", fontWeight: "bold" }}>
+                        {weaponName}
+                      </p>
+                      <p style={{ margin: 0, fontSize: "12px", opacity: 0.8 }}>
+                        {isUnlocked ? "✓ Unlocked" : "🔒 Locked"}
+                      </p>
+                    </div>
+                    {isUnlocked && (
+                      <button
+                        onClick={() => {
+                          setGameState((prev) => ({
+                            ...prev,
+                            currentWeapon: weaponId,
+                            ammo: weapons[weaponId]?.maxAmmo || 12,
+                          }));
+                        }}
+                        style={{
+                          padding: "8px 15px",
+                          fontSize: "14px",
+                          background: isEquipped ? "#4CAF50" : "#2196F3",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {isEquipped ? "✓ EQUIPPED" : "EQUIP"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Skins/Cosmetics Section */}
+          <div
+            style={{
+              background: "rgba(0,0,0,0.3)",
+              borderRadius: "10px",
+              padding: "20px",
+              border: "2px solid #E91E63",
+            }}
+          >
+            <h2 style={{ marginTop: 0, marginBottom: "15px", color: "#E91E63" }}>
+              👕 SKINS
+            </h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {gameState.user.cosmetics.length === 0 ? (
+                <p style={{ opacity: 0.7, marginTop: "10px" }}>No skins owned yet. Visit the shop!</p>
+              ) : (
+                gameState.user.cosmetics.map((skin, idx) => {
+                  const isEquipped = gameState.user.equippedSkin === skin;
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        padding: "12px",
+                        background: isEquipped ? "rgba(233, 30, 99, 0.5)" : "rgba(255,255,255,0.1)",
+                        borderRadius: "6px",
+                        border: isEquipped ? "2px solid #E91E63" : "1px solid rgba(255,255,255,0.3)",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <p style={{ margin: 0, fontWeight: "bold" }}>{skin}</p>
+                      <button
+                        onClick={() => {
+                          setGameState((prev) => ({
+                            ...prev,
+                            user: {
+                              ...prev.user,
+                              equippedSkin: isEquipped ? null : skin,
+                            },
+                          }));
+                        }}
+                        style={{
+                          padding: "8px 15px",
+                          fontSize: "14px",
+                          background: isEquipped ? "#E91E63" : "#2196F3",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {isEquipped ? "✓ EQUIPPED" : "EQUIP"}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (gameState.gamePhase === "menu") {
@@ -2740,6 +2938,33 @@ function HUD({
               }}
             >
               🛒 SHOP
+            </button>
+            
+            <button
+              onClick={() => {
+                setGameState((prev) => ({ ...prev, gamePhase: "inventory" }));
+              }}
+              style={{
+                padding: "20px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                background: "#FF5722",
+                color: "white",
+                border: "none",
+                borderRadius: "12px",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                transition: "transform 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1.05)";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1)";
+              }}
+            >
+              🎒 INVENTORY
             </button>
             
             <button
@@ -3767,6 +3992,7 @@ function HUD({
                     isGuest: false,
                     currency: 0,
                     cosmetics: [],
+                    equippedSkin: null,
                   },
                 }));
               }}
@@ -4088,6 +4314,7 @@ function Game() {
       isGuest: false,
       currency: 0,
       cosmetics: [],
+      equippedSkin: null,
     },
     story: {
       currentSettlement: 0,
