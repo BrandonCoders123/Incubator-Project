@@ -27,6 +27,8 @@ export interface IStorage {
   ): Promise<void>;
 
   verifyPassword(userId: number, password: string): Promise<boolean>;
+  
+  getShopItems(): Promise<any[]>;
 }
 
 /**
@@ -196,6 +198,37 @@ class MySQLStorage implements IStorage {
     if (users.length === 0) return false;
 
     return await bcrypt.compare(password, users[0].password_hash);
+  }
+
+  // ---------- Shop items ----------
+
+  async getShopItems(): Promise<any[]> {
+    try {
+      const [rows] = await this.pool.execute(
+        `SELECT 
+          item_id as id,
+          item_name as name,
+          item_type as type,
+          store_price as price,
+          is_cosmetic
+        FROM items
+        ORDER BY item_id ASC`
+      );
+
+      const items = rows as any[];
+      return items.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        description: item.type,
+        price: item.price,
+        image_url: `https://via.placeholder.com/200?text=${encodeURIComponent(item.name)}`,
+        rarity: item.is_cosmetic ? 'uncommon' : 'common',
+        category: item.type
+      }));
+    } catch (err) {
+      console.error('Error fetching shop items:', err);
+      return [];
+    }
   }
 }
 

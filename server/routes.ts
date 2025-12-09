@@ -357,6 +357,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get shop items endpoint
+  app.get("/getItems.php", async (req, res) => {
+    try {
+      const items = await storage.getShopItems();
+      res.json(items);
+    } catch (error) {
+      console.error("Get shop items error:", error);
+      res.status(500).json({ error: "Failed to load shop items" });
+    }
+  });
+
   // Logout endpoint
   app.post("/api/logout", (req, res) => {
     req.session.destroy((err) => {
