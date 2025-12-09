@@ -307,10 +307,11 @@ class MySQLStorage implements IStorage {
       if (result.length > 0) {
         return result[0].gold || 0;
       }
-      return 0;
+      // New user with no inventory - return default starting gold
+      return 1000;
     } catch (err) {
       console.error('Error fetching user currency:', err);
-      return 0;
+      return 1000;
     }
   }
 
@@ -328,8 +329,21 @@ class MySQLStorage implements IStorage {
 
   async purchaseItem(userId: number, itemId: number, price: number): Promise<void> {
     try {
-      // Get current gold
-      const currentGold = await this.getUserCurrency(userId);
+      // Get current gold (returns 1000 for new users)
+      let currentGold = await this.getUserCurrency(userId);
+      
+      // Check if user has any inventory rows
+      const [existingRows] = await this.pool.execute(
+        `SELECT inventory_id, gold FROM inventory WHERE user_id = ? LIMIT 1`,
+        [userId]
+      );
+      const existingInventory = existingRows as any[];
+      
+      // If user has existing rows, use their actual gold
+      if (existingInventory.length > 0) {
+        currentGold = existingInventory[0].gold || 0;
+      }
+      
       if (currentGold < price) {
         throw new Error('Insufficient gold');
       }
@@ -344,18 +358,22 @@ class MySQLStorage implements IStorage {
         throw new Error('Item already owned');
       }
 
-      // Insert item into inventory and deduct gold
+      const newGold = currentGold - price;
+
+      // Insert item into inventory with updated gold
       await this.pool.execute(
         `INSERT INTO inventory (user_id, item_id, acquired_at, gold) 
          VALUES (?, ?, NOW(), ?)`,
-        [userId, itemId, currentGold - price]
+        [userId, itemId, newGold]
       );
 
-      // Update gold for all user's inventory rows
-      await this.pool.execute(
-        `UPDATE inventory SET gold = ? WHERE user_id = ?`,
-        [currentGold - price, userId]
-      );
+      // Update gold for all other user's inventory rows (sync gold across rows)
+      if (existingInventory.length > 0) {
+        await this.pool.execute(
+          `UPDATE inventory SET gold = ? WHERE user_id = ?`,
+          [newGold, userId]
+        );
+      }
     } catch (err) {
       console.error('Error purchasing item:', err);
       throw err;
