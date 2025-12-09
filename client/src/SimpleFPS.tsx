@@ -1714,7 +1714,6 @@ function InventoryPage({
               <p style={{ opacity: 0.7 }}>Loading...</p>
             ) : (
               allWeapons.map((weapon) => {
-                const isEquipped = gameState.currentWeapon === weapon.id;
                 const isSelected = selectedWeapon === weapon.id;
                 const currentSkin = weaponSkins[weapon.id] || "Default";
                 return (
@@ -1725,50 +1724,22 @@ function InventoryPage({
                       padding: "15px",
                       background: isSelected 
                         ? "rgba(33, 150, 243, 0.5)" 
-                        : isEquipped 
-                          ? "rgba(76, 175, 80, 0.3)" 
-                          : "rgba(255,255,255,0.1)",
+                        : "rgba(255,255,255,0.1)",
                       borderRadius: "8px",
                       border: isSelected 
                         ? "2px solid #2196F3" 
-                        : isEquipped 
-                          ? "2px solid #4CAF50" 
-                          : "1px solid rgba(255,255,255,0.3)",
+                        : "1px solid rgba(255,255,255,0.3)",
                       cursor: "pointer",
                       transition: "all 0.2s",
                     }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <p style={{ margin: "0 0 5px 0", fontWeight: "bold", fontSize: "18px" }}>
-                          {weapon.name}
-                        </p>
-                        <p style={{ margin: 0, fontSize: "12px", opacity: 0.8 }}>
-                          Skin: {currentSkin} {isEquipped && "- Equipped"}
-                        </p>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setGameState((prev) => ({
-                            ...prev,
-                            currentWeapon: weapon.id,
-                            ammo: 12,
-                          }));
-                        }}
-                        style={{
-                          padding: "8px 15px",
-                          fontSize: "14px",
-                          background: isEquipped ? "#4CAF50" : "#2196F3",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "6px",
-                          cursor: "pointer",
-                          fontWeight: "bold",
-                        }}
-                      >
-                        {isEquipped ? "EQUIPPED" : "EQUIP"}
-                      </button>
+                    <div>
+                      <p style={{ margin: "0 0 5px 0", fontWeight: "bold", fontSize: "18px" }}>
+                        {weapon.name}
+                      </p>
+                      <p style={{ margin: 0, fontSize: "12px", opacity: 0.8 }}>
+                        Current Skin: {currentSkin}
+                      </p>
                     </div>
                   </div>
                 );
