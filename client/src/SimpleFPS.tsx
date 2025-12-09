@@ -1589,6 +1589,253 @@ function RegistrationForm({ setGameState }: { setGameState: any }) {
   );
 }
 
+// Inventory Component
+function InventoryPage({
+  gameState,
+  setGameState,
+}: {
+  gameState: GameState;
+  setGameState: React.Dispatch<React.SetStateAction<GameState>>;
+}) {
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [loadingInventory, setLoadingInventory] = useState(true);
+  const [selectedWeapon, setSelectedWeapon] = useState<number | null>(null);
+
+  // Define available weapons with their skins
+  const allWeapons = [
+    { id: 1, name: "Standard Pistol", skins: ["Default", "Gold Plated", "Neon Green", "Shadow Black"] },
+    { id: 2, name: "Combat Rifle", skins: ["Default", "Desert Camo", "Arctic White", "Blood Red"] },
+    { id: 3, name: "Sniper Rifle", skins: ["Default", "Ghillie", "Chrome", "Midnight"] },
+    { id: 4, name: "Plasma Cannon", skins: ["Default", "Electric Blue", "Magma", "Void Purple"] },
+  ];
+
+  // Track equipped skins per weapon
+  const [weaponSkins, setWeaponSkins] = useState<Record<number, string>>({
+    1: "Default", 2: "Default", 3: "Default", 4: "Default"
+  });
+
+  useEffect(() => {
+    const fetchInventory = async () => {
+      try {
+        const response = await fetch("/api/inventory");
+        if (response.ok) {
+          const items = await response.json();
+          setInventoryItems(items);
+        }
+      } catch (err) {
+        console.error("Failed to fetch inventory:", err);
+      } finally {
+        setLoadingInventory(false);
+      }
+    };
+    fetchInventory();
+  }, []);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100vh",
+        background: "linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)",
+        display: "flex",
+        flexDirection: "column",
+        color: "white",
+        fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+        zIndex: 1000,
+        padding: "20px",
+      }}
+    >
+      {/* Top Bar */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "20px",
+          padding: "15px 20px",
+          background: "rgba(0,0,0,0.4)",
+          borderRadius: "10px",
+        }}
+      >
+        <h1 style={{ fontSize: "36px", margin: 0 }}>INVENTORY</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+          <span style={{ fontSize: "18px", color: "#fdc830" }}>
+            {gameState.user.currency} Gold
+          </span>
+          <button
+            onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))}
+            style={{
+              padding: "10px 20px",
+              fontSize: "16px",
+              fontWeight: "bold",
+              background: "#fdc830",
+              color: "#333",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer",
+            }}
+          >
+            BACK
+          </button>
+        </div>
+      </div>
+
+      {/* Inventory Content */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          display: "flex",
+          gap: "20px",
+          padding: "20px",
+        }}
+      >
+        {/* Weapons List */}
+        <div
+          style={{
+            flex: 1,
+            background: "rgba(0,0,0,0.3)",
+            borderRadius: "10px",
+            padding: "20px",
+            border: "2px solid #FFC107",
+          }}
+        >
+          <h2 style={{ marginTop: 0, marginBottom: "15px", color: "#FFC107" }}>
+            WEAPONS
+          </h2>
+          <p style={{ fontSize: "14px", opacity: 0.8, marginBottom: "15px" }}>
+            Click a weapon to change its skin
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {loadingInventory ? (
+              <p style={{ opacity: 0.7 }}>Loading...</p>
+            ) : (
+              allWeapons.map((weapon) => {
+                const isEquipped = gameState.currentWeapon === weapon.id;
+                const isSelected = selectedWeapon === weapon.id;
+                const currentSkin = weaponSkins[weapon.id] || "Default";
+                return (
+                  <div
+                    key={weapon.id}
+                    onClick={() => setSelectedWeapon(isSelected ? null : weapon.id)}
+                    style={{
+                      padding: "15px",
+                      background: isSelected 
+                        ? "rgba(33, 150, 243, 0.5)" 
+                        : isEquipped 
+                          ? "rgba(76, 175, 80, 0.3)" 
+                          : "rgba(255,255,255,0.1)",
+                      borderRadius: "8px",
+                      border: isSelected 
+                        ? "2px solid #2196F3" 
+                        : isEquipped 
+                          ? "2px solid #4CAF50" 
+                          : "1px solid rgba(255,255,255,0.3)",
+                      cursor: "pointer",
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div>
+                        <p style={{ margin: "0 0 5px 0", fontWeight: "bold", fontSize: "18px" }}>
+                          {weapon.name}
+                        </p>
+                        <p style={{ margin: 0, fontSize: "12px", opacity: 0.8 }}>
+                          Skin: {currentSkin} {isEquipped && "- Equipped"}
+                        </p>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setGameState((prev) => ({
+                            ...prev,
+                            currentWeapon: weapon.id,
+                            ammo: 12,
+                          }));
+                        }}
+                        style={{
+                          padding: "8px 15px",
+                          fontSize: "14px",
+                          background: isEquipped ? "#4CAF50" : "#2196F3",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {isEquipped ? "EQUIPPED" : "EQUIP"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Weapon Skins Panel */}
+        <div
+          style={{
+            flex: 1,
+            background: "rgba(0,0,0,0.3)",
+            borderRadius: "10px",
+            padding: "20px",
+            border: "2px solid #9C27B0",
+          }}
+        >
+          <h2 style={{ marginTop: 0, marginBottom: "15px", color: "#9C27B0" }}>
+            WEAPON SKINS
+          </h2>
+          {selectedWeapon ? (
+            <>
+              <p style={{ fontSize: "16px", marginBottom: "15px" }}>
+                Select a skin for <strong>{allWeapons.find(w => w.id === selectedWeapon)?.name}</strong>
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                {allWeapons.find(w => w.id === selectedWeapon)?.skins.map((skin) => {
+                  const isCurrentSkin = weaponSkins[selectedWeapon] === skin;
+                  return (
+                    <div
+                      key={skin}
+                      onClick={() => {
+                        setWeaponSkins(prev => ({ ...prev, [selectedWeapon]: skin }));
+                      }}
+                      style={{
+                        padding: "15px",
+                        background: isCurrentSkin ? "rgba(156, 39, 176, 0.5)" : "rgba(255,255,255,0.1)",
+                        borderRadius: "8px",
+                        border: isCurrentSkin ? "2px solid #9C27B0" : "1px solid rgba(255,255,255,0.3)",
+                        cursor: "pointer",
+                        textAlign: "center",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      <p style={{ margin: 0, fontWeight: "bold" }}>{skin}</p>
+                      {isCurrentSkin && (
+                        <p style={{ margin: "5px 0 0 0", fontSize: "12px", color: "#9C27B0" }}>
+                          Selected
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <p style={{ opacity: 0.7, textAlign: "center", marginTop: "50px" }}>
+              Select a weapon to view and change its skins
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Profile Component
 function ProfilePage({
   gameState,
@@ -2570,243 +2817,7 @@ function HUD({
 
   // Inventory Page
   if (gameState.gamePhase === "inventory") {
-    const [inventoryItems, setInventoryItems] = React.useState<any[]>([]);
-    const [loadingInventory, setLoadingInventory] = React.useState(true);
-    const [selectedWeapon, setSelectedWeapon] = React.useState<number | null>(null);
-
-    // Define available weapons with their skins
-    const allWeapons = [
-      { id: 1, name: "Standard Pistol", skins: ["Default", "Gold Plated", "Neon Green", "Shadow Black"] },
-      { id: 2, name: "Combat Rifle", skins: ["Default", "Desert Camo", "Arctic White", "Blood Red"] },
-      { id: 3, name: "Sniper Rifle", skins: ["Default", "Ghillie", "Chrome", "Midnight"] },
-      { id: 4, name: "Plasma Cannon", skins: ["Default", "Electric Blue", "Magma", "Void Purple"] },
-    ];
-
-    // Track equipped skins per weapon
-    const [weaponSkins, setWeaponSkins] = React.useState<Record<number, string>>({
-      1: "Default", 2: "Default", 3: "Default", 4: "Default"
-    });
-
-    React.useEffect(() => {
-      const fetchInventory = async () => {
-        try {
-          const response = await fetch("/api/inventory");
-          if (response.ok) {
-            const items = await response.json();
-            setInventoryItems(items);
-          }
-        } catch (err) {
-          console.error("Failed to fetch inventory:", err);
-        } finally {
-          setLoadingInventory(false);
-        }
-      };
-      fetchInventory();
-    }, [gameState.gamePhase]);
-
-    return (
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100vw",
-          height: "100vh",
-          background: "linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)",
-          display: "flex",
-          flexDirection: "column",
-          color: "white",
-          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-          zIndex: 1000,
-          padding: "20px",
-        }}
-      >
-        {/* Top Bar */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "20px",
-            padding: "15px 20px",
-            background: "rgba(0,0,0,0.4)",
-            borderRadius: "10px",
-          }}
-        >
-          <h1 style={{ fontSize: "36px", margin: 0 }}>🎒 INVENTORY</h1>
-          <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-            <span style={{ fontSize: "18px", color: "#fdc830" }}>
-              💰 {gameState.user.currency} Gold
-            </span>
-            <button
-              onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))}
-              style={{
-                padding: "10px 20px",
-                fontSize: "16px",
-                fontWeight: "bold",
-                background: "#fdc830",
-                color: "#333",
-                border: "none",
-                borderRadius: "8px",
-                cursor: "pointer",
-              }}
-            >
-              BACK
-            </button>
-          </div>
-        </div>
-
-        {/* Inventory Content */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            display: "flex",
-            gap: "20px",
-            padding: "20px",
-          }}
-        >
-          {/* Weapons List */}
-          <div
-            style={{
-              flex: 1,
-              background: "rgba(0,0,0,0.3)",
-              borderRadius: "10px",
-              padding: "20px",
-              border: "2px solid #FFC107",
-            }}
-          >
-            <h2 style={{ marginTop: 0, marginBottom: "15px", color: "#FFC107" }}>
-              ⚔️ WEAPONS
-            </h2>
-            <p style={{ fontSize: "14px", opacity: 0.8, marginBottom: "15px" }}>
-              Click a weapon to change its skin
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {loadingInventory ? (
-                <p style={{ opacity: 0.7 }}>Loading...</p>
-              ) : (
-                allWeapons.map((weapon) => {
-                  const isEquipped = gameState.currentWeapon === weapon.id;
-                  const isSelected = selectedWeapon === weapon.id;
-                  const currentSkin = weaponSkins[weapon.id] || "Default";
-                  return (
-                    <div
-                      key={weapon.id}
-                      onClick={() => setSelectedWeapon(isSelected ? null : weapon.id)}
-                      style={{
-                        padding: "15px",
-                        background: isSelected 
-                          ? "rgba(33, 150, 243, 0.5)" 
-                          : isEquipped 
-                            ? "rgba(76, 175, 80, 0.3)" 
-                            : "rgba(255,255,255,0.1)",
-                        borderRadius: "8px",
-                        border: isSelected 
-                          ? "2px solid #2196F3" 
-                          : isEquipped 
-                            ? "2px solid #4CAF50" 
-                            : "1px solid rgba(255,255,255,0.3)",
-                        cursor: "pointer",
-                        transition: "all 0.2s",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                          <p style={{ margin: "0 0 5px 0", fontWeight: "bold", fontSize: "18px" }}>
-                            {weapon.name}
-                          </p>
-                          <p style={{ margin: 0, fontSize: "12px", opacity: 0.8 }}>
-                            Skin: {currentSkin} {isEquipped && "• ✓ Equipped"}
-                          </p>
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setGameState((prev) => ({
-                              ...prev,
-                              currentWeapon: weapon.id,
-                              ammo: 12,
-                            }));
-                          }}
-                          style={{
-                            padding: "8px 15px",
-                            fontSize: "14px",
-                            background: isEquipped ? "#4CAF50" : "#2196F3",
-                            color: "white",
-                            border: "none",
-                            borderRadius: "6px",
-                            cursor: "pointer",
-                            fontWeight: "bold",
-                          }}
-                        >
-                          {isEquipped ? "✓ EQUIPPED" : "EQUIP"}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          {/* Weapon Skins Panel */}
-          <div
-            style={{
-              flex: 1,
-              background: "rgba(0,0,0,0.3)",
-              borderRadius: "10px",
-              padding: "20px",
-              border: "2px solid #9C27B0",
-            }}
-          >
-            <h2 style={{ marginTop: 0, marginBottom: "15px", color: "#9C27B0" }}>
-              🎨 WEAPON SKINS
-            </h2>
-            {selectedWeapon ? (
-              <>
-                <p style={{ fontSize: "16px", marginBottom: "15px" }}>
-                  Select a skin for <strong>{allWeapons.find(w => w.id === selectedWeapon)?.name}</strong>
-                </p>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                  {allWeapons.find(w => w.id === selectedWeapon)?.skins.map((skin) => {
-                    const isCurrentSkin = weaponSkins[selectedWeapon] === skin;
-                    return (
-                      <div
-                        key={skin}
-                        onClick={() => {
-                          setWeaponSkins(prev => ({ ...prev, [selectedWeapon]: skin }));
-                        }}
-                        style={{
-                          padding: "15px",
-                          background: isCurrentSkin ? "rgba(156, 39, 176, 0.5)" : "rgba(255,255,255,0.1)",
-                          borderRadius: "8px",
-                          border: isCurrentSkin ? "2px solid #9C27B0" : "1px solid rgba(255,255,255,0.3)",
-                          cursor: "pointer",
-                          textAlign: "center",
-                          transition: "all 0.2s",
-                        }}
-                      >
-                        <p style={{ margin: 0, fontWeight: "bold" }}>{skin}</p>
-                        {isCurrentSkin && (
-                          <p style={{ margin: "5px 0 0 0", fontSize: "12px", color: "#9C27B0" }}>
-                            ✓ Selected
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            ) : (
-              <p style={{ opacity: 0.7, textAlign: "center", marginTop: "50px" }}>
-                Select a weapon to view and change its skins
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+    return <InventoryPage gameState={gameState} setGameState={setGameState} />;
   }
 
   if (gameState.gamePhase === "menu") {
