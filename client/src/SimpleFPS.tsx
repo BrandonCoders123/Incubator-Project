@@ -2570,6 +2570,33 @@ function HUD({
 
   // Inventory Page
   if (gameState.gamePhase === "inventory") {
+    const [inventoryItems, setInventoryItems] = React.useState<any[]>([]);
+    const [loadingInventory, setLoadingInventory] = React.useState(true);
+
+    React.useEffect(() => {
+      const fetchInventory = async () => {
+        try {
+          const response = await fetch("/api/inventory");
+          if (response.ok) {
+            const items = await response.json();
+            setInventoryItems(items);
+          }
+        } catch (err) {
+          console.error("Failed to fetch inventory:", err);
+        } finally {
+          setLoadingInventory(false);
+        }
+      };
+      fetchInventory();
+    }, [gameState.gamePhase]);
+
+    const weapons = inventoryItems.filter(
+      (item) => !item.isCosmeticItem && item.type !== "Cosmetic"
+    );
+    const skins = inventoryItems.filter(
+      (item) => item.isCosmeticItem || item.type === "Cosmetic"
+    );
+
     return (
       <div
         style={{
@@ -2641,39 +2668,40 @@ function HUD({
               ⚔️ WEAPONS
             </h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {[1, 2, 3, 4].map((weaponId) => {
-                const isUnlocked = gameState.unlockedWeapons.includes(weaponId);
-                const isEquipped = gameState.currentWeapon === weaponId;
-                const weaponName = weapons[weaponId]?.name || `Weapon ${weaponId}`;
-
-                return (
-                  <div
-                    key={weaponId}
-                    style={{
-                      padding: "12px",
-                      background: isEquipped ? "rgba(76, 175, 80, 0.5)" : "rgba(255,255,255,0.1)",
-                      borderRadius: "6px",
-                      border: isEquipped ? "2px solid #4CAF50" : "1px solid rgba(255,255,255,0.3)",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <div>
-                      <p style={{ margin: "0 0 5px 0", fontWeight: "bold" }}>
-                        {weaponName}
-                      </p>
-                      <p style={{ margin: 0, fontSize: "12px", opacity: 0.8 }}>
-                        {isUnlocked ? "✓ Unlocked" : "🔒 Locked"}
-                      </p>
-                    </div>
-                    {isUnlocked && (
+              {loadingInventory ? (
+                <p style={{ opacity: 0.7 }}>Loading...</p>
+              ) : weapons.length === 0 ? (
+                <p style={{ opacity: 0.7 }}>No weapons owned yet. Visit the shop!</p>
+              ) : (
+                weapons.map((weapon) => {
+                  const isEquipped = gameState.currentWeapon === weapon.id;
+                  return (
+                    <div
+                      key={weapon.id}
+                      style={{
+                        padding: "12px",
+                        background: isEquipped ? "rgba(76, 175, 80, 0.5)" : "rgba(255,255,255,0.1)",
+                        borderRadius: "6px",
+                        border: isEquipped ? "2px solid #4CAF50" : "1px solid rgba(255,255,255,0.3)",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                      }}
+                    >
+                      <div>
+                        <p style={{ margin: "0 0 5px 0", fontWeight: "bold" }}>
+                          {weapon.name}
+                        </p>
+                        <p style={{ margin: 0, fontSize: "12px", opacity: 0.8 }}>
+                          ✓ Owned
+                        </p>
+                      </div>
                       <button
                         onClick={() => {
                           setGameState((prev) => ({
                             ...prev,
-                            currentWeapon: weaponId,
-                            ammo: weapons[weaponId]?.maxAmmo || 12,
+                            currentWeapon: weapon.id,
+                            ammo: 12,
                           }));
                         }}
                         style={{
@@ -2689,10 +2717,10 @@ function HUD({
                       >
                         {isEquipped ? "✓ EQUIPPED" : "EQUIP"}
                       </button>
-                    )}
-                  </div>
-                );
-              })}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -2709,14 +2737,16 @@ function HUD({
               👕 SKINS
             </h2>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {gameState.user.cosmetics.length === 0 ? (
-                <p style={{ opacity: 0.7, marginTop: "10px" }}>No skins owned yet. Visit the shop!</p>
+              {loadingInventory ? (
+                <p style={{ opacity: 0.7 }}>Loading...</p>
+              ) : skins.length === 0 ? (
+                <p style={{ opacity: 0.7 }}>No skins owned yet. Visit the shop!</p>
               ) : (
-                gameState.user.cosmetics.map((skin, idx) => {
-                  const isEquipped = gameState.user.equippedSkin === skin;
+                skins.map((skin) => {
+                  const isEquipped = gameState.user.equippedSkin === skin.name;
                   return (
                     <div
-                      key={idx}
+                      key={skin.id}
                       style={{
                         padding: "12px",
                         background: isEquipped ? "rgba(233, 30, 99, 0.5)" : "rgba(255,255,255,0.1)",
@@ -2727,14 +2757,14 @@ function HUD({
                         alignItems: "center",
                       }}
                     >
-                      <p style={{ margin: 0, fontWeight: "bold" }}>{skin}</p>
+                      <p style={{ margin: 0, fontWeight: "bold" }}>{skin.name}</p>
                       <button
                         onClick={() => {
                           setGameState((prev) => ({
                             ...prev,
                             user: {
                               ...prev.user,
-                              equippedSkin: isEquipped ? null : skin,
+                              equippedSkin: isEquipped ? null : skin.name,
                             },
                           }));
                         }}

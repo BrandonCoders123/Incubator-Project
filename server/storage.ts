@@ -29,6 +29,8 @@ export interface IStorage {
   verifyPassword(userId: number, password: string): Promise<boolean>;
   
   getShopItems(): Promise<any[]>;
+  getUserInventory(userId: number): Promise<any[]>;
+  purchaseItem(userId: number, itemId: number): Promise<void>;
 }
 
 /**
@@ -228,6 +230,53 @@ class MySQLStorage implements IStorage {
     } catch (err) {
       console.error('Error fetching shop items:', err);
       return [];
+    }
+  }
+
+  // ---------- User inventory ----------
+
+  async getUserInventory(userId: number): Promise<any[]> {
+    try {
+      const [rows] = await this.pool.execute(
+        `SELECT DISTINCT
+          i.item_id as id,
+          i.item_name as name,
+          i.item_type as type,
+          i.store_price as price,
+          i.is_cosmetic,
+          CASE WHEN ui.user_id IS NOT NULL THEN 1 ELSE 0 END as owned
+        FROM items i
+        LEFT JOIN user_items ui ON i.item_id = ui.item_id AND ui.user_id = ?
+        WHERE ui.user_id = ?
+        ORDER BY i.item_id ASC`,
+        [userId, userId]
+      );
+
+      const items = rows as any[];
+      return items.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        price: item.price,
+        isCosmeticItem: item.is_cosmetic === 1 || item.is_cosmetic === true
+      }));
+    } catch (err) {
+      console.error('Error fetching user inventory:', err);
+      return [];
+    }
+  }
+
+  async purchaseItem(userId: number, itemId: number): Promise<void> {
+    try {
+      await this.pool.execute(
+        `INSERT INTO user_items (user_id, item_id, purchased_at) 
+         VALUES (?, ?, NOW())
+         ON DUPLICATE KEY UPDATE purchased_at = NOW()`,
+        [userId, itemId]
+      );
+    } catch (err) {
+      console.error('Error purchasing item:', err);
+      throw err;
     }
   }
 }

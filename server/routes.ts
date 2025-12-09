@@ -368,6 +368,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user inventory endpoint
+  app.get("/api/inventory", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const inventory = await storage.getUserInventory(userId);
+      res.json(inventory);
+    } catch (error) {
+      console.error("Get user inventory error:", error);
+      res.status(500).json({ error: "Failed to load inventory" });
+    }
+  });
+
+  // Purchase item endpoint
+  app.post("/api/purchase", requireAuth, async (req, res) => {
+    try {
+      const { itemId } = req.body;
+      const userId = req.session.userId!;
+
+      if (!itemId) {
+        return res.status(400).json({ error: "Item ID is required" });
+      }
+
+      await storage.purchaseItem(userId, itemId);
+      res.json({ message: "Item purchased successfully" });
+    } catch (error) {
+      console.error("Purchase error:", error);
+      res.status(500).json({ error: "Failed to purchase item" });
+    }
+  });
+
   // Logout endpoint
   app.post("/api/logout", (req, res) => {
     req.session.destroy((err) => {
