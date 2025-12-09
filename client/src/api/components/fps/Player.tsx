@@ -3,7 +3,9 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useKeyboardControls } from '@react-three/drei';
 import { useFPS } from '../../lib/stores/useFPS';
 import { useAudio } from '../../lib/stores/useAudio';
+import { useSettings } from '../../lib/stores/useSettings';
 import * as THREE from 'three';
+
 
 export default function Player() {
   const { camera } = useThree();
@@ -25,37 +27,57 @@ export default function Player() {
   const rotationRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const isOnGroundRef = useRef<boolean>(true);
   const lastShotTime = useRef<number>(0);
+  const isAimingRef = useRef<boolean>(false); // 👈 NEW
   
-  // Mouse look controls
+  // Mouse look controls with sensitivity + aiming
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       if (!isPointerLocked || gameState !== 'playing') return;
-      
-      const sensitivity = 0.002;
+
+      const baseSensitivity = 0.002;
+      const multiplier = isAimingRef.current ? aimSensitivity : normalSensitivity;
+      const sensitivity = baseSensitivity * multiplier;
+
       rotationRef.current.y -= event.movementX * sensitivity;
       rotationRef.current.x -= event.movementY * sensitivity;
-      
+
       // Clamp vertical rotation
       rotationRef.current.x = Math.max(
-        -Math.PI / 2, 
+        -Math.PI / 2,
         Math.min(Math.PI / 2, rotationRef.current.x)
       );
     };
-    
+
     const handleMouseDown = (event: MouseEvent) => {
+      // Left click: shoot
       if (event.button === 0 && gameState === 'playing' && isPointerLocked) {
         handleShoot();
       }
+
+      // Right click: start aiming (lower sensitivity)
+      if (event.button === 2 && gameState === 'playing' && isPointerLocked) {
+        event.preventDefault();
+        isAimingRef.current = true;
+      }
     };
-    
+
+    const handleMouseUp = (event: MouseEvent) => {
+      // Stop aiming when right button is released
+      if (event.button === 2) {
+        isAimingRef.current = false;
+      }
+    };
+
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mousedown', handleMouseDown);
-    
+    window.addEventListener('mouseup', handleMouseUp);
+
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isPointerLocked, gameState]);
+  }, [isPointerLocked, gameState, normalSensitivity, aimSensitivity, handleShoot]);
   
   const handleShoot = () => {
     const currentTime = Date.now();
