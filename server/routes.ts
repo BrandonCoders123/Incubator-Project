@@ -383,18 +383,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Purchase item endpoint
   app.post("/api/purchase", requireAuth, async (req, res) => {
     try {
-      const { itemId } = req.body;
+      const { itemId, price } = req.body;
       const userId = req.session.userId!;
 
       if (!itemId) {
         return res.status(400).json({ error: "Item ID is required" });
       }
 
-      await storage.purchaseItem(userId, itemId);
-      res.json({ message: "Item purchased successfully" });
-    } catch (error) {
+      await storage.purchaseItem(userId, itemId, price || 0);
+      
+      // Return updated currency
+      const newCurrency = await storage.getUserCurrency(userId);
+      res.json({ message: "Item purchased successfully", currency: newCurrency });
+    } catch (error: any) {
       console.error("Purchase error:", error);
+      if (error.message === 'Insufficient gold') {
+        return res.status(400).json({ error: "Not enough gold" });
+      }
+      if (error.message === 'Item already owned') {
+        return res.status(400).json({ error: "You already own this item" });
+      }
       res.status(500).json({ error: "Failed to purchase item" });
+    }
+  });
+
+  // Get user currency endpoint
+  app.get("/api/currency", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const currency = await storage.getUserCurrency(userId);
+      res.json({ currency });
+    } catch (error) {
+      console.error("Get currency error:", error);
+      res.status(500).json({ error: "Failed to get currency" });
     }
   });
 

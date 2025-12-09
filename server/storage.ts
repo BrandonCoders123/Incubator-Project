@@ -30,7 +30,9 @@ export interface IStorage {
   
   getShopItems(): Promise<any[]>;
   getUserInventory(userId: number): Promise<any[]>;
-  purchaseItem(userId: number, itemId: number): Promise<void>;
+  purchaseItem(userId: number, itemId: number, price: number): Promise<void>;
+  getUserCurrency(userId: number): Promise<number>;
+  updateUserGold(userId: number, newGold: number): Promise<void>;
 }
 
 /**
@@ -135,9 +137,40 @@ class MySQLStorage implements IStorage {
   async getUserData(
     username: string
   ): Promise<{ currency: number; cosmetics: string[] } | undefined> {
-    // For now, return some defaults so the game can run.
-    // Update this once you have a proper user_data or stats table.
-    return { currency: 1000, cosmetics: [] };
+    try {
+      // Get user_id from accounts table
+      const [userRows] = await this.pool.execute(
+        `SELECT user_id FROM accounts WHERE username = ?`,
+        [username]
+      );
+      const users = userRows as any[];
+      if (users.length === 0) {
+        return { currency: 0, cosmetics: [] };
+      }
+      const userId = users[0].user_id;
+
+      // Get gold from inventory table
+      const [goldRows] = await this.pool.execute(
+        `SELECT gold FROM inventory WHERE user_id = ? LIMIT 1`,
+        [userId]
+      );
+      const goldResult = goldRows as any[];
+      const currency = goldResult.length > 0 ? (goldResult[0].gold || 0) : 0;
+
+      // Get owned cosmetics
+      const [cosmeticRows] = await this.pool.execute(
+        `SELECT i.item_name FROM items i 
+         INNER JOIN inventory inv ON i.item_id = inv.item_id 
+         WHERE inv.user_id = ? AND i.is_cosmetic = 1`,
+        [userId]
+      );
+      const cosmetics = (cosmeticRows as any[]).map(row => row.item_name);
+
+      return { currency, cosmetics };
+    } catch (err) {
+      console.error('Error fetching user data:', err);
+      return { currency: 0, cosmetics: [] };
+    }
   }
 
   // ---------- Profile info ----------
@@ -243,13 +276,11 @@ class MySQLStorage implements IStorage {
           i.item_name as name,
           i.item_type as type,
           i.store_price as price,
-          i.is_cosmetic,
-          CASE WHEN ui.user_id IS NOT NULL THEN 1 ELSE 0 END as owned
+          i.is_cosmetic
         FROM items i
-        LEFT JOIN user_items ui ON i.item_id = ui.item_id AND ui.user_id = ?
-        WHERE ui.user_id = ?
+        INNER JOIN inventory inv ON i.item_id = inv.item_id AND inv.user_id = ?
         ORDER BY i.item_id ASC`,
-        [userId, userId]
+        [userId]
       );
 
       const items = rows as any[];
@@ -266,13 +297,64 @@ class MySQLStorage implements IStorage {
     }
   }
 
-  async purchaseItem(userId: number, itemId: number): Promise<void> {
+  async getUserCurrency(userId: number): Promise<number> {
+    try {
+      const [rows] = await this.pool.execute(
+        `SELECT gold FROM inventory WHERE user_id = ? LIMIT 1`,
+        [userId]
+      );
+      const result = rows as any[];
+      if (result.length > 0) {
+        return result[0].gold || 0;
+      }
+      return 0;
+    } catch (err) {
+      console.error('Error fetching user currency:', err);
+      return 0;
+    }
+  }
+
+  async updateUserGold(userId: number, newGold: number): Promise<void> {
     try {
       await this.pool.execute(
-        `INSERT INTO user_items (user_id, item_id, purchased_at) 
-         VALUES (?, ?, NOW())
-         ON DUPLICATE KEY UPDATE purchased_at = NOW()`,
+        `UPDATE inventory SET gold = ? WHERE user_id = ?`,
+        [newGold, userId]
+      );
+    } catch (err) {
+      console.error('Error updating user gold:', err);
+      throw err;
+    }
+  }
+
+  async purchaseItem(userId: number, itemId: number, price: number): Promise<void> {
+    try {
+      // Get current gold
+      const currentGold = await this.getUserCurrency(userId);
+      if (currentGold < price) {
+        throw new Error('Insufficient gold');
+      }
+
+      // Check if user already owns this item
+      const [existing] = await this.pool.execute(
+        `SELECT inventory_id FROM inventory WHERE user_id = ? AND item_id = ?`,
         [userId, itemId]
+      );
+      const existingItems = existing as any[];
+      if (existingItems.length > 0) {
+        throw new Error('Item already owned');
+      }
+
+      // Insert item into inventory and deduct gold
+      await this.pool.execute(
+        `INSERT INTO inventory (user_id, item_id, acquired_at, gold) 
+         VALUES (?, ?, NOW(), ?)`,
+        [userId, itemId, currentGold - price]
+      );
+
+      // Update gold for all user's inventory rows
+      await this.pool.execute(
+        `UPDATE inventory SET gold = ? WHERE user_id = ?`,
+        [currentGold - price, userId]
       );
     } catch (err) {
       console.error('Error purchasing item:', err);
