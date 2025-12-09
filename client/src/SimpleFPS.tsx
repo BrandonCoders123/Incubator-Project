@@ -1597,9 +1597,10 @@ function InventoryPage({
   gameState: GameState;
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
 }) {
-  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [purchasedItems, setPurchasedItems] = useState<any[]>([]);
   const [loadingInventory, setLoadingInventory] = useState(true);
   const [selectedWeapon, setSelectedWeapon] = useState<number | null>(null);
+  const [currency, setCurrency] = useState(gameState.user.currency);
 
   // Define available weapons with their skins
   const allWeapons = [
@@ -1609,18 +1610,31 @@ function InventoryPage({
     { id: 4, name: "Plasma Cannon", skins: ["Default", "Electric Blue", "Magma", "Void Purple"] },
   ];
 
-  // Track equipped skins per weapon
+  // Track equipped skins per weapon based on purchased items
   const [weaponSkins, setWeaponSkins] = useState<Record<number, string>>({
     1: "Default", 2: "Default", 3: "Default", 4: "Default"
   });
 
   useEffect(() => {
-    const fetchInventory = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch("/api/inventory");
-        if (response.ok) {
-          const items = await response.json();
-          setInventoryItems(items);
+        // Fetch purchased items from database
+        const invResponse = await fetch("/api/inventory", { credentials: "include" });
+        if (invResponse.ok) {
+          const items = await invResponse.json();
+          setPurchasedItems(items);
+        }
+
+        // Fetch currency from database
+        const currResponse = await fetch("/api/currency", { credentials: "include" });
+        if (currResponse.ok) {
+          const data = await currResponse.json();
+          setCurrency(data.currency);
+          // Update game state with current currency
+          setGameState((prev) => ({
+            ...prev,
+            user: { ...prev.user, currency: data.currency },
+          }));
         }
       } catch (err) {
         console.error("Failed to fetch inventory:", err);
@@ -1628,7 +1642,7 @@ function InventoryPage({
         setLoadingInventory(false);
       }
     };
-    fetchInventory();
+    fetchData();
   }, []);
 
   return (
@@ -1663,7 +1677,7 @@ function InventoryPage({
         <h1 style={{ fontSize: "36px", margin: 0 }}>INVENTORY</h1>
         <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
           <span style={{ fontSize: "18px", color: "#fdc830" }}>
-            {gameState.user.currency} Gold
+            {currency} Gold
           </span>
           <button
             onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))}
@@ -1716,6 +1730,10 @@ function InventoryPage({
               allWeapons.map((weapon) => {
                 const isSelected = selectedWeapon === weapon.id;
                 const currentSkin = weaponSkins[weapon.id] || "Default";
+                // Check which skins the user owns for this weapon
+                const ownedSkins = purchasedItems
+                  .filter((item) => item.name && item.name.includes(weapon.name.split(" ")[0]))
+                  .map((item) => item.name);
                 return (
                   <div
                     key={weapon.id}
@@ -1748,7 +1766,7 @@ function InventoryPage({
           </div>
         </div>
 
-        {/* Weapon Skins Panel */}
+        {/* Purchased Items / Weapon Skins Panel */}
         <div
           style={{
             flex: 1,
@@ -1759,7 +1777,7 @@ function InventoryPage({
           }}
         >
           <h2 style={{ marginTop: 0, marginBottom: "15px", color: "#9C27B0" }}>
-            WEAPON SKINS
+            {selectedWeapon ? "WEAPON SKINS" : "PURCHASED ITEMS"}
           </h2>
           {selectedWeapon ? (
             <>
@@ -1769,20 +1787,36 @@ function InventoryPage({
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                 {allWeapons.find(w => w.id === selectedWeapon)?.skins.map((skin) => {
                   const isCurrentSkin = weaponSkins[selectedWeapon] === skin;
+                  const weaponName = allWeapons.find(w => w.id === selectedWeapon)?.name.split(" ")[0];
+                  const skinItemName = `${weaponName} - ${skin}`;
+                  const isOwned = skin === "Default" || purchasedItems.some((item) => item.name === skinItemName);
                   return (
                     <div
                       key={skin}
                       onClick={() => {
-                        setWeaponSkins(prev => ({ ...prev, [selectedWeapon]: skin }));
+                        if (isOwned) {
+                          setWeaponSkins(prev => ({ ...prev, [selectedWeapon]: skin }));
+                        } else {
+                          alert("You don't own this skin! Buy it from the shop.");
+                        }
                       }}
                       style={{
                         padding: "15px",
-                        background: isCurrentSkin ? "rgba(156, 39, 176, 0.5)" : "rgba(255,255,255,0.1)",
+                        background: isCurrentSkin 
+                          ? "rgba(156, 39, 176, 0.5)" 
+                          : isOwned 
+                            ? "rgba(255,255,255,0.1)" 
+                            : "rgba(100,100,100,0.3)",
                         borderRadius: "8px",
-                        border: isCurrentSkin ? "2px solid #9C27B0" : "1px solid rgba(255,255,255,0.3)",
-                        cursor: "pointer",
+                        border: isCurrentSkin 
+                          ? "2px solid #9C27B0" 
+                          : isOwned 
+                            ? "1px solid rgba(255,255,255,0.3)" 
+                            : "1px solid rgba(100,100,100,0.5)",
+                        cursor: isOwned ? "pointer" : "not-allowed",
                         textAlign: "center",
                         transition: "all 0.2s",
+                        opacity: isOwned ? 1 : 0.6,
                       }}
                     >
                       <p style={{ margin: 0, fontWeight: "bold" }}>{skin}</p>
@@ -1791,15 +1825,45 @@ function InventoryPage({
                           Selected
                         </p>
                       )}
+                      {!isOwned && (
+                        <p style={{ margin: "5px 0 0 0", fontSize: "10px", color: "#ff5722" }}>
+                          Not Owned
+                        </p>
+                      )}
                     </div>
                   );
                 })}
               </div>
             </>
           ) : (
-            <p style={{ opacity: 0.7, textAlign: "center", marginTop: "50px" }}>
-              Select a weapon to view and change its skins
-            </p>
+            <>
+              {loadingInventory ? (
+                <p style={{ opacity: 0.7 }}>Loading...</p>
+              ) : purchasedItems.length === 0 ? (
+                <p style={{ opacity: 0.7, textAlign: "center", marginTop: "50px" }}>
+                  No items purchased yet. Visit the shop!
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {purchasedItems.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        padding: "12px",
+                        background: "rgba(255,255,255,0.1)",
+                        borderRadius: "6px",
+                        border: "1px solid rgba(255,255,255,0.3)",
+                      }}
+                    >
+                      <p style={{ margin: 0, fontWeight: "bold" }}>{item.name}</p>
+                      <p style={{ margin: "5px 0 0 0", fontSize: "12px", opacity: 0.8 }}>
+                        {item.type}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -2404,14 +2468,17 @@ function HUD({
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
   const [shopLoading, setShopLoading] = useState(false);
   const [shopError, setShopError] = useState<string | null>(null);
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
+  const [ownedItemIds, setOwnedItemIds] = useState<number[]>([]);
 
-  // Fetch shop items when entering the shop
+  // Fetch shop items and owned items when entering the shop
   useEffect(() => {
     if (gameState.gamePhase !== "shop") return;
 
     setShopLoading(true);
     setShopError(null);
 
+    // Fetch shop items
     fetch("/getItems.php")
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load shop");
@@ -2427,24 +2494,82 @@ function HUD({
       .finally(() => {
         setShopLoading(false);
       });
+
+    // Fetch owned items (for registered users)
+    if (!gameState.user.isGuest) {
+      fetch("/api/inventory", { credentials: "include" })
+        .then((res) => res.json())
+        .then((items) => {
+          setOwnedItemIds(items.map((item: any) => item.id));
+        })
+        .catch((err) => console.error("Failed to fetch inventory:", err));
+      
+      // Fetch current currency from database
+      fetch("/api/currency", { credentials: "include" })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.currency !== undefined) {
+            setGameState((prev) => ({
+              ...prev,
+              user: { ...prev.user, currency: data.currency },
+            }));
+          }
+        })
+        .catch((err) => console.error("Failed to fetch currency:", err));
+    }
   }, [gameState.gamePhase]);
 
-  // Handle item purchases
-  const handleBuyItem = (item: ShopItem) => {
-    if (gameState.user.currency < item.price) {
-      alert("Not enough currency!");
+  // Handle item purchases - now calls the API
+  const handleBuyItem = async (item: ShopItem) => {
+    if (gameState.user.isGuest) {
+      alert("Please log in to purchase items!");
       return;
     }
 
-    setGameState((prev) => ({
-      ...prev,
-      user: {
-        ...prev.user,
-        currency: prev.user.currency - item.price,
-        cosmetics: [...prev.user.cosmetics, item.name],
-      },
-      inventory: [...prev.inventory, item.name],
-    }));
+    if (gameState.user.currency < item.price) {
+      alert("Not enough gold!");
+      return;
+    }
+
+    if (ownedItemIds.includes(item.id)) {
+      alert("You already own this item!");
+      return;
+    }
+
+    setPurchaseLoading(true);
+    try {
+      const response = await fetch("/api/purchase", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: item.id, price: item.price }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.error || "Purchase failed!");
+        return;
+      }
+
+      // Update local state with new currency and owned item
+      setGameState((prev) => ({
+        ...prev,
+        user: {
+          ...prev.user,
+          currency: data.currency,
+          cosmetics: [...prev.user.cosmetics, item.name],
+        },
+        inventory: [...prev.inventory, item.name],
+      }));
+      setOwnedItemIds((prev) => [...prev, item.id]);
+      alert(`Purchased ${item.name}!`);
+    } catch (err) {
+      console.error("Purchase error:", err);
+      alert("Purchase failed. Please try again.");
+    } finally {
+      setPurchaseLoading(false);
+    }
   };
 
   // Login Page
@@ -3261,7 +3386,7 @@ function HUD({
           )}
 
           {shopItems.map((item) => {
-            const isOwned = gameState.inventory.includes(item.name);
+            const isOwned = ownedItemIds.includes(item.id);
             const canAfford = gameState.user.currency >= item.price;
 
             // Rarity-based styling
