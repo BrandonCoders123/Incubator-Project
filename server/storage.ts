@@ -184,14 +184,25 @@ class MySQLStorage implements IStorage {
       }
       const userId = users[0].user_id;
 
-      // Get gold from inventory_items table
-      const [goldRows] = await this.pool.execute(
-        `SELECT gold FROM inventory_items WHERE user_id = ? LIMIT 1`,
+      // Get gold from inventory table (primary source)
+      const [invGoldRows] = await this.pool.execute(
+        `SELECT gold FROM inventory WHERE user_id = ? LIMIT 1`,
         [userId]
       );
-      const goldResult = goldRows as any[];
-      // New users with no inventory get 1000 gold starting balance
-      const currency = goldResult.length > 0 ? (goldResult[0].gold || 1000) : 1000;
+      const invGoldResult = invGoldRows as any[];
+      let currency = 1000;
+      
+      if (invGoldResult.length > 0) {
+        currency = invGoldResult[0].gold || 1000;
+      } else {
+        // Fallback: check inventory_items table
+        const [goldRows] = await this.pool.execute(
+          `SELECT gold FROM inventory_items WHERE user_id = ? LIMIT 1`,
+          [userId]
+        );
+        const goldResult = goldRows as any[];
+        currency = goldResult.length > 0 ? (goldResult[0].gold || 1000) : 1000;
+      }
 
       // Get owned cosmetics from inventory_items table
       const [cosmeticRows] = await this.pool.execute(
@@ -337,7 +348,17 @@ class MySQLStorage implements IStorage {
 
   async getUserCurrency(userId: number): Promise<number> {
     try {
-      // Get gold from inventory_items table
+      // First check inventory table (primary source for gold)
+      const [invRows] = await this.pool.execute(
+        `SELECT gold FROM inventory WHERE user_id = ? LIMIT 1`,
+        [userId]
+      );
+      const invResult = invRows as any[];
+      if (invResult.length > 0) {
+        return invResult[0].gold || 1000;
+      }
+      
+      // Fallback: check inventory_items table
       const [rows] = await this.pool.execute(
         `SELECT gold FROM inventory_items WHERE user_id = ? LIMIT 1`,
         [userId]
@@ -369,13 +390,28 @@ class MySQLStorage implements IStorage {
 
   async purchaseItem(userId: number, itemId: number, price: number): Promise<void> {
     try {
-      // Get current gold from inventory_items
-      const [goldRows] = await this.pool.execute(
-        `SELECT gold FROM inventory_items WHERE user_id = ? LIMIT 1`,
+      // First, get or create inventory record to satisfy foreign key constraint
+      const [invRows] = await this.pool.execute(
+        `SELECT inventory_id, gold FROM inventory WHERE user_id = ? LIMIT 1`,
         [userId]
       );
-      const goldResult = goldRows as any[];
-      let currentGold = goldResult.length > 0 ? (goldResult[0].gold || 1000) : 1000;
+      const invResult = invRows as any[];
+      
+      let inventoryId: number;
+      let currentGold: number;
+      
+      if (invResult.length === 0) {
+        // Create inventory record for user with default gold
+        const [insertResult] = await this.pool.execute(
+          `INSERT INTO inventory (user_id, gold, acquired_at) VALUES (?, 1000, NOW())`,
+          [userId]
+        );
+        inventoryId = (insertResult as any).insertId;
+        currentGold = 1000;
+      } else {
+        inventoryId = invResult[0].inventory_id;
+        currentGold = invResult[0].gold || 1000;
+      }
       
       if (currentGold < price) {
         throw new Error('Insufficient gold');
@@ -393,13 +429,19 @@ class MySQLStorage implements IStorage {
 
       const newGold = currentGold - price;
 
-      // Add item to inventory_items table with updated gold
+      // Update gold in inventory table
       await this.pool.execute(
-        `INSERT INTO inventory_items (user_id, item_id, gold) VALUES (?, ?, ?)`,
-        [userId, itemId, newGold]
+        `UPDATE inventory SET gold = ? WHERE inventory_id = ?`,
+        [newGold, inventoryId]
       );
 
-      // Update gold for all user's existing inventory rows
+      // Add item to inventory_items table with the valid inventory_id
+      await this.pool.execute(
+        `INSERT INTO inventory_items (user_id, inventory_id, item_id, gold) VALUES (?, ?, ?, ?)`,
+        [userId, inventoryId, itemId, newGold]
+      );
+
+      // Update gold for all user's existing inventory_items rows
       await this.pool.execute(
         `UPDATE inventory_items SET gold = ? WHERE user_id = ?`,
         [newGold, userId]
