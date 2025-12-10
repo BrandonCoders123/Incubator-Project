@@ -1,0 +1,136 @@
+I’m building a browser FPS game in this Replit project with a PHP/MySQL backend and a React + TypeScript frontend.
+
+The main page after login is SimpleFPS.tsx (this is the “home page” once the user is logged in). I already have:
+
+An accounts table (with user_id as primary key).
+
+A user_settings table with columns:
+
+user_id (INT, PK, FK to accounts.user_id)
+
+mouse_sensitivity (FLOAT)
+
+move_forward_key (VARCHAR)
+
+move_backward_key (VARCHAR)
+
+move_left_key (VARCHAR)
+
+move_right_key (VARCHAR)
+
+jump_key (VARCHAR)
+
+crouch_key (VARCHAR)
+
+A MySQL trigger that automatically creates a user_settings row whenever a new account is created.
+
+The logged-in user ID is stored in PHP as $_SESSION['user_id'].
+
+I want you to implement a Settings flow in SimpleFPS.tsx that works like this:
+
+Behavior I want
+
+On the SimpleFPS.tsx page, there is (or should be) a Settings button.
+
+When the user clicks this button, a settings panel/modal opens.
+
+When the settings panel opens:
+
+It should load the current user’s saved keybinds (and optionally mouse sensitivity) from the database.
+
+These values come from the user_settings table for the logged-in user.
+
+The values should be displayed in the UI (e.g., “Forward: W”, “Backward: S”, etc.).
+
+Rebinding behavior for each keybind:
+
+When the user clicks on a keybind (for example, the “Forward” key field), the current value disappears or shows some “Press a key…” state.
+
+Then, the next key the user presses on the keyboard should be captured and set as the new keybind for that action.
+
+That new key should show up in the UI for that action (e.g., “Forward: E”).
+
+When the user is done changing their keybinds and clicks Save:
+
+The new keybind values (and sensitivity if included) should be sent to the backend.
+
+The backend should update the user_settings row for the currently logged-in user.
+
+After saving, reopening the settings panel should show the updated values from the database.
+
+What I want you to implement
+
+Backend (PHP)
+Create or update two PHP endpoints in this project:
+
+getSettings.php
+
+Uses $_SESSION['user_id'] to find the current user.
+
+Queries user_settings for that user_id.
+
+Returns JSON containing at least:
+
+move_forward_key
+
+move_backward_key
+
+move_left_key
+
+move_right_key
+
+jump_key
+
+crouch_key
+
+(and mouse_sensitivity if you want to include it)
+
+Uses the existing DB connection (likely from db.php).
+
+saveSettings.php
+
+Uses $_SESSION['user_id'].
+
+Accepts updated keybinds (and sensitivity) via POST.
+
+Updates the appropriate user_settings row for that user_id.
+
+Returns a simple success/failure response.
+
+Frontend (SimpleFPS.tsx)
+
+Add React state to hold the settings object (keys and sensitivity).
+
+Add UI state to control whether the settings panel/modal is open.
+
+When the settings panel first opens:
+
+Call getSettings.php (using fetch with credentials: 'include' so sessions work).
+
+Populate the settings state with the values from the backend.
+
+For each keybind field:
+
+When clicked, enter a “listening” mode where the UI waits for the next key press.
+
+Capture the next key pressed and update that specific keybind in state.
+
+Add a Save button:
+
+Sends the current settings state to saveSettings.php via POST.
+
+On success, keep the settings state in sync and optionally close the panel or show a confirmation.
+
+Integration with gameplay
+
+Wherever the FPS controls use keybinds and mouse sensitivity inside SimpleFPS.tsx, make sure they use the values from this settings state instead of hard-coded defaults, so the game actually reacts to the custom keybinds.
+
+Please modify SimpleFPS.tsx and add/update the necessary PHP files in this Replit project to implement this full flow:
+
+Settings button on the home page,
+
+Settings panel that loads keybinds from the DB,
+
+Click-to-rebind behavior,
+
+Save button that writes updated keybinds back to the database for that user.

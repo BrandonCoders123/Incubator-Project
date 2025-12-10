@@ -1603,11 +1603,12 @@ function InventoryPage({
   const [currency, setCurrency] = useState(gameState.user.currency);
 
   // Define available weapons with their skins
+  // shopPrefix is the prefix used in shop item names (e.g., "Pistol - Gold Plated")
   const allWeapons = [
-    { id: 1, name: "Standard Pistol", skins: ["Default", "Gold Plated", "Neon Green", "Shadow Black"] },
-    { id: 2, name: "Combat Rifle", skins: ["Default", "Desert Camo", "Arctic White", "Blood Red"] },
-    { id: 3, name: "Sniper Rifle", skins: ["Default", "Ghillie", "Chrome", "Midnight"] },
-    { id: 4, name: "Plasma Cannon", skins: ["Default", "Electric Blue", "Magma", "Void Purple"] },
+    { id: 1, name: "Standard Pistol", shopPrefix: "Pistol", skins: ["Default", "Gold Plated", "Neon Green", "Shadow Black"] },
+    { id: 2, name: "Combat Rifle", shopPrefix: "Rifle", skins: ["Default", "Desert Camo", "Arctic White", "Blood Red"] },
+    { id: 3, name: "Sniper Rifle", shopPrefix: "Sniper", skins: ["Default", "Ghillie", "Chrome", "Midnight"] },
+    { id: 4, name: "Plasma Cannon", shopPrefix: "Plasma", skins: ["Default", "Electric Blue", "Magma", "Void Purple"] },
   ];
 
   // Track equipped skins per weapon based on purchased items
@@ -1730,10 +1731,10 @@ function InventoryPage({
               allWeapons.map((weapon) => {
                 const isSelected = selectedWeapon === weapon.id;
                 const currentSkin = weaponSkins[weapon.id] || "Default";
-                // Check which skins the user owns for this weapon
-                const ownedSkins = purchasedItems
-                  .filter((item) => item.name && item.name.includes(weapon.name.split(" ")[0]))
-                  .map((item) => item.name);
+                // Count owned skins for this weapon (excluding Default)
+                const ownedSkinsCount = purchasedItems.filter((item) => 
+                  item.name && item.name.startsWith(`${weapon.shopPrefix} - `)
+                ).length;
                 return (
                   <div
                     key={weapon.id}
@@ -1757,6 +1758,9 @@ function InventoryPage({
                       </p>
                       <p style={{ margin: 0, fontSize: "12px", opacity: 0.8 }}>
                         Current Skin: {currentSkin}
+                      </p>
+                      <p style={{ margin: "3px 0 0 0", fontSize: "11px", color: "#4CAF50" }}>
+                        {ownedSkinsCount} skin{ownedSkinsCount !== 1 ? "s" : ""} owned
                       </p>
                     </div>
                   </div>
@@ -1787,8 +1791,10 @@ function InventoryPage({
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                 {allWeapons.find(w => w.id === selectedWeapon)?.skins.map((skin) => {
                   const isCurrentSkin = weaponSkins[selectedWeapon] === skin;
-                  const weaponName = allWeapons.find(w => w.id === selectedWeapon)?.name.split(" ")[0];
-                  const skinItemName = `${weaponName} - ${skin}`;
+                  const weapon = allWeapons.find(w => w.id === selectedWeapon);
+                  const shopPrefix = weapon?.shopPrefix || "";
+                  const skinItemName = `${shopPrefix} - ${skin}`;
+                  // Check ownership by matching the shop item name format
                   const isOwned = skin === "Default" || purchasedItems.some((item) => item.name === skinItemName);
                   return (
                     <div
@@ -1845,22 +1851,47 @@ function InventoryPage({
                 </p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  {purchasedItems.map((item) => (
-                    <div
-                      key={item.id}
-                      style={{
-                        padding: "12px",
-                        background: "rgba(255,255,255,0.1)",
-                        borderRadius: "6px",
-                        border: "1px solid rgba(255,255,255,0.3)",
-                      }}
-                    >
-                      <p style={{ margin: 0, fontWeight: "bold" }}>{item.name}</p>
-                      <p style={{ margin: "5px 0 0 0", fontSize: "12px", opacity: 0.8 }}>
-                        {item.type}
-                      </p>
-                    </div>
-                  ))}
+                  {purchasedItems.map((item) => {
+                    // Parse weapon and skin from item name (e.g., "Pistol - Gold Plated")
+                    const nameParts = item.name?.split(" - ") || [item.name];
+                    const weaponType = nameParts[0] || "Item";
+                    const skinName = nameParts[1] || item.name;
+                    
+                    const weaponColors: Record<string, string> = {
+                      Pistol: "#4CAF50",
+                      Rifle: "#2196F3",
+                      Sniper: "#9C27B0",
+                      Plasma: "#FF5722",
+                    };
+                    
+                    return (
+                      <div
+                        key={item.id}
+                        style={{
+                          padding: "12px",
+                          background: "rgba(255,255,255,0.1)",
+                          borderRadius: "6px",
+                          border: "1px solid rgba(255,255,255,0.3)",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <span
+                            style={{
+                              background: weaponColors[weaponType] || "#555",
+                              color: "white",
+                              padding: "2px 8px",
+                              borderRadius: "4px",
+                              fontSize: "10px",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            {weaponType}
+                          </span>
+                          <p style={{ margin: 0, fontWeight: "bold" }}>{skinName}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </>
