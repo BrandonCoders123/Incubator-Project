@@ -144,7 +144,7 @@ class MySQLStorage implements IStorage {
 
       // Check if user has any inventory_items entries
       const [invRows] = await this.pool.execute(
-        `SELECT id FROM inventory_items WHERE inventory_id = ? LIMIT 1`,
+        `SELECT inventory_id FROM inventory_items WHERE user_id = ? LIMIT 1`,
         [userId]
       );
       const invResult = invRows as any[];
@@ -152,13 +152,13 @@ class MySQLStorage implements IStorage {
       if (invResult.length > 0) {
         // Update gold for all user's inventory_items rows
         await this.pool.execute(
-          `UPDATE inventory_items SET gold = ? WHERE inventory_id = ?`,
+          `UPDATE inventory_items SET gold = ? WHERE user_id = ?`,
           [currency, userId]
         );
       } else {
         // Create initial inventory_items entry with gold (item_id 0 means no item, just currency)
         await this.pool.execute(
-          `INSERT INTO inventory_items (inventory_id, item_id, gold) VALUES (?, 0, ?)`,
+          `INSERT INTO inventory_items (user_id, item_id, gold) VALUES (?, 0, ?)`,
           [userId, currency]
         );
       }
@@ -184,9 +184,9 @@ class MySQLStorage implements IStorage {
       }
       const userId = users[0].user_id;
 
-      // Get gold from inventory_items table (inventory_id = user_id)
+      // Get gold from inventory_items table
       const [goldRows] = await this.pool.execute(
-        `SELECT gold FROM inventory_items WHERE inventory_id = ? LIMIT 1`,
+        `SELECT gold FROM inventory_items WHERE user_id = ? LIMIT 1`,
         [userId]
       );
       const goldResult = goldRows as any[];
@@ -197,7 +197,7 @@ class MySQLStorage implements IStorage {
       const [cosmeticRows] = await this.pool.execute(
         `SELECT i.item_name FROM items i 
          INNER JOIN inventory_items ii ON i.item_id = ii.item_id 
-         WHERE ii.inventory_id = ? AND i.is_cosmetic = 1`,
+         WHERE ii.user_id = ? AND i.is_cosmetic = 1`,
         [userId]
       );
       const cosmetics = (cosmeticRows as any[]).map(row => row.item_name);
@@ -306,7 +306,7 @@ class MySQLStorage implements IStorage {
 
   async getUserInventory(userId: number): Promise<any[]> {
     try {
-      // Get items directly from inventory_items table using user_id (inventory_id = user_id)
+      // Get items directly from inventory_items table using user_id
       const [rows] = await this.pool.execute(
         `SELECT DISTINCT
           i.item_id as id,
@@ -316,7 +316,7 @@ class MySQLStorage implements IStorage {
           i.is_cosmetic
         FROM items i
         INNER JOIN inventory_items ii ON i.item_id = ii.item_id
-        WHERE ii.inventory_id = ?
+        WHERE ii.user_id = ?
         ORDER BY i.item_id ASC`,
         [userId]
       );
@@ -337,9 +337,9 @@ class MySQLStorage implements IStorage {
 
   async getUserCurrency(userId: number): Promise<number> {
     try {
-      // Get gold from inventory_items table (inventory_id = user_id)
+      // Get gold from inventory_items table
       const [rows] = await this.pool.execute(
-        `SELECT gold FROM inventory_items WHERE inventory_id = ? LIMIT 1`,
+        `SELECT gold FROM inventory_items WHERE user_id = ? LIMIT 1`,
         [userId]
       );
       const result = rows as any[];
@@ -358,7 +358,7 @@ class MySQLStorage implements IStorage {
     try {
       // Update gold in all inventory_items rows for this user
       await this.pool.execute(
-        `UPDATE inventory_items SET gold = ? WHERE inventory_id = ?`,
+        `UPDATE inventory_items SET gold = ? WHERE user_id = ?`,
         [newGold, userId]
       );
     } catch (err) {
@@ -369,9 +369,9 @@ class MySQLStorage implements IStorage {
 
   async purchaseItem(userId: number, itemId: number, price: number): Promise<void> {
     try {
-      // Get current gold from inventory_items (inventory_id = user_id)
+      // Get current gold from inventory_items
       const [goldRows] = await this.pool.execute(
-        `SELECT gold FROM inventory_items WHERE inventory_id = ? LIMIT 1`,
+        `SELECT gold FROM inventory_items WHERE user_id = ? LIMIT 1`,
         [userId]
       );
       const goldResult = goldRows as any[];
@@ -383,7 +383,7 @@ class MySQLStorage implements IStorage {
 
       // Check if user already owns this item
       const [existing] = await this.pool.execute(
-        `SELECT id FROM inventory_items WHERE inventory_id = ? AND item_id = ?`,
+        `SELECT inventory_id FROM inventory_items WHERE user_id = ? AND item_id = ?`,
         [userId, itemId]
       );
       const existingItems = existing as any[];
@@ -395,13 +395,13 @@ class MySQLStorage implements IStorage {
 
       // Add item to inventory_items table with updated gold
       await this.pool.execute(
-        `INSERT INTO inventory_items (inventory_id, item_id, gold) VALUES (?, ?, ?)`,
+        `INSERT INTO inventory_items (user_id, item_id, gold) VALUES (?, ?, ?)`,
         [userId, itemId, newGold]
       );
 
       // Update gold for all user's existing inventory rows
       await this.pool.execute(
-        `UPDATE inventory_items SET gold = ? WHERE inventory_id = ?`,
+        `UPDATE inventory_items SET gold = ? WHERE user_id = ?`,
         [newGold, userId]
       );
     } catch (err) {
