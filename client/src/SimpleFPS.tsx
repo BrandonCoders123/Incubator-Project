@@ -1621,15 +1621,15 @@ function InventoryPage({
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch purchased items from database (using PHP endpoint with inventory_items table)
-        const invResponse = await fetch("/getInventory.php", { credentials: "include" });
+        // Fetch purchased items from database
+        const invResponse = await fetch("/api/inventory", { credentials: "include" });
         if (invResponse.ok) {
           const items = await invResponse.json();
           setPurchasedItems(items);
         }
 
         // Fetch currency from database
-        const currResponse = await fetch("/getCurrency.php", { credentials: "include" });
+        const currResponse = await fetch("/api/currency", { credentials: "include" });
         if (currResponse.ok) {
           const data = await currResponse.json();
           setCurrency(data.currency);
@@ -1954,7 +1954,7 @@ function SettingsPage({
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch("/getSettings.php", { credentials: "include" });
+        const res = await fetch("/api/settings", { credentials: "include" });
         const data = await res.json();
         if (data.success && data.settings) {
           const s = data.settings;
@@ -2005,7 +2005,7 @@ function SettingsPage({
     setSaving(true);
     setMessage("");
     try {
-      const res = await fetch("/saveSettings.php", {
+      const res = await fetch("/api/settings", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -2830,7 +2830,7 @@ function HUD({
 
     // Fetch owned items (for registered users)
     if (!gameState.user.isGuest) {
-      fetch("/getInventory.php", { credentials: "include" })
+      fetch("/api/inventory", { credentials: "include" })
         .then((res) => res.json())
         .then((items) => {
           setOwnedItemIds(items.map((item: any) => item.id));
@@ -2838,7 +2838,7 @@ function HUD({
         .catch((err) => console.error("Failed to fetch inventory:", err));
       
       // Fetch current currency from database
-      fetch("/getCurrency.php", { credentials: "include" })
+      fetch("/api/currency", { credentials: "include" })
         .then((res) => res.json())
         .then((data) => {
           if (data.currency !== undefined) {
@@ -2871,7 +2871,7 @@ function HUD({
 
     setPurchaseLoading(true);
     try {
-      const response = await fetch("/purchaseItem.php", {
+      const response = await fetch("/api/purchase", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -3012,7 +3012,7 @@ function HUD({
                     
                     // Load user settings after login
                     try {
-                      const settingsRes = await fetch("/getSettings.php", { credentials: "include" });
+                      const settingsRes = await fetch("/api/settings", { credentials: "include" });
                       const settingsData = await settingsRes.json();
                       if (settingsData.success && settingsData.settings) {
                         const s = settingsData.settings;
@@ -3580,7 +3580,8 @@ function HUD({
   // Settings Page
   if (gameState.gamePhase === "settings") {
     return (
-      <SettingsPage 
+      <
+        SettingsPage 
         gameState={gameState} 
         setGameState={setGameState} 
       />

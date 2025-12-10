@@ -33,6 +33,8 @@ export interface IStorage {
   purchaseItem(userId: number, itemId: number, price: number): Promise<void>;
   getUserCurrency(userId: number): Promise<number>;
   updateUserGold(userId: number, newGold: number): Promise<void>;
+  getUserSettings(userId: number): Promise<any>;
+  saveUserSettings(userId: number, settings: any): Promise<void>;
 }
 
 /**
@@ -191,14 +193,24 @@ class MySQLStorage implements IStorage {
       // New users with no inventory get 1000 gold starting balance
       const currency = goldResult.length > 0 ? (goldResult[0].gold || 0) : 1000;
 
-      // Get owned cosmetics
-      const [cosmeticRows] = await this.pool.execute(
-        `SELECT i.item_name FROM items i 
-         INNER JOIN inventory inv ON i.item_id = inv.item_id 
-         WHERE inv.user_id = ? AND i.is_cosmetic = 1`,
+      // Get owned cosmetics from inventory_items junction table
+      const [invIdRows] = await this.pool.execute(
+        `SELECT inventory_id FROM inventory WHERE user_id = ? LIMIT 1`,
         [userId]
       );
-      const cosmetics = (cosmeticRows as any[]).map(row => row.item_name);
+      const invIdResult = invIdRows as any[];
+      let cosmetics: string[] = [];
+      
+      if (invIdResult.length > 0) {
+        const inventoryId = invIdResult[0].inventory_id;
+        const [cosmeticRows] = await this.pool.execute(
+          `SELECT i.item_name FROM items i 
+           INNER JOIN inventory_items ii ON i.item_id = ii.item_id 
+           WHERE ii.inventory_id = ? AND i.is_cosmetic = 1`,
+          [inventoryId]
+        );
+        cosmetics = (cosmeticRows as any[]).map(row => row.item_name);
+      }
 
       return { currency, cosmetics };
     } catch (err) {
@@ -304,6 +316,18 @@ class MySQLStorage implements IStorage {
 
   async getUserInventory(userId: number): Promise<any[]> {
     try {
+      // First get the user's inventory_id
+      const [invRows] = await this.pool.execute(
+        `SELECT inventory_id FROM inventory WHERE user_id = ? LIMIT 1`,
+        [userId]
+      );
+      const invResult = invRows as any[];
+      if (invResult.length === 0) {
+        return []; // No inventory yet
+      }
+      const inventoryId = invResult[0].inventory_id;
+
+      // Get items from inventory_items junction table
       const [rows] = await this.pool.execute(
         `SELECT DISTINCT
           i.item_id as id,
@@ -312,9 +336,10 @@ class MySQLStorage implements IStorage {
           i.store_price as price,
           i.is_cosmetic
         FROM items i
-        INNER JOIN inventory inv ON i.item_id = inv.item_id AND inv.user_id = ?
+        INNER JOIN inventory_items ii ON i.item_id = ii.item_id
+        WHERE ii.inventory_id = ?
         ORDER BY i.item_id ASC`,
-        [userId]
+        [inventoryId]
       );
 
       const items = rows as any[];
@@ -363,18 +388,26 @@ class MySQLStorage implements IStorage {
 
   async purchaseItem(userId: number, itemId: number, price: number): Promise<void> {
     try {
-      // Get current gold (returns 1000 for new users)
-      let currentGold = await this.getUserCurrency(userId);
-      
-      // Check if user has any inventory rows
+      // Get or create user's inventory entry
       const [existingRows] = await this.pool.execute(
         `SELECT inventory_id, gold FROM inventory WHERE user_id = ? LIMIT 1`,
         [userId]
       );
       const existingInventory = existingRows as any[];
       
-      // If user has existing rows, use their actual gold
-      if (existingInventory.length > 0) {
+      let inventoryId: number;
+      let currentGold: number;
+      
+      if (existingInventory.length === 0) {
+        // Create initial inventory with default gold (1000)
+        const [insertResult] = await this.pool.execute(
+          `INSERT INTO inventory (user_id, acquired_at, gold) VALUES (?, NOW(), 1000)`,
+          [userId]
+        );
+        inventoryId = (insertResult as any).insertId;
+        currentGold = 1000;
+      } else {
+        inventoryId = existingInventory[0].inventory_id;
         currentGold = existingInventory[0].gold || 0;
       }
       
@@ -382,10 +415,10 @@ class MySQLStorage implements IStorage {
         throw new Error('Insufficient gold');
       }
 
-      // Check if user already owns this item
+      // Check if user already owns this item in inventory_items table
       const [existing] = await this.pool.execute(
-        `SELECT inventory_id FROM inventory WHERE user_id = ? AND item_id = ?`,
-        [userId, itemId]
+        `SELECT id FROM inventory_items WHERE inventory_id = ? AND item_id = ?`,
+        [inventoryId, itemId]
       );
       const existingItems = existing as any[];
       if (existingItems.length > 0) {
@@ -394,22 +427,109 @@ class MySQLStorage implements IStorage {
 
       const newGold = currentGold - price;
 
-      // Insert item into inventory with updated gold
+      // Deduct gold from inventory
       await this.pool.execute(
-        `INSERT INTO inventory (user_id, item_id, acquired_at, gold) 
-         VALUES (?, ?, NOW(), ?)`,
-        [userId, itemId, newGold]
+        `UPDATE inventory SET gold = ? WHERE inventory_id = ?`,
+        [newGold, inventoryId]
       );
 
-      // Update gold for all other user's inventory rows (sync gold across rows)
-      if (existingInventory.length > 0) {
+      // Add item to inventory_items junction table
+      await this.pool.execute(
+        `INSERT INTO inventory_items (inventory_id, item_id) VALUES (?, ?)`,
+        [inventoryId, itemId]
+      );
+    } catch (err) {
+      console.error('Error purchasing item:', err);
+      throw err;
+    }
+  }
+
+  // ---------- User settings ----------
+
+  async getUserSettings(userId: number): Promise<any> {
+    try {
+      const [rows] = await this.pool.execute(
+        `SELECT mouse_sensitivity, move_forward_key, move_backward_key, 
+                move_left_key, move_right_key, jump_key 
+         FROM user_settings WHERE user_id = ?`,
+        [userId]
+      );
+      const result = rows as any[];
+      if (result.length > 0) {
+        return result[0];
+      }
+      // Return defaults if no settings exist
+      return {
+        mouse_sensitivity: 1.0,
+        move_forward_key: "KeyW",
+        move_backward_key: "KeyS",
+        move_left_key: "KeyA",
+        move_right_key: "KeyD",
+        jump_key: "Space"
+      };
+    } catch (err) {
+      console.error('Error fetching user settings:', err);
+      // Return defaults on error
+      return {
+        mouse_sensitivity: 1.0,
+        move_forward_key: "KeyW",
+        move_backward_key: "KeyS",
+        move_left_key: "KeyA",
+        move_right_key: "KeyD",
+        jump_key: "Space"
+      };
+    }
+  }
+
+  async saveUserSettings(userId: number, settings: any): Promise<void> {
+    try {
+      // Check if settings exist
+      const [existing] = await this.pool.execute(
+        `SELECT user_id FROM user_settings WHERE user_id = ?`,
+        [userId]
+      );
+      const existingRows = existing as any[];
+
+      if (existingRows.length > 0) {
+        // Update existing settings
         await this.pool.execute(
-          `UPDATE inventory SET gold = ? WHERE user_id = ?`,
-          [newGold, userId]
+          `UPDATE user_settings SET 
+            mouse_sensitivity = ?,
+            move_forward_key = ?,
+            move_backward_key = ?,
+            move_left_key = ?,
+            move_right_key = ?,
+            jump_key = ?
+           WHERE user_id = ?`,
+          [
+            settings.mouse_sensitivity || 1.0,
+            settings.move_forward_key || "KeyW",
+            settings.move_backward_key || "KeyS",
+            settings.move_left_key || "KeyA",
+            settings.move_right_key || "KeyD",
+            settings.jump_key || "Space",
+            userId
+          ]
+        );
+      } else {
+        // Insert new settings
+        await this.pool.execute(
+          `INSERT INTO user_settings (user_id, mouse_sensitivity, move_forward_key, 
+            move_backward_key, move_left_key, move_right_key, jump_key)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            userId,
+            settings.mouse_sensitivity || 1.0,
+            settings.move_forward_key || "KeyW",
+            settings.move_backward_key || "KeyS",
+            settings.move_left_key || "KeyA",
+            settings.move_right_key || "KeyD",
+            settings.jump_key || "Space"
+          ]
         );
       }
     } catch (err) {
-      console.error('Error purchasing item:', err);
+      console.error('Error saving user settings:', err);
       throw err;
     }
   }

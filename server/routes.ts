@@ -429,6 +429,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Get user settings endpoint
+  app.get("/api/settings", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const settings = await storage.getUserSettings(userId);
+      res.json({ success: true, settings });
+    } catch (error) {
+      console.error("Get settings error:", error);
+      res.status(500).json({ success: false, error: "Failed to load settings" });
+    }
+  });
+
+  // Save user settings endpoint
+  app.post("/api/settings", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const settings = req.body;
+      await storage.saveUserSettings(userId, settings);
+      res.json({ success: true, message: "Settings saved successfully" });
+    } catch (error) {
+      console.error("Save settings error:", error);
+      res.status(500).json({ success: false, error: "Failed to save settings" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
