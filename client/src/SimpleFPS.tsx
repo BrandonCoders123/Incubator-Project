@@ -476,7 +476,9 @@ function Player({
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       if (document.pointerLockElement && gameStateRef.current.gamePhase === "playing") {
-        const sensitivity = 0.002;
+        // Get sensitivity from settings store (base * multiplier)
+        const { normalSensitivity } = useSettings.getState();
+        const sensitivity = 0.002 * normalSensitivity;
         rotationRef.current.y -= event.movementX * sensitivity;
         rotationRef.current.x -= event.movementY * sensitivity;
         rotationRef.current.x = Math.max(
@@ -1902,6 +1904,306 @@ function InventoryPage({
   );
 }
 
+// Settings Component
+function SettingsPage({
+  gameState,
+  setGameState,
+}: {
+  gameState: GameState;
+  setGameState: React.Dispatch<React.SetStateAction<GameState>>;
+}) {
+  const { setKeybinding, setNormalSensitivity } = useSettings();
+  
+  // Settings state from database
+  const [settings, setSettings] = useState({
+    mouse_sensitivity: 1.0,
+    move_forward_key: "KeyW",
+    move_backward_key: "KeyS",
+    move_left_key: "KeyA",
+    move_right_key: "KeyD",
+    jump_key: "Space",
+  });
+  
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [listeningFor, setListeningFor] = useState<string | null>(null);
+
+  // Keybind display names
+  const keybindLabels: Record<string, string> = {
+    move_forward_key: "Move Forward",
+    move_backward_key: "Move Backward",
+    move_left_key: "Move Left",
+    move_right_key: "Move Right",
+    jump_key: "Jump",
+  };
+
+  // Convert key code to display name
+  const getKeyDisplayName = (code: string) => {
+    if (code.startsWith("Key")) return code.replace("Key", "");
+    if (code.startsWith("Digit")) return code.replace("Digit", "");
+    if (code === "Space") return "Space";
+    if (code === "ShiftLeft" || code === "ShiftRight") return "Shift";
+    if (code === "ControlLeft" || code === "ControlRight") return "Ctrl";
+    if (code === "AltLeft" || code === "AltRight") return "Alt";
+    if (code.startsWith("Arrow")) return code.replace("Arrow", "");
+    return code;
+  };
+
+  // Fetch settings on mount and apply to global store
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch("/getSettings.php", { credentials: "include" });
+        const data = await res.json();
+        if (data.success && data.settings) {
+          const s = data.settings;
+          // Update local state for UI
+          setSettings({
+            mouse_sensitivity: parseFloat(s.mouse_sensitivity) || 1.0,
+            move_forward_key: s.move_forward_key || "KeyW",
+            move_backward_key: s.move_backward_key || "KeyS",
+            move_left_key: s.move_left_key || "KeyA",
+            move_right_key: s.move_right_key || "KeyD",
+            jump_key: s.jump_key || "Space",
+          });
+          // Also apply to global store immediately
+          setKeybinding("forward", s.move_forward_key || "KeyW");
+          setKeybinding("backward", s.move_backward_key || "KeyS");
+          setKeybinding("leftward", s.move_left_key || "KeyA");
+          setKeybinding("rightward", s.move_right_key || "KeyD");
+          setKeybinding("jump", s.jump_key || "Space");
+          const sens = parseFloat(s.mouse_sensitivity);
+          setNormalSensitivity(isNaN(sens) ? 1 : sens);
+        }
+      } catch (err) {
+        console.error("Failed to fetch settings:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSettings();
+  }, [setKeybinding, setNormalSensitivity]);
+
+  // Listen for key presses when rebinding
+  useEffect(() => {
+    if (!listeningFor) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      const keyCode = e.code;
+      setSettings((prev) => ({ ...prev, [listeningFor]: keyCode }));
+      setListeningFor(null);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [listeningFor]);
+
+  // Save settings to database
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage("");
+    try {
+      const res = await fetch("/saveSettings.php", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMessage("Settings saved successfully!");
+        // Update the game's keybindings store
+        setKeybinding("forward", settings.move_forward_key);
+        setKeybinding("backward", settings.move_backward_key);
+        setKeybinding("leftward", settings.move_left_key);
+        setKeybinding("rightward", settings.move_right_key);
+        setKeybinding("jump", settings.jump_key);
+        setNormalSensitivity(settings.mouse_sensitivity);
+      } else {
+        setMessage(data.error || "Failed to save settings");
+      }
+    } catch (err) {
+      setMessage("Failed to save settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100vh",
+        background: "linear-gradient(135deg, #FF9800 0%, #F57C00 100%)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "white",
+        fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+        zIndex: 1000,
+        padding: "20px",
+        overflow: "auto",
+      }}
+    >
+      <div
+        style={{
+          textAlign: "center",
+          padding: "40px",
+          background: "rgba(0,0,0,0.6)",
+          borderRadius: "20px",
+          boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+          maxWidth: "600px",
+          width: "100%",
+        }}
+      >
+        <h1
+          style={{
+            fontSize: "42px",
+            marginBottom: "20px",
+            textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
+          }}
+        >
+          SETTINGS
+        </h1>
+
+        {loading ? (
+          <p>Loading settings...</p>
+        ) : (
+          <>
+            {/* Mouse Sensitivity */}
+            <div style={{ marginBottom: "30px", textAlign: "left" }}>
+              <label style={{ fontSize: "18px", fontWeight: "bold" }}>
+                Mouse Sensitivity: {settings.mouse_sensitivity.toFixed(1)}
+              </label>
+              <input
+                type="range"
+                min="0.1"
+                max="3"
+                step="0.1"
+                value={settings.mouse_sensitivity}
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    mouse_sensitivity: parseFloat(e.target.value),
+                  }))
+                }
+                style={{
+                  width: "100%",
+                  height: "8px",
+                  marginTop: "10px",
+                  cursor: "pointer",
+                }}
+              />
+            </div>
+
+            {/* Keybinds Section */}
+            <h2 style={{ fontSize: "24px", marginBottom: "15px", textAlign: "left" }}>
+              Keybinds
+            </h2>
+            <p style={{ fontSize: "14px", opacity: 0.8, marginBottom: "15px", textAlign: "left" }}>
+              Click on a key to rebind it, then press the new key
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              {Object.entries(keybindLabels).map(([key, label]) => (
+                <div
+                  key={key}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "12px 15px",
+                    background: "rgba(255,255,255,0.1)",
+                    borderRadius: "8px",
+                    border: listeningFor === key ? "2px solid #fdc830" : "1px solid rgba(255,255,255,0.3)",
+                  }}
+                >
+                  <span style={{ fontSize: "16px" }}>{label}</span>
+                  <button
+                    onClick={() => setListeningFor(key)}
+                    style={{
+                      padding: "8px 20px",
+                      fontSize: "14px",
+                      fontWeight: "bold",
+                      background: listeningFor === key ? "#fdc830" : "#555",
+                      color: listeningFor === key ? "#333" : "white",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      minWidth: "100px",
+                    }}
+                  >
+                    {listeningFor === key
+                      ? "Press a key..."
+                      : getKeyDisplayName(settings[key as keyof typeof settings] as string)}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Message */}
+            {message && (
+              <p
+                style={{
+                  marginTop: "20px",
+                  padding: "10px",
+                  background: message.includes("success") ? "rgba(76, 175, 80, 0.3)" : "rgba(244, 67, 54, 0.3)",
+                  borderRadius: "8px",
+                }}
+              >
+                {message}
+              </p>
+            )}
+
+            {/* Buttons */}
+            <div style={{ display: "flex", gap: "15px", marginTop: "30px", justifyContent: "center" }}>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                style={{
+                  padding: "15px 40px",
+                  fontSize: "18px",
+                  fontWeight: "bold",
+                  background: saving ? "#888" : "#4CAF50",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "12px",
+                  cursor: saving ? "not-allowed" : "pointer",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                }}
+              >
+                {saving ? "Saving..." : "SAVE"}
+              </button>
+              <button
+                onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))}
+                style={{
+                  padding: "15px 40px",
+                  fontSize: "18px",
+                  fontWeight: "bold",
+                  background: "#fdc830",
+                  color: "#333",
+                  border: "none",
+                  borderRadius: "12px",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                }}
+              >
+                BACK
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Profile Component
 function ProfilePage({
   gameState,
@@ -2686,6 +2988,7 @@ function HUD({
           >
             <button
               onClick={async () => {
+                const { setKeybinding, setNormalSensitivity } = useSettings.getState();
                 try {
                   const response = await fetch("/api/login", {
                     method: "POST",
@@ -2706,6 +3009,24 @@ function HUD({
                         equippedSkin: null,
                       },
                     }));
+                    
+                    // Load user settings after login
+                    try {
+                      const settingsRes = await fetch("/getSettings.php", { credentials: "include" });
+                      const settingsData = await settingsRes.json();
+                      if (settingsData.success && settingsData.settings) {
+                        const s = settingsData.settings;
+                        setKeybinding("forward", s.move_forward_key);
+                        setKeybinding("backward", s.move_backward_key);
+                        setKeybinding("leftward", s.move_left_key);
+                        setKeybinding("rightward", s.move_right_key);
+                        setKeybinding("jump", s.jump_key);
+                        const sens = parseFloat(s.mouse_sensitivity);
+                        setNormalSensitivity(isNaN(sens) ? 1 : sens);
+                      }
+                    } catch (e) {
+                      console.error("Failed to load settings:", e);
+                    }
                   } else {
                     const error = await response.json();
                     alert(error.error || "Login failed");
@@ -3259,66 +3580,10 @@ function HUD({
   // Settings Page
   if (gameState.gamePhase === "settings") {
     return (
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100vw",
-          height: "100vh",
-          background: "linear-gradient(135deg, #FF9800 0%, #F57C00 100%)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "white",
-          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-          zIndex: 1000,
-        }}
-      >
-        <div
-          style={{
-            textAlign: "center",
-            padding: "50px",
-            background: "rgba(0,0,0,0.6)",
-            borderRadius: "20px",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
-            maxWidth: "800px",
-          }}
-        >
-          <h1
-            style={{
-              fontSize: "48px",
-              marginBottom: "30px",
-              textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
-            }}
-          >
-            ⚙️ SETTINGS
-          </h1>
-          <p style={{ fontSize: "20px", marginBottom: "40px" }}>
-            Coming soon! Adjust game settings, controls, and preferences.
-          </p>
-          <button
-            onClick={() => {
-              setGameState((prev) => ({ ...prev, gamePhase: "menu" }));
-            }}
-            style={{
-              padding: "15px 40px",
-              fontSize: "20px",
-              fontWeight: "bold",
-              background: "#fdc830",
-              color: "#333",
-              border: "none",
-              borderRadius: "12px",
-              cursor: "pointer",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-            }}
-          >
-            BACK TO MENU
-          </button>
-        </div>
-      </div>
+      <SettingsPage 
+        gameState={gameState} 
+        setGameState={setGameState} 
+      />
     );
   }
 
