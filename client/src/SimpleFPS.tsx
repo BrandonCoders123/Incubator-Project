@@ -1621,15 +1621,15 @@ function InventoryPage({
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch purchased items from database
-        const invResponse = await fetch("/api/inventory", { credentials: "include" });
+        // Fetch purchased items from database (using PHP endpoint with inventory_items table)
+        const invResponse = await fetch("/getInventory.php", { credentials: "include" });
         if (invResponse.ok) {
           const items = await invResponse.json();
           setPurchasedItems(items);
         }
 
         // Fetch currency from database
-        const currResponse = await fetch("/api/currency", { credentials: "include" });
+        const currResponse = await fetch("/getCurrency.php", { credentials: "include" });
         if (currResponse.ok) {
           const data = await currResponse.json();
           setCurrency(data.currency);
@@ -2830,7 +2830,7 @@ function HUD({
 
     // Fetch owned items (for registered users)
     if (!gameState.user.isGuest) {
-      fetch("/api/inventory", { credentials: "include" })
+      fetch("/getInventory.php", { credentials: "include" })
         .then((res) => res.json())
         .then((items) => {
           setOwnedItemIds(items.map((item: any) => item.id));
@@ -2838,7 +2838,7 @@ function HUD({
         .catch((err) => console.error("Failed to fetch inventory:", err));
       
       // Fetch current currency from database
-      fetch("/api/currency", { credentials: "include" })
+      fetch("/getCurrency.php", { credentials: "include" })
         .then((res) => res.json())
         .then((data) => {
           if (data.currency !== undefined) {
@@ -2871,7 +2871,7 @@ function HUD({
 
     setPurchaseLoading(true);
     try {
-      const response = await fetch("/api/purchase", {
+      const response = await fetch("/purchaseItem.php", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
