@@ -3389,6 +3389,11 @@ function HUD({
             const isOwned = ownedItemIds.includes(item.id);
             const canAfford = gameState.user.currency >= item.price;
 
+            // Parse weapon and skin name from item name (e.g., "Pistol - Gold Plated")
+            const nameParts = item.name.split(" - ");
+            const weaponType = nameParts[0] || item.name;
+            const skinName = nameParts[1] || "Skin";
+
             // Rarity-based styling
             const rarityColors: Record<string, string> = {
               common: "#808080",
@@ -3396,6 +3401,14 @@ function HUD({
               rare: "#3498db",
               epic: "#9b59b6",
               legendary: "#f39c12",
+            };
+
+            // Weapon type colors
+            const weaponColors: Record<string, string> = {
+              Pistol: "#4CAF50",
+              Rifle: "#2196F3",
+              Sniper: "#9C27B0",
+              Plasma: "#FF5722",
             };
 
             return (
@@ -3411,6 +3424,21 @@ function HUD({
                   gap: "10px",
                 }}
               >
+                {/* Weapon Type Badge */}
+                <div
+                  style={{
+                    background: weaponColors[weaponType] || "#555",
+                    color: "white",
+                    padding: "4px 10px",
+                    borderRadius: "4px",
+                    fontSize: "11px",
+                    fontWeight: "bold",
+                    textTransform: "uppercase",
+                    alignSelf: "flex-start",
+                  }}
+                >
+                  {weaponType}
+                </div>
                 {item.image_url && (
                   <div
                     style={{
@@ -3425,7 +3453,7 @@ function HUD({
                 )}
                 <div>
                   <h3 style={{ margin: "0 0 5px 0", fontSize: "16px" }}>
-                    {item.name}
+                    {skinName}
                   </h3>
                   <p
                     style={{
