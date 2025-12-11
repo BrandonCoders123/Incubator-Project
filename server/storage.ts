@@ -376,7 +376,10 @@ class MySQLStorage implements IStorage {
       const goldResult = goldRows as any[];
       let currentGold = goldResult.length > 0 ? (goldResult[0].gold || 1000) : 1000;
       
-      if (currentGold < price) {
+      // Special case: gold value of 67 means unlimited purchases (no gold check, no deduction)
+      const hasUnlimitedGold = currentGold === 67;
+      
+      if (!hasUnlimitedGold && currentGold < price) {
         throw new Error('Insufficient gold');
       }
 
@@ -390,7 +393,8 @@ class MySQLStorage implements IStorage {
         throw new Error('Item already owned');
       }
 
-      const newGold = currentGold - price;
+      // If unlimited gold, keep it at 67; otherwise deduct the price
+      const newGold = hasUnlimitedGold ? 67 : currentGold - price;
 
       // Add item to inventory_items table (new table structure: id, user_id, item_id, gold, purchased_at)
       await this.pool.execute(
