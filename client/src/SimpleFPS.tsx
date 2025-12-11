@@ -3139,7 +3139,9 @@ function HUD({
       return;
     }
 
-    if (gameState.user.currency < item.price) {
+    // Special case: gold value of 67 means unlimited purchases
+    const hasUnlimitedGold = gameState.user.currency === 67;
+    if (!hasUnlimitedGold && gameState.user.currency < item.price) {
       alert("Not enough gold!");
       return;
     }
