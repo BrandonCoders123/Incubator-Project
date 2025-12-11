@@ -1810,7 +1810,7 @@ function InventoryPage({
         <h1 style={{ fontSize: "36px", margin: 0 }}>INVENTORY</h1>
         <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
           <span style={{ fontSize: "18px", color: "#fdc830" }}>
-            {currency} Gold
+            {currency === 67 ? "∞" : currency} Gold
           </span>
           <button
             onClick={() =>
