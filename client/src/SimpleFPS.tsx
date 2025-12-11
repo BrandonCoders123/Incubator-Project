@@ -7,11 +7,15 @@ import React, {
   useMemo,
 } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { KeyboardControls, useKeyboardControls, useTexture } from "@react-three/drei";
+import {
+  KeyboardControls,
+  useKeyboardControls,
+  useTexture,
+} from "@react-three/drei";
 import * as THREE from "three";
 import "@fontsource/inter";
 
-import { useSettings } from "./lib/stores/useSettings";  // 👈 new
+import { useSettings } from "./lib/stores/useSettings"; // 👈 new
 
 // Weapon definitions
 interface Weapon {
@@ -61,9 +65,9 @@ const weapons: Record<number, Weapon> = {
 // Story elements
 const SETTLEMENTS = [
   "Bun Valley Outpost",
-  "Condiment Creek Base", 
+  "Condiment Creek Base",
   "Relish Ridge Fortress",
-  "Mustard Mountain Stronghold"
+  "Mustard Mountain Stronghold",
 ];
 
 // Level definitions
@@ -174,7 +178,21 @@ interface GameState {
   maxHealth: number; // Added for token health buffs
   ammo: number;
   coins: number; // Changed from score to coins
-  gamePhase: "login" | "register" | "menu" | "leaderboard" | "settings" | "profile" | "shop" | "inventory" | "introCutscene" | "playing" | "paused" | "gameover" | "victory" | "levelTransition";
+  gamePhase:
+    | "login"
+    | "register"
+    | "menu"
+    | "leaderboard"
+    | "settings"
+    | "profile"
+    | "shop"
+    | "inventory"
+    | "introCutscene"
+    | "playing"
+    | "paused"
+    | "gameover"
+    | "victory"
+    | "levelTransition";
   enemies: Enemy[];
   bullets: Array<{
     id: string;
@@ -228,13 +246,11 @@ interface ShopItem {
   category: string;
 }
 
-
-
 // Wall collision detection helper - AABB collision
 function checkWallCollision(
   position: THREE.Vector3,
   walls: { position: number[]; size: number[] }[],
-  radius: number = 0.5
+  radius: number = 0.5,
 ): boolean {
   for (const wall of walls) {
     const [wx, wy, wz] = wall.position;
@@ -263,14 +279,14 @@ function checkWallCollision(
 function checkRampCollision(
   position: THREE.Vector3,
   ramps: Ramp[],
-  radius: number = 0.5
+  radius: number = 0.5,
 ): boolean {
   for (const ramp of ramps) {
     const [rx, ry, rz] = ramp.position;
     // Treat ramp as a simple box for collision (horizontal check)
     const halfWidth = ramp.width / 2;
     const halfLength = ramp.length / 2;
-    
+
     if (
       position.x + radius > rx - halfWidth &&
       position.x - radius < rx + halfWidth &&
@@ -283,7 +299,6 @@ function checkRampCollision(
   }
   return false;
 }
-
 
 // Get ramps for current level
 function getRampsForLevel(level: number): Ramp[] {
@@ -310,7 +325,9 @@ function getRampsForLevel(level: number): Ramp[] {
 }
 
 // Get walls for current level
-function getWallsForLevel(level: number): { position: number[]; size: number[] }[] {
+function getWallsForLevel(
+  level: number,
+): { position: number[]; size: number[] }[] {
   if (level === 0) {
     return [
       { position: [30, 5, 0], size: [1, 10, 60] },
@@ -374,11 +391,10 @@ function getWallsForLevel(level: number): { position: number[]; size: number[] }
 }
 
 // Environment Component
-  function GameEnvironment({ gameState }: { gameState: GameState }) {
-    const grassTexture = useTexture("/textures/grass.png");
-    const asphaltTexture = useTexture("/textures/asphalt.png");
-    const woodTexture = useTexture("/textures/wood.jpg");
-
+function GameEnvironment({ gameState }: { gameState: GameState }) {
+  const grassTexture = useTexture("/textures/grass.png");
+  const asphaltTexture = useTexture("/textures/asphalt.png");
+  const woodTexture = useTexture("/textures/wood.jpg");
 
   grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
   grassTexture.repeat.set(10, 10);
@@ -397,7 +413,10 @@ function getWallsForLevel(level: number): { position: number[]; size: number[] }
 
       {/* Render walls */}
       {walls.map((wall, index) => (
-        <mesh key={`wall-${index}`} position={wall.position as [number, number, number]}>
+        <mesh
+          key={`wall-${index}`}
+          position={wall.position as [number, number, number]}
+        >
           <boxGeometry args={wall.size as [number, number, number]} />
           <meshLambertMaterial map={woodTexture} color="#8B4513" />
         </mesh>
@@ -447,7 +466,7 @@ function Player({
     4: 100,
   });
   const gameStateRef = useRef(gameState);
-  
+
   // Keep gameStateRef in sync
   useEffect(() => {
     gameStateRef.current = gameState;
@@ -458,13 +477,13 @@ function Player({
     if (playerRef.current) {
       // Level-specific safe spawn points
       const spawnPoints: Record<number, [number, number, number]> = {
-        0: [0, 1, 0],      // Level 1: Center is safe
-        1: [0, 1, -15],    // Level 2 (Robot Factory): Spawn away from center wall
-        2: [0, 1, 20],     // Level 3 (Palace): Spawn in safe area
-        3: [-10, 1, -10],  // Level 4 (Crimson Battlefield): Spawn in corner
-        4: [0, 1, 0],      // Level 5 (Mustard Mountain): Center spawn
+        0: [0, 1, 0], // Level 1: Center is safe
+        1: [0, 1, -15], // Level 2 (Robot Factory): Spawn away from center wall
+        2: [0, 1, 20], // Level 3 (Palace): Spawn in safe area
+        3: [-10, 1, -10], // Level 4 (Crimson Battlefield): Spawn in corner
+        4: [0, 1, 0], // Level 5 (Mustard Mountain): Center spawn
       };
-      
+
       const spawnPoint = spawnPoints[gameState.level.currentLevel] || [0, 1, 0];
       playerRef.current.position.set(...spawnPoint);
       velocityRef.current.set(0, 0, 0);
@@ -475,7 +494,10 @@ function Player({
   // Mouse controls - optimized to prevent re-attachment on every state change
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
-      if (document.pointerLockElement && gameStateRef.current.gamePhase === "playing") {
+      if (
+        document.pointerLockElement &&
+        gameStateRef.current.gamePhase === "playing"
+      ) {
         // Get sensitivity from settings store (base * multiplier)
         const { normalSensitivity } = useSettings.getState();
         const sensitivity = 0.002 * normalSensitivity;
@@ -515,7 +537,8 @@ function Player({
               .add(direction.clone().multiplyScalar(1));
 
             // Update weapon ammo ref
-            weaponAmmo.current[currentState.currentWeapon] = currentState.ammo - 1;
+            weaponAmmo.current[currentState.currentWeapon] =
+              currentState.ammo - 1;
 
             setGameState((prev) => ({
               ...prev,
@@ -679,10 +702,10 @@ function Player({
       // Wall collision detection
       const walls = getWallsForLevel(gameState.level.currentLevel);
       const ramps = getRampsForLevel(gameState.level.currentLevel);
-      
+
       const hasWallCollision = checkWallCollision(newPos, walls, 0.5);
       const hasRampCollision = checkRampCollision(newPos, ramps, 0.5);
-      
+
       if (hasWallCollision || hasRampCollision) {
         // Collision detected, don't move in that direction
         // Try sliding along obstacles - check X and Z separately
@@ -691,10 +714,12 @@ function Player({
         const zOnly = playerRef.current.position.clone();
         zOnly.z = newPos.z;
 
-        const canMoveX = !checkWallCollision(xOnly, walls, 0.5) && 
-                        !checkRampCollision(xOnly, ramps, 0.5);
-        const canMoveZ = !checkWallCollision(zOnly, walls, 0.5) && 
-                        !checkRampCollision(zOnly, ramps, 0.5);
+        const canMoveX =
+          !checkWallCollision(xOnly, walls, 0.5) &&
+          !checkRampCollision(xOnly, ramps, 0.5);
+        const canMoveZ =
+          !checkWallCollision(zOnly, walls, 0.5) &&
+          !checkRampCollision(zOnly, ramps, 0.5);
 
         if (canMoveX) {
           // Can move in X direction
@@ -714,7 +739,11 @@ function Player({
     }
 
     // Weapon switching (only unlocked weapons)
-    if (keys.weapon1 && gameState.currentWeapon !== 1 && gameState.unlockedWeapons.includes(1)) {
+    if (
+      keys.weapon1 &&
+      gameState.currentWeapon !== 1 &&
+      gameState.unlockedWeapons.includes(1)
+    ) {
       weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
       setGameState((prev) => ({
         ...prev,
@@ -723,7 +752,11 @@ function Player({
         isReloading: false,
       }));
     }
-    if (keys.weapon2 && gameState.currentWeapon !== 2 && gameState.unlockedWeapons.includes(2)) {
+    if (
+      keys.weapon2 &&
+      gameState.currentWeapon !== 2 &&
+      gameState.unlockedWeapons.includes(2)
+    ) {
       weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
       setGameState((prev) => ({
         ...prev,
@@ -732,7 +765,11 @@ function Player({
         isReloading: false,
       }));
     }
-    if (keys.weapon3 && gameState.currentWeapon !== 3 && gameState.unlockedWeapons.includes(3)) {
+    if (
+      keys.weapon3 &&
+      gameState.currentWeapon !== 3 &&
+      gameState.unlockedWeapons.includes(3)
+    ) {
       weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
       setGameState((prev) => ({
         ...prev,
@@ -741,7 +778,11 @@ function Player({
         isReloading: false,
       }));
     }
-    if (keys.weapon4 && gameState.currentWeapon !== 4 && gameState.unlockedWeapons.includes(4)) {
+    if (
+      keys.weapon4 &&
+      gameState.currentWeapon !== 4 &&
+      gameState.unlockedWeapons.includes(4)
+    ) {
       weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
       setGameState((prev) => ({
         ...prev,
@@ -826,7 +867,7 @@ function Player({
 function RobotModel({ isAttacking }: { isAttacking: boolean }) {
   const leftArmRef = useRef<THREE.Group>(null);
   const rightArmRef = useRef<THREE.Group>(null);
-  
+
   useFrame((state) => {
     if (isAttacking && leftArmRef.current && rightArmRef.current) {
       // Attack animation - swing arms forward
@@ -860,11 +901,19 @@ function RobotModel({ isAttacking }: { isAttacking: boolean }) {
       {/* Eyes - glowing red */}
       <mesh position={[-0.15, 1.55, 0.21]}>
         <sphereGeometry args={[0.08]} />
-        <meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={2} />
+        <meshStandardMaterial
+          color="#ff0000"
+          emissive="#ff0000"
+          emissiveIntensity={2}
+        />
       </mesh>
       <mesh position={[0.15, 1.55, 0.21]}>
         <sphereGeometry args={[0.08]} />
-        <meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={2} />
+        <meshStandardMaterial
+          color="#ff0000"
+          emissive="#ff0000"
+          emissiveIntensity={2}
+        />
       </mesh>
 
       {/* Antenna */}
@@ -874,19 +923,31 @@ function RobotModel({ isAttacking }: { isAttacking: boolean }) {
       </mesh>
       <mesh position={[0, 2.0, 0]}>
         <sphereGeometry args={[0.08]} />
-        <meshStandardMaterial color="#ff4444" emissive="#ff4444" emissiveIntensity={1} />
+        <meshStandardMaterial
+          color="#ff4444"
+          emissive="#ff4444"
+          emissiveIntensity={1}
+        />
       </mesh>
 
       {/* Left Arm */}
       <group ref={leftArmRef} position={[-0.4, 0.9, 0]}>
         <mesh position={[0, -0.25, 0]}>
           <cylinderGeometry args={[0.12, 0.12, 0.6]} />
-          <meshStandardMaterial color="#555555" metalness={0.7} roughness={0.3} />
+          <meshStandardMaterial
+            color="#555555"
+            metalness={0.7}
+            roughness={0.3}
+          />
         </mesh>
         {/* Left Hand/Claw */}
         <mesh position={[0, -0.6, 0]}>
           <boxGeometry args={[0.15, 0.15, 0.15]} />
-          <meshStandardMaterial color="#333333" metalness={0.8} roughness={0.2} />
+          <meshStandardMaterial
+            color="#333333"
+            metalness={0.8}
+            roughness={0.2}
+          />
         </mesh>
       </group>
 
@@ -894,12 +955,20 @@ function RobotModel({ isAttacking }: { isAttacking: boolean }) {
       <group ref={rightArmRef} position={[0.4, 0.9, 0]}>
         <mesh position={[0, -0.25, 0]}>
           <cylinderGeometry args={[0.12, 0.12, 0.6]} />
-          <meshStandardMaterial color="#555555" metalness={0.7} roughness={0.3} />
+          <meshStandardMaterial
+            color="#555555"
+            metalness={0.7}
+            roughness={0.3}
+          />
         </mesh>
         {/* Right Hand/Claw */}
         <mesh position={[0, -0.6, 0]}>
           <boxGeometry args={[0.15, 0.15, 0.15]} />
-          <meshStandardMaterial color="#333333" metalness={0.8} roughness={0.2} />
+          <meshStandardMaterial
+            color="#333333"
+            metalness={0.8}
+            roughness={0.2}
+          />
         </mesh>
       </group>
 
@@ -1026,13 +1095,16 @@ function Enemy({
 
       // Attack logic
       setIsAttacking(distanceToPlayer < 2.5);
-      
+
       if (enemy.type === "melee" || enemy.type === "giant") {
         // Melee and Giant: Contact damage
         if (distanceToPlayer < 1.5 && gameState.gamePhase === "playing") {
           const currentTime = Date.now();
           setGameState((prev) => {
-            if (currentTime - prev.lastDamageTime > archetype.attackInterval && prev.gamePhase === "playing") {
+            if (
+              currentTime - prev.lastDamageTime > archetype.attackInterval &&
+              prev.gamePhase === "playing"
+            ) {
               const newHealth = Math.max(0, prev.health - archetype.damage);
               return {
                 ...prev,
@@ -1081,35 +1153,46 @@ function Enemy({
         setGameState((prev) => {
           const enemyKilled = enemy.health - bullet.damage <= 0;
           const newCoins = enemyKilled ? prev.coins + 1 : prev.coins; // 1 coin per kill
-          
+
           // Increment kill counter only if enemy died
-          const newKills = enemyKilled ? prev.story.totalKills + 1 : prev.story.totalKills;
-          const newLevelKills = enemyKilled ? prev.level.killsThisLevel + 1 : prev.level.killsThisLevel;
-          
+          const newKills = enemyKilled
+            ? prev.story.totalKills + 1
+            : prev.story.totalKills;
+          const newLevelKills = enemyKilled
+            ? prev.level.killsThisLevel + 1
+            : prev.level.killsThisLevel;
+
           // Every 10 kills = conquer a settlement
           const newSettlementIndex = Math.floor(newKills / 10);
-          
+
           // Every 3 kills = rescue an ally
           const newAlliesRescued = Math.floor(newKills / 3);
-          
+
           // Check if we just conquered a new settlement
           let newSettlementsConquered = prev.story.settlementsConquered;
-          if (newSettlementIndex > prev.story.currentSettlement && newSettlementIndex <= SETTLEMENTS.length) {
+          if (
+            newSettlementIndex > prev.story.currentSettlement &&
+            newSettlementIndex <= SETTLEMENTS.length
+          ) {
             const settlementName = SETTLEMENTS[newSettlementIndex - 1];
             if (!prev.story.settlementsConquered.includes(settlementName)) {
-              newSettlementsConquered = [...prev.story.settlementsConquered, settlementName];
+              newSettlementsConquered = [
+                ...prev.story.settlementsConquered,
+                settlementName,
+              ];
             }
           }
-          
+
           // Check level progression
           const currentLevelData = LEVELS[prev.level.currentLevel];
-          const shouldLevelUp = currentLevelData && newLevelKills >= currentLevelData.killsRequired;
+          const shouldLevelUp =
+            currentLevelData && newLevelKills >= currentLevelData.killsRequired;
           const nextLevel = prev.level.currentLevel + 1;
           const hasNextLevel = nextLevel < LEVELS.length;
-          
+
           // Check victory condition - completed final level
           const completedFinalLevel = shouldLevelUp && !hasNextLevel;
-          
+
           // Determine next game phase
           let nextPhase = prev.gamePhase;
           if (completedFinalLevel) {
@@ -1117,7 +1200,7 @@ function Enemy({
           } else if (shouldLevelUp && hasNextLevel) {
             nextPhase = "levelTransition";
           }
-          
+
           return {
             ...prev,
             bullets: prev.bullets.filter((b) => b.id !== bullet.id),
@@ -1130,7 +1213,10 @@ function Enemy({
               .filter((e) => e.health > 0),
             coins: newCoins,
             story: {
-              currentSettlement: Math.min(newSettlementIndex, SETTLEMENTS.length - 1),
+              currentSettlement: Math.min(
+                newSettlementIndex,
+                SETTLEMENTS.length - 1,
+              ),
               alliesRescued: newAlliesRescued,
               settlementsConquered: newSettlementsConquered,
               totalKills: newKills,
@@ -1154,14 +1240,16 @@ function Enemy({
     <group ref={enemyRef} position={enemy.position}>
       {/* Simple colored cube for enemy - color based on type, size based on archetype */}
       <mesh>
-        <boxGeometry args={[0.8 * enemySize, 1.5 * enemySize, 0.8 * enemySize]} />
+        <boxGeometry
+          args={[0.8 * enemySize, 1.5 * enemySize, 0.8 * enemySize]}
+        />
         <meshStandardMaterial color={archetype.color} />
       </mesh>
       {/* Health bar above enemy */}
       <mesh position={[0, healthBarYPosition, 0]}>
         <planeGeometry args={[1 * enemySize, 0.1]} />
-        <meshBasicMaterial 
-          color={enemy.health > (archetype.health / 2) ? "#00ff00" : "#ff0000"} 
+        <meshBasicMaterial
+          color={enemy.health > archetype.health / 2 ? "#00ff00" : "#ff0000"}
           opacity={0.8}
           transparent
         />
@@ -1276,7 +1364,11 @@ function EnemyProjectile({
   return (
     <mesh ref={projectileRef} position={projectile.position}>
       <sphereGeometry args={[0.3]} />
-      <meshStandardMaterial color="#ff6600" emissive="#ff4400" emissiveIntensity={0.8} />
+      <meshStandardMaterial
+        color="#ff6600"
+        emissive="#ff4400"
+        emissiveIntensity={0.8}
+      />
     </mesh>
   );
 }
@@ -1375,153 +1467,159 @@ function IntroCutscene({
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
 }) {
   const [currentScene, setCurrentScene] = useState(0);
-  
+
   const scenes = [
     {
       text: "In the peaceful town of Hot Dog Haven, a young hot dog named Hayden lived happily with his family...",
-      duration: 4000
+      duration: 4000,
     },
     {
       text: "But one fateful day, an army of robot hot dogs descended upon the town!",
-      duration: 4000
+      duration: 4000,
     },
     {
       text: "They captured Hayden's parents and took them to their stronghold at Mustard Mountain!",
-      duration: 4000
+      duration: 4000,
     },
     {
       text: "Now Hayden must be brave. He must conquer the robot settlements scattered across the land...",
-      duration: 4000
+      duration: 4000,
     },
     {
       text: "Along the way, he'll rescue captured hot dog allies and grow stronger.",
-      duration: 4000
+      duration: 4000,
     },
     {
       text: "Only by defeating all four robot settlements can Hayden reach Mustard Mountain and save his parents!",
-      duration: 4000
+      duration: 4000,
     },
     {
       text: "The legend of MUSTARD begins now...",
       duration: 3000,
-      isLast: true
-    }
+      isLast: true,
+    },
   ];
-  
+
   useEffect(() => {
     if (currentScene < scenes.length - 1) {
       const timer = setTimeout(() => {
         setCurrentScene(currentScene + 1);
       }, scenes[currentScene].duration);
-      
+
       return () => clearTimeout(timer);
     } else {
       const timer = setTimeout(() => {
         setGameState((prev) => ({ ...prev, gamePhase: "playing" }));
         document.body.requestPointerLock();
       }, scenes[currentScene].duration);
-      
+
       return () => clearTimeout(timer);
     }
   }, [currentScene, scenes, setGameState]);
-  
+
   return (
     <div
       style={{
-        position: 'fixed',
+        position: "fixed",
         top: 0,
         left: 0,
-        width: '100vw',
-        height: '100vh',
-        background: 'linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #fdc830 100%)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'white',
+        width: "100vw",
+        height: "100vh",
+        background:
+          "linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #fdc830 100%)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "white",
         fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
         zIndex: 2000,
-        padding: '40px',
+        padding: "40px",
       }}
     >
       <div
         style={{
-          maxWidth: '800px',
-          textAlign: 'center',
-          background: 'rgba(0, 0, 0, 0.6)',
-          padding: '60px',
-          borderRadius: '20px',
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+          maxWidth: "800px",
+          textAlign: "center",
+          background: "rgba(0, 0, 0, 0.6)",
+          padding: "60px",
+          borderRadius: "20px",
+          boxShadow: "0 20px 60px rgba(0, 0, 0, 0.5)",
         }}
       >
         <h2
           style={{
-            fontSize: '28px',
-            lineHeight: '1.8',
-            marginBottom: '40px',
-            textShadow: '2px 2px 4px rgba(0, 0, 0, 0.8)',
-            minHeight: '120px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            fontSize: "28px",
+            lineHeight: "1.8",
+            marginBottom: "40px",
+            textShadow: "2px 2px 4px rgba(0, 0, 0, 0.8)",
+            minHeight: "120px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
           {scenes[currentScene].text}
         </h2>
-        
+
         <div
           style={{
-            display: 'flex',
-            gap: '20px',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginTop: '30px',
+            display: "flex",
+            gap: "20px",
+            alignItems: "center",
+            justifyContent: "center",
+            marginTop: "30px",
           }}
         >
           <div
             style={{
-              display: 'flex',
-              gap: '10px',
+              display: "flex",
+              gap: "10px",
             }}
           >
             {scenes.map((_, index) => (
               <div
                 key={index}
                 style={{
-                  width: '12px',
-                  height: '12px',
-                  borderRadius: '50%',
-                  background: index === currentScene ? '#fdc830' : 'rgba(255, 255, 255, 0.3)',
-                  transition: 'all 0.3s ease',
+                  width: "12px",
+                  height: "12px",
+                  borderRadius: "50%",
+                  background:
+                    index === currentScene
+                      ? "#fdc830"
+                      : "rgba(255, 255, 255, 0.3)",
+                  transition: "all 0.3s ease",
                 }}
               />
             ))}
           </div>
         </div>
-        
+
         <button
           onClick={() => {
             setGameState((prev) => ({ ...prev, gamePhase: "playing" }));
             document.body.requestPointerLock();
           }}
           style={{
-            marginTop: '40px',
-            padding: '12px 30px',
-            fontSize: '18px',
-            fontWeight: 'bold',
-            background: 'rgba(255, 255, 255, 0.2)',
-            color: 'white',
-            border: '2px solid white',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
+            marginTop: "40px",
+            padding: "12px 30px",
+            fontSize: "18px",
+            fontWeight: "bold",
+            background: "rgba(255, 255, 255, 0.2)",
+            color: "white",
+            border: "2px solid white",
+            borderRadius: "8px",
+            cursor: "pointer",
+            transition: "all 0.3s ease",
             fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
           }}
           onMouseEnter={(e) => {
-            (e.target as HTMLButtonElement).style.background = 'rgba(255, 255, 255, 0.4)';
+            (e.target as HTMLButtonElement).style.background =
+              "rgba(255, 255, 255, 0.4)";
           }}
           onMouseLeave={(e) => {
-            (e.target as HTMLButtonElement).style.background = 'rgba(255, 255, 255, 0.2)';
+            (e.target as HTMLButtonElement).style.background =
+              "rgba(255, 255, 255, 0.2)";
           }}
         >
           Skip Cutscene
@@ -1584,7 +1682,11 @@ function RegistrationForm({ setGameState }: { setGameState: any }) {
         onChange={(e) => setPassword(e.target.value)}
       />
       <button onClick={handleRegister}>Register</button>
-      <button onClick={() => setGameState((prev: any) => ({ ...prev, gamePhase: "login" }))}>
+      <button
+        onClick={() =>
+          setGameState((prev: any) => ({ ...prev, gamePhase: "login" }))
+        }
+      >
         Back to Login
       </button>
     </div>
@@ -1607,29 +1709,56 @@ function InventoryPage({
   // Define available weapons with their skins
   // shopPrefix is the prefix used in shop item names (e.g., "Pistol - Gold Plated")
   const allWeapons = [
-    { id: 1, name: "Standard Pistol", shopPrefix: "Pistol", skins: ["Default", "Gold Plated", "Neon Green", "Shadow Black"] },
-    { id: 2, name: "Combat Rifle", shopPrefix: "Rifle", skins: ["Default", "Desert Camo", "Arctic White", "Blood Red"] },
-    { id: 3, name: "Sniper Rifle", shopPrefix: "Sniper", skins: ["Default", "Ghillie", "Chrome", "Midnight"] },
-    { id: 4, name: "Plasma Cannon", shopPrefix: "Plasma", skins: ["Default", "Electric Blue", "Magma", "Void Purple"] },
+    {
+      id: 1,
+      name: "Standard Pistol",
+      shopPrefix: "Pistol",
+      skins: ["Default", "Gold Plated", "Neon Green", "Shadow Black"],
+    },
+    {
+      id: 2,
+      name: "Combat Rifle",
+      shopPrefix: "Rifle",
+      skins: ["Default", "Desert Camo", "Arctic White", "Blood Red"],
+    },
+    {
+      id: 3,
+      name: "Sniper Rifle",
+      shopPrefix: "Sniper",
+      skins: ["Default", "Ghillie", "Chrome", "Midnight"],
+    },
+    {
+      id: 4,
+      name: "Plasma Cannon",
+      shopPrefix: "Plasma",
+      skins: ["Default", "Electric Blue", "Magma", "Void Purple"],
+    },
   ];
 
   // Track equipped skins per weapon based on purchased items
   const [weaponSkins, setWeaponSkins] = useState<Record<number, string>>({
-    1: "Default", 2: "Default", 3: "Default", 4: "Default"
+    1: "Default",
+    2: "Default",
+    3: "Default",
+    4: "Default",
   });
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         // Fetch purchased items from database
-        const invResponse = await fetch("/api/inventory", { credentials: "include" });
+        const invResponse = await fetch("/api/inventory", {
+          credentials: "include",
+        });
         if (invResponse.ok) {
           const items = await invResponse.json();
           setPurchasedItems(items);
         }
 
         // Fetch currency from database
-        const currResponse = await fetch("/api/currency", { credentials: "include" });
+        const currResponse = await fetch("/api/currency", {
+          credentials: "include",
+        });
         if (currResponse.ok) {
           const data = await currResponse.json();
           setCurrency(data.currency);
@@ -1683,7 +1812,9 @@ function InventoryPage({
             {currency} Gold
           </span>
           <button
-            onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))}
+            onClick={() =>
+              setGameState((prev) => ({ ...prev, gamePhase: "menu" }))
+            }
             style={{
               padding: "10px 20px",
               fontSize: "16px",
@@ -1726,7 +1857,9 @@ function InventoryPage({
           <p style={{ fontSize: "14px", opacity: 0.8, marginBottom: "15px" }}>
             Click a weapon to change its skin
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+          >
             {loadingInventory ? (
               <p style={{ opacity: 0.7 }}>Loading...</p>
             ) : (
@@ -1734,35 +1867,52 @@ function InventoryPage({
                 const isSelected = selectedWeapon === weapon.id;
                 const currentSkin = weaponSkins[weapon.id] || "Default";
                 // Count owned skins for this weapon (excluding Default)
-                const ownedSkinsCount = purchasedItems.filter((item) => 
-                  item.name && item.name.startsWith(`${weapon.shopPrefix} - `)
+                const ownedSkinsCount = purchasedItems.filter(
+                  (item) =>
+                    item.name &&
+                    item.name.startsWith(`${weapon.shopPrefix} - `),
                 ).length;
                 return (
                   <div
                     key={weapon.id}
-                    onClick={() => setSelectedWeapon(isSelected ? null : weapon.id)}
+                    onClick={() =>
+                      setSelectedWeapon(isSelected ? null : weapon.id)
+                    }
                     style={{
                       padding: "15px",
-                      background: isSelected 
-                        ? "rgba(33, 150, 243, 0.5)" 
+                      background: isSelected
+                        ? "rgba(33, 150, 243, 0.5)"
                         : "rgba(255,255,255,0.1)",
                       borderRadius: "8px",
-                      border: isSelected 
-                        ? "2px solid #2196F3" 
+                      border: isSelected
+                        ? "2px solid #2196F3"
                         : "1px solid rgba(255,255,255,0.3)",
                       cursor: "pointer",
                       transition: "all 0.2s",
                     }}
                   >
                     <div>
-                      <p style={{ margin: "0 0 5px 0", fontWeight: "bold", fontSize: "18px" }}>
+                      <p
+                        style={{
+                          margin: "0 0 5px 0",
+                          fontWeight: "bold",
+                          fontSize: "18px",
+                        }}
+                      >
                         {weapon.name}
                       </p>
                       <p style={{ margin: 0, fontSize: "12px", opacity: 0.8 }}>
                         Current Skin: {currentSkin}
                       </p>
-                      <p style={{ margin: "3px 0 0 0", fontSize: "11px", color: "#4CAF50" }}>
-                        {ownedSkinsCount} skin{ownedSkinsCount !== 1 ? "s" : ""} owned
+                      <p
+                        style={{
+                          margin: "3px 0 0 0",
+                          fontSize: "11px",
+                          color: "#4CAF50",
+                        }}
+                      >
+                        {ownedSkinsCount} skin{ownedSkinsCount !== 1 ? "s" : ""}{" "}
+                        owned
                       </p>
                     </div>
                   </div>
@@ -1788,59 +1938,91 @@ function InventoryPage({
           {selectedWeapon ? (
             <>
               <p style={{ fontSize: "16px", marginBottom: "15px" }}>
-                Select a skin for <strong>{allWeapons.find(w => w.id === selectedWeapon)?.name}</strong>
+                Select a skin for{" "}
+                <strong>
+                  {allWeapons.find((w) => w.id === selectedWeapon)?.name}
+                </strong>
               </p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                {allWeapons.find(w => w.id === selectedWeapon)?.skins.map((skin) => {
-                  const isCurrentSkin = weaponSkins[selectedWeapon] === skin;
-                  const weapon = allWeapons.find(w => w.id === selectedWeapon);
-                  const shopPrefix = weapon?.shopPrefix || "";
-                  const skinItemName = `${shopPrefix} - ${skin}`;
-                  // Check ownership by matching the shop item name format
-                  const isOwned = skin === "Default" || purchasedItems.some((item) => item.name === skinItemName);
-                  return (
-                    <div
-                      key={skin}
-                      onClick={() => {
-                        if (isOwned) {
-                          setWeaponSkins(prev => ({ ...prev, [selectedWeapon]: skin }));
-                        } else {
-                          alert("You don't own this skin! Buy it from the shop.");
-                        }
-                      }}
-                      style={{
-                        padding: "15px",
-                        background: isCurrentSkin 
-                          ? "rgba(156, 39, 176, 0.5)" 
-                          : isOwned 
-                            ? "rgba(255,255,255,0.1)" 
-                            : "rgba(100,100,100,0.3)",
-                        borderRadius: "8px",
-                        border: isCurrentSkin 
-                          ? "2px solid #9C27B0" 
-                          : isOwned 
-                            ? "1px solid rgba(255,255,255,0.3)" 
-                            : "1px solid rgba(100,100,100,0.5)",
-                        cursor: isOwned ? "pointer" : "not-allowed",
-                        textAlign: "center",
-                        transition: "all 0.2s",
-                        opacity: isOwned ? 1 : 0.6,
-                      }}
-                    >
-                      <p style={{ margin: 0, fontWeight: "bold" }}>{skin}</p>
-                      {isCurrentSkin && (
-                        <p style={{ margin: "5px 0 0 0", fontSize: "12px", color: "#9C27B0" }}>
-                          Selected
-                        </p>
-                      )}
-                      {!isOwned && (
-                        <p style={{ margin: "5px 0 0 0", fontSize: "10px", color: "#ff5722" }}>
-                          Not Owned
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "10px",
+                }}
+              >
+                {allWeapons
+                  .find((w) => w.id === selectedWeapon)
+                  ?.skins.map((skin) => {
+                    const isCurrentSkin = weaponSkins[selectedWeapon] === skin;
+                    const weapon = allWeapons.find(
+                      (w) => w.id === selectedWeapon,
+                    );
+                    const shopPrefix = weapon?.shopPrefix || "";
+                    const skinItemName = `${shopPrefix} - ${skin}`;
+                    // Check ownership by matching the shop item name format
+                    const isOwned =
+                      skin === "Default" ||
+                      purchasedItems.some((item) => item.name === skinItemName);
+                    return (
+                      <div
+                        key={skin}
+                        onClick={() => {
+                          if (isOwned) {
+                            setWeaponSkins((prev) => ({
+                              ...prev,
+                              [selectedWeapon]: skin,
+                            }));
+                          } else {
+                            alert(
+                              "You don't own this skin! Buy it from the shop.",
+                            );
+                          }
+                        }}
+                        style={{
+                          padding: "15px",
+                          background: isCurrentSkin
+                            ? "rgba(156, 39, 176, 0.5)"
+                            : isOwned
+                              ? "rgba(255,255,255,0.1)"
+                              : "rgba(100,100,100,0.3)",
+                          borderRadius: "8px",
+                          border: isCurrentSkin
+                            ? "2px solid #9C27B0"
+                            : isOwned
+                              ? "1px solid rgba(255,255,255,0.3)"
+                              : "1px solid rgba(100,100,100,0.5)",
+                          cursor: isOwned ? "pointer" : "not-allowed",
+                          textAlign: "center",
+                          transition: "all 0.2s",
+                          opacity: isOwned ? 1 : 0.6,
+                        }}
+                      >
+                        <p style={{ margin: 0, fontWeight: "bold" }}>{skin}</p>
+                        {isCurrentSkin && (
+                          <p
+                            style={{
+                              margin: "5px 0 0 0",
+                              fontSize: "12px",
+                              color: "#9C27B0",
+                            }}
+                          >
+                            Selected
+                          </p>
+                        )}
+                        {!isOwned && (
+                          <p
+                            style={{
+                              margin: "5px 0 0 0",
+                              fontSize: "10px",
+                              color: "#ff5722",
+                            }}
+                          >
+                            Not Owned
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
               </div>
             </>
           ) : (
@@ -1848,24 +2030,36 @@ function InventoryPage({
               {loadingInventory ? (
                 <p style={{ opacity: 0.7 }}>Loading...</p>
               ) : purchasedItems.length === 0 ? (
-                <p style={{ opacity: 0.7, textAlign: "center", marginTop: "50px" }}>
+                <p
+                  style={{
+                    opacity: 0.7,
+                    textAlign: "center",
+                    marginTop: "50px",
+                  }}
+                >
                   No items purchased yet. Visit the shop!
                 </p>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
+                  }}
+                >
                   {purchasedItems.map((item) => {
                     // Parse weapon and skin from item name (e.g., "Pistol - Gold Plated")
                     const nameParts = item.name?.split(" - ") || [item.name];
                     const weaponType = nameParts[0] || "Item";
                     const skinName = nameParts[1] || item.name;
-                    
+
                     const weaponColors: Record<string, string> = {
                       Pistol: "#4CAF50",
                       Rifle: "#2196F3",
                       Sniper: "#9C27B0",
                       Plasma: "#FF5722",
                     };
-                    
+
                     return (
                       <div
                         key={item.id}
@@ -1876,7 +2070,13 @@ function InventoryPage({
                           border: "1px solid rgba(255,255,255,0.3)",
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "10px",
+                          }}
+                        >
                           <span
                             style={{
                               background: weaponColors[weaponType] || "#555",
@@ -1889,7 +2089,9 @@ function InventoryPage({
                           >
                             {weaponType}
                           </span>
-                          <p style={{ margin: 0, fontWeight: "bold" }}>{skinName}</p>
+                          <p style={{ margin: 0, fontWeight: "bold" }}>
+                            {skinName}
+                          </p>
                         </div>
                       </div>
                     );
@@ -1913,7 +2115,7 @@ function SettingsPage({
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
 }) {
   const { setKeybinding, setNormalSensitivity } = useSettings();
-  
+
   // Settings state from database
   const [settings, setSettings] = useState({
     mouse_sensitivity: 1.0,
@@ -1923,7 +2125,7 @@ function SettingsPage({
     move_right_key: "KeyD",
     jump_key: "Space",
   });
-  
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -2103,14 +2305,29 @@ function SettingsPage({
             </div>
 
             {/* Keybinds Section */}
-            <h2 style={{ fontSize: "24px", marginBottom: "15px", textAlign: "left" }}>
+            <h2
+              style={{
+                fontSize: "24px",
+                marginBottom: "15px",
+                textAlign: "left",
+              }}
+            >
               Keybinds
             </h2>
-            <p style={{ fontSize: "14px", opacity: 0.8, marginBottom: "15px", textAlign: "left" }}>
+            <p
+              style={{
+                fontSize: "14px",
+                opacity: 0.8,
+                marginBottom: "15px",
+                textAlign: "left",
+              }}
+            >
               Click on a key to rebind it, then press the new key
             </p>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+            >
               {Object.entries(keybindLabels).map(([key, label]) => (
                 <div
                   key={key}
@@ -2121,7 +2338,10 @@ function SettingsPage({
                     padding: "12px 15px",
                     background: "rgba(255,255,255,0.1)",
                     borderRadius: "8px",
-                    border: listeningFor === key ? "2px solid #fdc830" : "1px solid rgba(255,255,255,0.3)",
+                    border:
+                      listeningFor === key
+                        ? "2px solid #fdc830"
+                        : "1px solid rgba(255,255,255,0.3)",
                   }}
                 >
                   <span style={{ fontSize: "16px" }}>{label}</span>
@@ -2141,7 +2361,9 @@ function SettingsPage({
                   >
                     {listeningFor === key
                       ? "Press a key..."
-                      : getKeyDisplayName(settings[key as keyof typeof settings] as string)}
+                      : getKeyDisplayName(
+                          settings[key as keyof typeof settings] as string,
+                        )}
                   </button>
                 </div>
               ))}
@@ -2153,7 +2375,9 @@ function SettingsPage({
                 style={{
                   marginTop: "20px",
                   padding: "10px",
-                  background: message.includes("success") ? "rgba(76, 175, 80, 0.3)" : "rgba(244, 67, 54, 0.3)",
+                  background: message.includes("success")
+                    ? "rgba(76, 175, 80, 0.3)"
+                    : "rgba(244, 67, 54, 0.3)",
                   borderRadius: "8px",
                 }}
               >
@@ -2162,7 +2386,14 @@ function SettingsPage({
             )}
 
             {/* Buttons */}
-            <div style={{ display: "flex", gap: "15px", marginTop: "30px", justifyContent: "center" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: "15px",
+                marginTop: "30px",
+                justifyContent: "center",
+              }}
+            >
               <button
                 onClick={handleSave}
                 disabled={saving}
@@ -2181,7 +2412,9 @@ function SettingsPage({
                 {saving ? "Saving..." : "SAVE"}
               </button>
               <button
-                onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))}
+                onClick={() =>
+                  setGameState((prev) => ({ ...prev, gamePhase: "menu" }))
+                }
                 style={{
                   padding: "15px 40px",
                   fontSize: "18px",
@@ -2212,22 +2445,26 @@ function ProfilePage({
   gameState: GameState;
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
 }) {
-  const [profile, setProfile] = useState<{ username: string; email: string; profilePicture: string | null } | null>(null);
+  const [profile, setProfile] = useState<{
+    username: string;
+    email: string;
+    profilePicture: string | null;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  
+
   // Edit states
   const [editingUsername, setEditingUsername] = useState(false);
   const [newUsername, setNewUsername] = useState("");
-  
+
   const [editingPassword, setEditingPassword] = useState(false);
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  
+
   const [uploadingPicture, setUploadingPicture] = useState(false);
-  
+
   // URL picture upload states
   const [pictureUrl, setPictureUrl] = useState("");
   const [loadingUrlPicture, setLoadingUrlPicture] = useState(false);
@@ -2288,7 +2525,9 @@ function ProfilePage({
         return;
       }
       setSuccess("Username updated successfully!");
-      setProfile((prev) => prev ? { ...prev, username: data.username } : null);
+      setProfile((prev) =>
+        prev ? { ...prev, username: data.username } : null,
+      );
       setEditingUsername(false);
     } catch (err) {
       setError("Network error");
@@ -2324,7 +2563,9 @@ function ProfilePage({
     }
   };
 
-  const handleUploadPicture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadPicture = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -2348,7 +2589,9 @@ function ProfilePage({
         return;
       }
       setSuccess("Profile picture updated!");
-      setProfile((prev) => prev ? { ...prev, profilePicture: data.profilePictureUrl } : null);
+      setProfile((prev) =>
+        prev ? { ...prev, profilePicture: data.profilePictureUrl } : null,
+      );
       setUploadingPicture(false);
     } catch (err) {
       setError("Network error");
@@ -2380,7 +2623,9 @@ function ProfilePage({
         return;
       }
       setSuccess("Profile picture updated from URL!");
-      setProfile((prev) => prev ? { ...prev, profilePicture: pictureUrl.trim() } : null);
+      setProfile((prev) =>
+        prev ? { ...prev, profilePicture: pictureUrl.trim() } : null,
+      );
       setPictureUrl("");
       setShowUrlInput(false);
       setLoadingUrlPicture(false);
@@ -2442,7 +2687,13 @@ function ProfilePage({
           boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
         }}
       >
-        <h1 style={{ fontSize: "36px", marginBottom: "30px", textAlign: "center" }}>
+        <h1
+          style={{
+            fontSize: "36px",
+            marginBottom: "30px",
+            textAlign: "center",
+          }}
+        >
           Profile
         </h1>
 
@@ -2497,9 +2748,17 @@ function ProfilePage({
               fontWeight: "bold",
             }}
           >
-            {!profile?.profilePicture && (profile?.username.charAt(0).toUpperCase() || "?")}
+            {!profile?.profilePicture &&
+              (profile?.username.charAt(0).toUpperCase() || "?")}
           </div>
-          <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginBottom: "15px" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              justifyContent: "center",
+              marginBottom: "15px",
+            }}
+          >
             <label
               style={{
                 background: "rgba(255,255,255,0.2)",
@@ -2535,7 +2794,14 @@ function ProfilePage({
             </button>
           </div>
           {showUrlInput && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "15px" }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+                marginBottom: "15px",
+              }}
+            >
               <input
                 type="text"
                 value={pictureUrl}
@@ -2595,7 +2861,9 @@ function ProfilePage({
           <h3 style={{ fontSize: "18px", marginBottom: "10px" }}>Username</h3>
           {!editingUsername ? (
             <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <span style={{ fontSize: "16px", flex: 1 }}>{profile?.username}</span>
+              <span style={{ fontSize: "16px", flex: 1 }}>
+                {profile?.username}
+              </span>
               <button
                 onClick={() => setEditingUsername(true)}
                 style={{
@@ -2611,7 +2879,9 @@ function ProfilePage({
               </button>
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+            >
               <input
                 type="text"
                 value={newUsername}
@@ -2686,7 +2956,9 @@ function ProfilePage({
               Change Password
             </button>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+            >
               <input
                 type="password"
                 value={oldPassword}
@@ -2765,7 +3037,9 @@ function ProfilePage({
 
         {/* Back to Menu */}
         <button
-          onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))}
+          onClick={() =>
+            setGameState((prev) => ({ ...prev, gamePhase: "menu" }))
+          }
           style={{
             width: "100%",
             background: "rgba(255,255,255,0.2)",
@@ -2836,7 +3110,7 @@ function HUD({
           setOwnedItemIds(items.map((item: any) => item.id));
         })
         .catch((err) => console.error("Failed to fetch inventory:", err));
-      
+
       // Fetch current currency from database
       fetch("/api/currency", { credentials: "include" })
         .then((res) => res.json())
@@ -2943,7 +3217,7 @@ function HUD({
               marginBottom: "30px",
             }}
           >
-            FPS ARENA 
+            FPS ARENA
           </h1>
           <h2 style={{ fontSize: "24px", marginBottom: "20px" }}>Login</h2>
           <div
@@ -2988,7 +3262,8 @@ function HUD({
           >
             <button
               onClick={async () => {
-                const { setKeybinding, setNormalSensitivity } = useSettings.getState();
+                const { setKeybinding, setNormalSensitivity } =
+                  useSettings.getState();
                 try {
                   const response = await fetch("/api/login", {
                     method: "POST",
@@ -3009,10 +3284,12 @@ function HUD({
                         equippedSkin: null,
                       },
                     }));
-                    
+
                     // Load user settings after login
                     try {
-                      const settingsRes = await fetch("/api/settings", { credentials: "include" });
+                      const settingsRes = await fetch("/api/settings", {
+                        credentials: "include",
+                      });
                       const settingsData = await settingsRes.json();
                       if (settingsData.success && settingsData.settings) {
                         const s = settingsData.settings;
@@ -3277,7 +3554,8 @@ function HUD({
           left: 0,
           width: "100vw",
           height: "100vh",
-          background: "linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #fdc830 100%)",
+          background:
+            "linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #fdc830 100%)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
@@ -3305,7 +3583,7 @@ function HUD({
               textShadow: "3px 3px 6px rgba(0,0,0,0.8)",
             }}
           >
-            My GHS Story:
+            
           </h1>
           <h2
             style={{
@@ -3326,21 +3604,33 @@ function HUD({
               ? "(Guest)"
               : `Currency: ${gameState.user.currency}`}
           </p>
-          <p style={{ fontSize: "18px", marginBottom: "30px", lineHeight: "1.6" }}>
-            Help Hayden the hot dog rescue his parents from the robot hot dogs!<br/>
+          <p
+            style={{
+              fontSize: "18px",
+              marginBottom: "30px",
+              lineHeight: "1.6",
+            }}
+          >
+            Help Hayden the hot dog rescue his parents from the robot hot dogs!
+            <br />
             Conquer settlements and make allies along the way.
           </p>
-          
+
           {/* Navigation Grid */}
-          <div style={{ 
-            display: "grid", 
-            gridTemplateColumns: "1fr 1fr", 
-            gap: "15px", 
-            marginBottom: "20px" 
-          }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "15px",
+              marginBottom: "20px",
+            }}
+          >
             <button
               onClick={() => {
-                setGameState((prev) => ({ ...prev, gamePhase: "introCutscene" }));
+                setGameState((prev) => ({
+                  ...prev,
+                  gamePhase: "introCutscene",
+                }));
               }}
               style={{
                 padding: "20px",
@@ -3364,7 +3654,7 @@ function HUD({
             >
               🎮 PLAY GAME
             </button>
-            
+
             <button
               onClick={() => {
                 setGameState((prev) => ({ ...prev, gamePhase: "leaderboard" }));
@@ -3391,7 +3681,7 @@ function HUD({
             >
               🏆 LEADERBOARD
             </button>
-            
+
             <button
               onClick={() => {
                 setGameState((prev) => ({ ...prev, gamePhase: "profile" }));
@@ -3418,7 +3708,7 @@ function HUD({
             >
               👤 PROFILE
             </button>
-            
+
             <button
               onClick={() => {
                 setGameState((prev) => ({ ...prev, gamePhase: "shop" }));
@@ -3445,7 +3735,7 @@ function HUD({
             >
               🛒 SHOP
             </button>
-            
+
             <button
               onClick={() => {
                 setGameState((prev) => ({ ...prev, gamePhase: "inventory" }));
@@ -3472,7 +3762,7 @@ function HUD({
             >
               🎒 INVENTORY
             </button>
-            
+
             <button
               onClick={() => {
                 setGameState((prev) => ({ ...prev, gamePhase: "settings" }));
@@ -3579,13 +3869,7 @@ function HUD({
 
   // Settings Page
   if (gameState.gamePhase === "settings") {
-    return (
-      <
-        SettingsPage 
-        gameState={gameState} 
-        setGameState={setGameState} 
-      />
-    );
+    return <SettingsPage gameState={gameState} setGameState={setGameState} />;
   }
 
   // Shop Page
@@ -3625,7 +3909,9 @@ function HUD({
               💰 {gameState.user.currency}
             </span>
             <button
-              onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))}
+              onClick={() =>
+                setGameState((prev) => ({ ...prev, gamePhase: "menu" }))
+              }
               style={{
                 padding: "10px 20px",
                 fontSize: "16px",
@@ -3656,7 +3942,13 @@ function HUD({
           }}
         >
           {shopLoading && (
-            <div style={{ gridColumn: "1 / -1", textAlign: "center", fontSize: "20px" }}>
+            <div
+              style={{
+                gridColumn: "1 / -1",
+                textAlign: "center",
+                fontSize: "20px",
+              }}
+            >
               Loading shop items...
             </div>
           )}
@@ -3677,7 +3969,13 @@ function HUD({
           )}
 
           {!shopLoading && shopItems.length === 0 && !shopError && (
-            <div style={{ gridColumn: "1 / -1", textAlign: "center", fontSize: "18px" }}>
+            <div
+              style={{
+                gridColumn: "1 / -1",
+                textAlign: "center",
+                fontSize: "18px",
+              }}
+            >
               No items available
             </div>
           )}
@@ -3818,7 +4116,7 @@ function HUD({
   if (gameState.gamePhase === "levelTransition") {
     const completedLevel = LEVELS[gameState.level.currentLevel];
     const nextLevel = LEVELS[gameState.level.currentLevel + 1];
-    
+
     // Determine weapon unlock for this level
     let weaponUnlock = null;
     if (gameState.level.currentLevel === 0) {
@@ -3828,9 +4126,9 @@ function HUD({
     } else if (gameState.level.currentLevel === 3) {
       weaponUnlock = { id: 4, name: weapons[4].name }; // LMG after level 4
     }
-    
+
     const canAffordToken = gameState.coins >= 2;
-    
+
     return (
       <div
         style={{
@@ -3839,7 +4137,8 @@ function HUD({
           left: 0,
           width: "100vw",
           height: "100vh",
-          background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
+          background:
+            "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -3871,18 +4170,41 @@ function HUD({
           >
             ✅ LEVEL COMPLETE!
           </h2>
-          <div style={{ fontSize: "20px", marginBottom: "20px", lineHeight: "1.8" }}>
+          <div
+            style={{
+              fontSize: "20px",
+              marginBottom: "20px",
+              lineHeight: "1.8",
+            }}
+          >
             <p style={{ marginBottom: "15px", color: "#ffeb3b" }}>
               You've conquered <strong>{completedLevel?.name}</strong>!
             </p>
             <p style={{ fontSize: "18px", opacity: 0.9 }}>
-              Coins: <span style={{ color: "#fdc830", fontWeight: "bold" }}>{gameState.coins}</span>
+              Coins:{" "}
+              <span style={{ color: "#fdc830", fontWeight: "bold" }}>
+                {gameState.coins}
+              </span>
             </p>
           </div>
-          
+
           {weaponUnlock && (
-            <div style={{ marginBottom: "20px", padding: "15px", background: "rgba(76,175,80,0.2)", borderRadius: "10px", border: "2px solid #4caf50" }}>
-              <h3 style={{ fontSize: "20px", color: "#4caf50", marginBottom: "5px" }}>
+            <div
+              style={{
+                marginBottom: "20px",
+                padding: "15px",
+                background: "rgba(76,175,80,0.2)",
+                borderRadius: "10px",
+                border: "2px solid #4caf50",
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: "20px",
+                  color: "#4caf50",
+                  marginBottom: "5px",
+                }}
+              >
                 🔓 WEAPON UNLOCKED!
               </h3>
               <p style={{ fontSize: "18px", fontWeight: "bold" }}>
@@ -3890,29 +4212,78 @@ function HUD({
               </p>
             </div>
           )}
-          
+
           {/* Shop Section */}
-          <div style={{ marginBottom: "20px", padding: "20px", background: "rgba(156,39,176,0.2)", borderRadius: "10px", border: "2px solid #9C27B0" }}>
-            <h3 style={{ fontSize: "24px", color: "#9C27B0", marginBottom: "15px" }}>
+          <div
+            style={{
+              marginBottom: "20px",
+              padding: "20px",
+              background: "rgba(156,39,176,0.2)",
+              borderRadius: "10px",
+              border: "2px solid #9C27B0",
+            }}
+          >
+            <h3
+              style={{
+                fontSize: "24px",
+                color: "#9C27B0",
+                marginBottom: "15px",
+              }}
+            >
               🛒 SHOPKEEPER
             </h3>
-            <p style={{ fontSize: "14px", opacity: 0.8, marginBottom: "15px", fontStyle: "italic" }}>
+            <p
+              style={{
+                fontSize: "14px",
+                opacity: 0.8,
+                marginBottom: "15px",
+                fontStyle: "italic",
+              }}
+            >
               "Traveler! I have something for you..."
             </p>
-            
+
             {/* Token Item */}
-            <div style={{ padding: "15px", background: "rgba(0,0,0,0.4)", borderRadius: "8px", marginBottom: "10px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+            <div
+              style={{
+                padding: "15px",
+                background: "rgba(0,0,0,0.4)",
+                borderRadius: "8px",
+                marginBottom: "10px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  gap: "10px",
+                }}
+              >
                 <div style={{ textAlign: "left" }}>
-                  <div style={{ fontSize: "18px", fontWeight: "bold", marginBottom: "5px" }}>
+                  <div
+                    style={{
+                      fontSize: "18px",
+                      fontWeight: "bold",
+                      marginBottom: "5px",
+                    }}
+                  >
                     💚 Health Buff Token
                   </div>
                   <div style={{ fontSize: "14px", opacity: 0.7 }}>
                     Permanently increases max health by +10 HP (stackable!)
                   </div>
                   {gameState.tokensPurchased > 0 && (
-                    <div style={{ fontSize: "13px", color: "#4caf50", marginTop: "5px" }}>
-                      Owned: {gameState.tokensPurchased} | Max Health: {gameState.maxHealth} HP
+                    <div
+                      style={{
+                        fontSize: "13px",
+                        color: "#4caf50",
+                        marginTop: "5px",
+                      }}
+                    >
+                      Owned: {gameState.tokensPurchased} | Max Health:{" "}
+                      {gameState.maxHealth} HP
                     </div>
                   )}
                 </div>
@@ -3946,13 +4317,32 @@ function HUD({
               </div>
             </div>
           </div>
-          
+
           {nextLevel && (
-            <div style={{ marginBottom: "20px", padding: "20px", background: "rgba(255,215,0,0.1)", borderRadius: "10px" }}>
-              <h3 style={{ fontSize: "24px", color: "#fdc830", marginBottom: "10px" }}>
+            <div
+              style={{
+                marginBottom: "20px",
+                padding: "20px",
+                background: "rgba(255,215,0,0.1)",
+                borderRadius: "10px",
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: "24px",
+                  color: "#fdc830",
+                  marginBottom: "10px",
+                }}
+              >
                 🎯 NEXT MISSION
               </h3>
-              <p style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "5px" }}>
+              <p
+                style={{
+                  fontSize: "20px",
+                  fontWeight: "bold",
+                  marginBottom: "5px",
+                }}
+              >
                 {nextLevel.name}
               </p>
               <p style={{ fontSize: "16px", opacity: 0.8 }}>
@@ -3960,15 +4350,17 @@ function HUD({
               </p>
             </div>
           )}
-          
+
           <button
             onClick={() => {
               setGameState((prev) => {
                 // Add weapon unlock
-                const newUnlockedWeapons = weaponUnlock && !prev.unlockedWeapons.includes(weaponUnlock.id)
-                  ? [...prev.unlockedWeapons, weaponUnlock.id]
-                  : prev.unlockedWeapons;
-                
+                const newUnlockedWeapons =
+                  weaponUnlock &&
+                  !prev.unlockedWeapons.includes(weaponUnlock.id)
+                    ? [...prev.unlockedWeapons, weaponUnlock.id]
+                    : prev.unlockedWeapons;
+
                 return {
                   ...prev,
                   gamePhase: "playing",
@@ -4018,7 +4410,8 @@ function HUD({
           left: 0,
           width: "100vw",
           height: "100vh",
-          background: "linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #fdc830 100%)",
+          background:
+            "linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #fdc830 100%)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -4048,36 +4441,61 @@ function HUD({
           >
             🌭 VICTORY! 🌭
           </h2>
-          <div style={{ fontSize: "24px", marginBottom: "30px", lineHeight: "1.6" }}>
+          <div
+            style={{
+              fontSize: "24px",
+              marginBottom: "30px",
+              lineHeight: "1.6",
+            }}
+          >
             <p style={{ marginBottom: "20px" }}>
-              Hayden has conquered all robot settlements<br/>
+              Hayden has conquered all robot settlements
+              <br />
               and rescued his parents from Mustard Mountain!
             </p>
             <p style={{ fontSize: "18px", opacity: 0.9 }}>
-              The hot dog family is reunited once more,<br/>
+              The hot dog family is reunited once more,
+              <br />
               and peace returns to Hot Dog Haven!
             </p>
           </div>
           <div style={{ marginBottom: "30px", fontSize: "18px" }}>
             <div style={{ marginBottom: "10px" }}>
-              Total Coins: <span style={{ color: "#fdc830", fontWeight: "bold" }}>{gameState.coins}</span>
+              Total Coins:{" "}
+              <span style={{ color: "#fdc830", fontWeight: "bold" }}>
+                {gameState.coins}
+              </span>
             </div>
             <div style={{ marginBottom: "10px" }}>
-              Allies Rescued: <span style={{ color: "#90EE90", fontWeight: "bold" }}>{gameState.story.alliesRescued}</span>
+              Allies Rescued:{" "}
+              <span style={{ color: "#90EE90", fontWeight: "bold" }}>
+                {gameState.story.alliesRescued}
+              </span>
             </div>
             <div style={{ marginBottom: "10px" }}>
-              Settlements Conquered: <span style={{ color: "#FFD700", fontWeight: "bold" }}>{gameState.story.settlementsConquered.length}/{SETTLEMENTS.length}</span>
+              Settlements Conquered:{" "}
+              <span style={{ color: "#FFD700", fontWeight: "bold" }}>
+                {gameState.story.settlementsConquered.length}/
+                {SETTLEMENTS.length}
+              </span>
             </div>
             <div style={{ marginBottom: "10px" }}>
-              Currency Earned: <span style={{ color: "#4caf50", fontWeight: "bold" }}>{currencyEarned}</span>
+              Currency Earned:{" "}
+              <span style={{ color: "#4caf50", fontWeight: "bold" }}>
+                {currencyEarned}
+              </span>
             </div>
             {!gameState.user.isGuest && (
-              <div style={{ fontSize: "14px", opacity: 0.8, marginTop: "10px" }}>
+              <div
+                style={{ fontSize: "14px", opacity: 0.8, marginTop: "10px" }}
+              >
                 Currency added to your account!
               </div>
             )}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "15px" }}
+          >
             <button
               onClick={async () => {
                 const newCurrency = gameState.user.isGuest
@@ -4488,6 +4906,26 @@ function HUD({
             >
               EXIT TO MAIN MENU
             </button>
+            <button
+              onClick={() => {
+                setGameState((prev) => ({
+                  ...prev,
+                  gamePhase: "settings",
+                }));
+              }}
+              style={{
+                padding: "15px 30px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                background: "#808080",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+              }}
+            >
+              SETTINGS
+            </button>
           </div>
         </div>
       </div>
@@ -4561,7 +4999,14 @@ function HUD({
         }}
       >
         <div
-          style={{ marginBottom: "8px", fontSize: "14px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "10px" }}
+          style={{
+            marginBottom: "8px",
+            fontSize: "14px",
+            fontWeight: "bold",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+          }}
         >
           HEALTH
           {gameState.tokensPurchased > 0 && (
@@ -4593,7 +5038,10 @@ function HUD({
             style={{
               width: `${(gameState.health / gameState.maxHealth) * 100}%`,
               height: "100%",
-              background: gameState.health > (gameState.maxHealth * 0.3) ? "#00ff00" : "#ff0000",
+              background:
+                gameState.health > gameState.maxHealth * 0.3
+                  ? "#00ff00"
+                  : "#ff0000",
               transition: "width 0.3s ease",
             }}
           />
@@ -4657,20 +5105,36 @@ function HUD({
           fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
         }}
       >
-        <div style={{ fontSize: "14px", fontWeight: "bold", marginBottom: "8px", color: "#fdc830" }}>
+        <div
+          style={{
+            fontSize: "14px",
+            fontWeight: "bold",
+            marginBottom: "8px",
+            color: "#fdc830",
+          }}
+        >
           💰 COINS: {gameState.coins}
         </div>
-        <div style={{ fontSize: "12px", color: "#ffeb3b", fontWeight: "bold", marginBottom: "4px" }}>
+        <div
+          style={{
+            fontSize: "12px",
+            color: "#ffeb3b",
+            fontWeight: "bold",
+            marginBottom: "4px",
+          }}
+        >
           {LEVELS[gameState.level.currentLevel]?.name || "Final Level"}
         </div>
         <div style={{ fontSize: "11px", marginBottom: "8px" }}>
-          Kills: {gameState.level.killsThisLevel}/{LEVELS[gameState.level.currentLevel]?.killsRequired || "∞"}
+          Kills: {gameState.level.killsThisLevel}/
+          {LEVELS[gameState.level.currentLevel]?.killsRequired || "∞"}
         </div>
         <div style={{ fontSize: "11px", color: "#90EE90" }}>
           ✓ Allies Rescued: {gameState.story.alliesRescued}
         </div>
         <div style={{ fontSize: "11px", color: "#FFD700" }}>
-          ✓ Settlements: {gameState.story.settlementsConquered.length}/{SETTLEMENTS.length}
+          ✓ Settlements: {gameState.story.settlementsConquered.length}/
+          {SETTLEMENTS.length}
         </div>
       </div>
     </div>
@@ -4695,7 +5159,7 @@ function GameLogic({
     const currentLevelData = LEVELS[gameState.level.currentLevel];
     const spawnRate = currentLevelData?.spawnRate || 3; // Default 3 seconds if no level
     const maxEnemies = currentLevelData?.maxEnemies || 10; // Use level-based max enemies
-    
+
     if (
       currentTime - lastSpawnTime.current > spawnRate &&
       gameState.enemies.length < maxEnemies
@@ -4713,7 +5177,7 @@ function GameLogic({
       // Level 4 (Mustard Mountain): 30% melee, 30% ranged, 40% giant (max 10 giants)
       let enemyType: EnemyType = "melee";
       const currentLevel = gameState.level.currentLevel;
-      
+
       if (currentLevel === 0) {
         enemyType = "melee";
       } else if (currentLevel === 1) {
@@ -4764,7 +5228,10 @@ function GameLogic({
         ],
         level: {
           ...prev.level,
-          giantsSpawnedThisLevel: enemyType === "giant" ? prev.level.giantsSpawnedThisLevel + 1 : prev.level.giantsSpawnedThisLevel,
+          giantsSpawnedThisLevel:
+            enemyType === "giant"
+              ? prev.level.giantsSpawnedThisLevel + 1
+              : prev.level.giantsSpawnedThisLevel,
         },
       }));
 
@@ -4881,7 +5348,7 @@ export default function SimpleFPS() {
         name,
         keys,
       })),
-    [keybindings]
+    [keybindings],
   );
 
   return (
@@ -4892,4 +5359,3 @@ export default function SimpleFPS() {
     </div>
   );
 }
-
