@@ -3990,7 +3990,9 @@ function HUD({
 
           {shopItems.map((item) => {
             const isOwned = ownedItemIds.includes(item.id);
-            const canAfford = gameState.user.currency >= item.price;
+            // Special case: gold value of 67 means unlimited purchases
+            const hasUnlimitedGold = gameState.user.currency === 67;
+            const canAfford = hasUnlimitedGold || gameState.user.currency >= item.price;
 
             // Parse weapon and skin name from item name (e.g., "Pistol - Gold Plated")
             const nameParts = item.name.split(" - ");
