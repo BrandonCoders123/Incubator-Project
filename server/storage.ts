@@ -144,7 +144,7 @@ class MySQLStorage implements IStorage {
 
       // Check if user has any inventory_items entries
       const [invRows] = await this.pool.execute(
-        `SELECT inventory_id FROM inventory_items WHERE user_id = ? LIMIT 1`,
+        `SELECT id FROM inventory_items WHERE user_id = ? LIMIT 1`,
         [userId]
       );
       const invResult = invRows as any[];
@@ -158,8 +158,8 @@ class MySQLStorage implements IStorage {
       } else {
         // Create initial inventory_items entry with gold (item_id 0 means no item, just currency)
         await this.pool.execute(
-          `INSERT INTO inventory_items (user_id, inventory_id, item_id, gold) VALUES (?, ?, 0, ?)`,
-          [userId, userId, currency]
+          `INSERT INTO inventory_items (user_id, item_id, gold) VALUES (?, 0, ?)`,
+          [userId, currency]
         );
       }
       console.log(`[updateUserCurrency] Set ${username} currency to ${currency}`);
@@ -382,7 +382,7 @@ class MySQLStorage implements IStorage {
 
       // Check if user already owns this item
       const [existing] = await this.pool.execute(
-        `SELECT inventory_id FROM inventory_items WHERE user_id = ? AND item_id = ?`,
+        `SELECT id FROM inventory_items WHERE user_id = ? AND item_id = ?`,
         [userId, itemId]
       );
       const existingItems = existing as any[];
@@ -392,10 +392,10 @@ class MySQLStorage implements IStorage {
 
       const newGold = currentGold - price;
 
-      // Add item to inventory_items table (inventory_id can be NULL or same as user_id)
+      // Add item to inventory_items table (new table structure: id, user_id, item_id, gold, purchased_at)
       await this.pool.execute(
-        `INSERT INTO inventory_items (user_id, inventory_id, item_id, gold) VALUES (?, ?, ?, ?)`,
-        [userId, userId, itemId, newGold]
+        `INSERT INTO inventory_items (user_id, item_id, gold) VALUES (?, ?, ?)`,
+        [userId, itemId, newGold]
       );
 
       // Update gold for all user's existing inventory_items rows

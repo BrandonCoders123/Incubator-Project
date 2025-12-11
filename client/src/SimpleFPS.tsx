@@ -234,6 +234,7 @@ interface GameState {
   isReloading: boolean;
   reloadStartTime: number;
   lastShotTime: number;
+  previousGamePhase: string | null; // Track where user came from (for settings back navigation)
 }
 
 interface ShopItem {
@@ -2413,7 +2414,11 @@ function SettingsPage({
               </button>
               <button
                 onClick={() =>
-                  setGameState((prev) => ({ ...prev, gamePhase: "menu" }))
+                  setGameState((prev) => ({ 
+                    ...prev, 
+                    gamePhase: prev.previousGamePhase === "paused" ? "paused" : "menu",
+                    previousGamePhase: null, // Clear the previous phase after navigating back
+                  }))
                 }
                 style={{
                   padding: "15px 40px",
@@ -3765,7 +3770,7 @@ function HUD({
 
             <button
               onClick={() => {
-                setGameState((prev) => ({ ...prev, gamePhase: "settings" }));
+                setGameState((prev) => ({ ...prev, gamePhase: "settings", previousGamePhase: "menu" }));
               }}
               style={{
                 padding: "20px",
@@ -4911,6 +4916,7 @@ function HUD({
                 setGameState((prev) => ({
                   ...prev,
                   gamePhase: "settings",
+                  previousGamePhase: "paused", // Remember we came from pause menu
                 }));
               }}
               style={{
@@ -5281,6 +5287,7 @@ function Game() {
     isReloading: false,
     reloadStartTime: 0,
     lastShotTime: 0,
+    previousGamePhase: null,
   });
 
   if (gameState.gamePhase !== "playing" && gameState.gamePhase !== "paused") {
