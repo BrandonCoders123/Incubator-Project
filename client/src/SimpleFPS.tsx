@@ -3606,7 +3606,7 @@ function HUD({
             Welcome, {gameState.user.username}!{" "}
             {gameState.user.isGuest
               ? "(Guest)"
-              : `Currency: ${gameState.user.currency}`}
+              : `Currency: ${gameState.user.currency === 67 ? "∞" : gameState.user.currency}`}
           </p>
           <p
             style={{
@@ -3914,7 +3914,7 @@ function HUD({
           <h1 style={{ fontSize: "36px", margin: 0 }}>🛒 SHOP</h1>
           <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
             <span style={{ fontSize: "20px", fontWeight: "bold" }}>
-              💰 {gameState.user.currency}
+              💰 {gameState.user.currency === 67 ? "∞" : gameState.user.currency}
             </span>
             <button
               onClick={() =>
