@@ -29,7 +29,7 @@ interface Weapon {
 
 const weapons: Record<number, Weapon> = {
   1: {
-    name: "Pistol",
+    name: "Ketchup Squirter",
     maxAmmo: 12,
     damage: 50,
     reloadTime: 2000,
@@ -37,7 +37,7 @@ const weapons: Record<number, Weapon> = {
     bulletsPerKill: 1,
   },
   2: {
-    name: "Rifle",
+    name: "SPSL (Super Pressurized Sauce Launsher)",
     maxAmmo: 8,
     damage: 75,
     reloadTime: 3000,
@@ -45,7 +45,7 @@ const weapons: Record<number, Weapon> = {
     bulletsPerKill: 1,
   },
   3: {
-    name: "Assault Rifle",
+    name: "Topping Shooter",
     maxAmmo: 30,
     damage: 30,
     reloadTime: 2500,
@@ -53,7 +53,7 @@ const weapons: Record<number, Weapon> = {
     bulletsPerKill: 2,
   },
   4: {
-    name: "LMG",
+    name: "LMG(Lacerating Muffin Generator)",
     maxAmmo: 60,
     damage: 40,
     reloadTime: 4000,
@@ -2414,9 +2414,10 @@ function SettingsPage({
               </button>
               <button
                 onClick={() =>
-                  setGameState((prev) => ({ 
-                    ...prev, 
-                    gamePhase: prev.previousGamePhase === "paused" ? "paused" : "menu",
+                  setGameState((prev) => ({
+                    ...prev,
+                    gamePhase:
+                      prev.previousGamePhase === "paused" ? "paused" : "menu",
                     previousGamePhase: null, // Clear the previous phase after navigating back
                   }))
                 }
@@ -3346,7 +3347,7 @@ function HUD({
             >
               Create Account
             </button>
-            <button
+            {/* <button
               onClick={() => {
                 setGameState((prev) => ({
                   ...prev,
@@ -3371,7 +3372,7 @@ function HUD({
               }}
             >
               Play as Guest
-            </button>
+            </button> */}
           </div>
         </div>
       </div>
@@ -3492,7 +3493,7 @@ function HUD({
                       user: {
                         username,
                         isGuest: false,
-                        currency: 1000,
+                        currency: 100000000,
                         cosmetics: [],
                         equippedSkin: null,
                       },
@@ -3587,9 +3588,7 @@ function HUD({
               marginBottom: "10px",
               textShadow: "3px 3px 6px rgba(0,0,0,0.8)",
             }}
-          >
-            
-          </h1>
+          ></h1>
           <h2
             style={{
               fontSize: "48px",
@@ -3770,7 +3769,11 @@ function HUD({
 
             <button
               onClick={() => {
-                setGameState((prev) => ({ ...prev, gamePhase: "settings", previousGamePhase: "menu" }));
+                setGameState((prev) => ({
+                  ...prev,
+                  gamePhase: "settings",
+                  previousGamePhase: "menu",
+                }));
               }}
               style={{
                 padding: "20px",

@@ -20,7 +20,7 @@ try {
         echo json_encode(['currency' => (int)$result['gold']]);
     } else {
         // New user with no inventory - return default starting gold
-        echo json_encode(['currency' => 1000]);
+        echo json_encode(['currency' => 1000000000000]);
     }
 } catch (Exception $e) {
     http_response_code(500);
