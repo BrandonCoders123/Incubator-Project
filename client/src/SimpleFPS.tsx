@@ -31,13 +31,13 @@ const weapons: Record<number, Weapon> = {
   1: {
     name: "Ketchup Squirter",
     maxAmmo: 12,
-    damage: 50,
+    damage: 34,
     reloadTime: 2000,
     fireRate: 0, // semi-auto
     bulletsPerKill: 1,
   },
   2: {
-    name: "SPSL (Super Pressurized Sauce Launsher)",
+    name: "Mustard Launcher",
     maxAmmo: 8,
     damage: 75,
     reloadTime: 3000,
@@ -46,16 +46,16 @@ const weapons: Record<number, Weapon> = {
   },
   3: {
     name: "Topping Shooter",
-    maxAmmo: 30,
+    maxAmmo: 36,
     damage: 30,
     reloadTime: 2500,
-    fireRate: 10, // 10 shots per second
+    fireRate: 18, // 18 shots per second
     bulletsPerKill: 2,
   },
   4: {
-    name: "LMG(Lacerating Muffin Generator)",
+    name: "Lacerating Muffin Generator",
     maxAmmo: 60,
-    damage: 40,
+    damage: 20,
     reloadTime: 4000,
     fireRate: 12, // 12 shots per second
     bulletsPerKill: 2,
@@ -235,6 +235,7 @@ interface GameState {
   reloadStartTime: number;
   lastShotTime: number;
   previousGamePhase: string | null; // Track where user came from (for settings back navigation)
+  equippedWeaponSkins: Record<number, string>; // Track equipped skin per weapon (weapon id -> skin name)
 }
 
 interface ShopItem {
@@ -1379,20 +1380,39 @@ function WeaponSprite({ gameState }: { gameState: GameState }) {
   const { camera } = useThree();
   const weaponRef = useRef<THREE.Mesh>(null);
 
-  // Get weapon colors for different weapons
+  // Skin color mappings for each weapon type
+  const skinColors: Record<number, Record<string, string>> = {
+    1: { // Pistol skins
+      "Default": "#888888",
+      "Gold Plated": "#FFD700",
+      "Neon Green": "#39FF14",
+      "Shadow Black": "#1a1a1a",
+    },
+    2: { // Rifle skins
+      "Default": "#654321",
+      "Desert Camo": "#C2B280",
+      "Arctic White": "#F0F0F0",
+      "Blood Red": "#8B0000",
+    },
+    3: { // Sniper skins
+      "Default": "#2e2e2e",
+      "Ghillie": "#355E3B",
+      "Chrome": "#C0C0C0",
+      "Midnight": "#191970",
+    },
+    4: { // Plasma/LMG skins
+      "Default": "#1a1a1a",
+      "Electric Blue": "#00BFFF",
+      "Magma": "#FF4500",
+      "Void Purple": "#8B008B",
+    },
+  };
+
+  // Get weapon color based on equipped skin from gameState
   const getWeaponColor = (weaponNum: number) => {
-    switch (weaponNum) {
-      case 1:
-        return "#888888"; // Gray for pistol
-      case 2:
-        return "#654321"; // Brown for rifle
-      case 3:
-        return "#2e2e2e"; // Dark gray for assault rifle
-      case 4:
-        return "#1a1a1a"; // Black for LMG
-      default:
-        return "#888888";
-    }
+    const equippedSkin = gameState.equippedWeaponSkins?.[weaponNum] || "Default";
+    const weaponSkins = skinColors[weaponNum] || skinColors[1];
+    return weaponSkins[equippedSkin] || weaponSkins["Default"];
   };
 
   // Get weapon size based on type
@@ -1736,13 +1756,10 @@ function InventoryPage({
     },
   ];
 
-  // Track equipped skins per weapon based on purchased items
-  const [weaponSkins, setWeaponSkins] = useState<Record<number, string>>({
-    1: "Default",
-    2: "Default",
-    3: "Default",
-    4: "Default",
-  });
+  // Track equipped skins per weapon - initialize from gameState
+  const [weaponSkins, setWeaponSkins] = useState<Record<number, string>>(
+    gameState.equippedWeaponSkins || { 1: "Default", 2: "Default", 3: "Default", 4: "Default" }
+  );
 
   useEffect(() => {
     const fetchData = async () => {
@@ -1972,6 +1989,14 @@ function InventoryPage({
                             setWeaponSkins((prev) => ({
                               ...prev,
                               [selectedWeapon]: skin,
+                            }));
+                            // Also update gameState so skin persists to gameplay
+                            setGameState((prev) => ({
+                              ...prev,
+                              equippedWeaponSkins: {
+                                ...prev.equippedWeaponSkins,
+                                [selectedWeapon]: skin,
+                              },
                             }));
                           } else {
                             alert(
@@ -5295,6 +5320,7 @@ function Game() {
     reloadStartTime: 0,
     lastShotTime: 0,
     previousGamePhase: null,
+    equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default" },
   });
 
   if (gameState.gamePhase !== "playing" && gameState.gamePhase !== "paused") {
