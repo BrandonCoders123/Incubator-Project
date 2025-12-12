@@ -1728,30 +1728,30 @@ function InventoryPage({
   const [currency, setCurrency] = useState(gameState.user.currency);
 
   // Define available weapons with their skins
-  // shopPrefix is the prefix used in shop item names (e.g., "Pistol - Gold Plated")
+  // shopPrefix is the prefix used in shop item names (e.g., "Ketchup Squirter - Gold Plated")
   const allWeapons = [
     {
       id: 1,
-      name: "Standard Pistol",
-      shopPrefix: "Pistol",
+      name: "Ketchup Squirter",
+      shopPrefix: "Ketchup Squirter",
       skins: ["Default", "Gold Plated", "Neon Green", "Shadow Black"],
     },
     {
       id: 2,
-      name: "Combat Rifle",
-      shopPrefix: "Rifle",
+      name: "Mustard Launcher",
+      shopPrefix: "Mustard Launcher",
       skins: ["Default", "Desert Camo", "Arctic White", "Blood Red"],
     },
     {
       id: 3,
-      name: "Sniper Rifle",
-      shopPrefix: "Sniper",
+      name: "Topping Shooter",
+      shopPrefix: "Topping Shooter",
       skins: ["Default", "Ghillie", "Chrome", "Midnight"],
     },
     {
       id: 4,
-      name: "Plasma Cannon",
-      shopPrefix: "Plasma",
+      name: "Lacerating Muffin Generator",
+      shopPrefix: "Lacerating Muffin Generator",
       skins: ["Default", "Electric Blue", "Magma", "Void Purple"],
     },
   ];
