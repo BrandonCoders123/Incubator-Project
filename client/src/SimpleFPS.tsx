@@ -47,7 +47,7 @@ const weapons: Record<number, Weapon> = {
   3: {
     name: "Topping Shooter",
     maxAmmo: 36,
-    damage: 30,
+    damage: 25,
     reloadTime: 2500,
     fireRate: 18, // 18 shots per second
     bulletsPerKill: 2,
@@ -3316,6 +3316,8 @@ function HUD({
                         cosmetics: data.cosmetics || [],
                         equippedSkin: null,
                       },
+                      // Reset weapon skins to default for new login session
+                      equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default" },
                     }));
 
                     // Load user settings after login
@@ -3524,6 +3526,8 @@ function HUD({
                         cosmetics: [],
                         equippedSkin: null,
                       },
+                      // Reset weapon skins to default for new account
+                      equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default" },
                     }));
                   } else {
                     const error = await response.json();
