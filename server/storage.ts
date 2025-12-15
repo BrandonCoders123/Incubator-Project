@@ -180,7 +180,7 @@ class MySQLStorage implements IStorage {
       );
       const users = userRows as any[];
       if (users.length === 0) {
-        return { currency: 1000, cosmetics: [] };
+        return { currency: 500, cosmetics: [] };
       }
       const userId = users[0].user_id;
 
@@ -190,7 +190,7 @@ class MySQLStorage implements IStorage {
         [userId]
       );
       const goldResult = goldRows as any[];
-      const currency = goldResult.length > 0 ? (goldResult[0].gold || 1000) : 1000;
+      const currency = goldResult.length > 0 ? (goldResult[0].gold || 500) : 500;
 
       // Get owned cosmetics from inventory_items table
       const [cosmeticRows] = await this.pool.execute(
@@ -204,7 +204,7 @@ class MySQLStorage implements IStorage {
       return { currency, cosmetics };
     } catch (err) {
       console.error('Error fetching user data:', err);
-      return { currency: 1000, cosmetics: [] };
+      return { currency: 500, cosmetics: [] };
     }
   }
 

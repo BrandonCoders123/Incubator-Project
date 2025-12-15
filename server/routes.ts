@@ -159,7 +159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               res.json({
                 message: "Login successful",
                 user: { username: user.username, id: user.id },
-                currency: userData?.currency || 1000,
+                currency: userData?.currency || 500,
                 cosmetics: userData?.cosmetics || [],
               });
             })
@@ -167,7 +167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               res.json({
                 message: "Login successful",
                 user: { username: user.username, id: user.id },
-                currency: 1000,
+                currency: 500,
                 cosmetics: [],
               });
             });

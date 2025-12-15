@@ -3526,7 +3526,7 @@ function HUD({
                       user: {
                         username,
                         isGuest: false,
-                        currency: 100000000,
+                        currency: 500,
                         cosmetics: [],
                         equippedSkin: null,
                       },
