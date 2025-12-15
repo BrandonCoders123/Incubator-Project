@@ -2525,7 +2525,11 @@ function ProfilePage({
       if (!res.ok) {
         if (res.status === 401) {
           setLoading(false);
-          setGameState((prev) => ({ ...prev, gamePhase: "login" }));
+          setGameState((prev) => ({ 
+            ...prev, 
+            gamePhase: "login",
+            equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default" },
+          }));
           return;
         }
         throw new Error("Failed to load profile");
@@ -4932,6 +4936,8 @@ function HUD({
                     cosmetics: [],
                     equippedSkin: null,
                   },
+                  // Reset weapon skins when logging out
+                  equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default" },
                 }));
               }}
               style={{
