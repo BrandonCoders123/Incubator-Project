@@ -3176,6 +3176,12 @@ function HUD({
       return;
     }
 
+    // Special case: if user has unlimited gold (67), don't allow purchases
+    if (gameState.user.currency === 67) {
+      alert("You already have unlimited gold!");
+      return;
+    }
+
     // Mock purchase - just add gold (no real payment)
     const confirmPurchase = window.confirm(
       `Purchase ${bundle.gold} gold for ${bundle.price}?\n\n(This is a test purchase - no real money will be charged)`
@@ -4022,6 +4028,89 @@ function HUD({
               BACK
             </button>
           </div>
+        </div>
+
+        {/* Buy Gold Section */}
+        <div
+          style={{
+            marginBottom: "20px",
+            padding: "20px",
+            background: "linear-gradient(135deg, #f39c12 0%, #e74c3c 100%)",
+            borderRadius: "10px",
+          }}
+        >
+          <h2 style={{ margin: "0 0 15px 0", fontSize: "24px", textAlign: "center" }}>
+            💎 BUY GOLD
+          </h2>
+          <p style={{ margin: "0 0 15px 0", fontSize: "14px", textAlign: "center", opacity: 0.9 }}>
+            Get more gold to purchase weapon skins!
+          </p>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap: "15px",
+            }}
+          >
+            {currencyBundles.map((bundle) => (
+              <div
+                key={bundle.id}
+                style={{
+                  background: bundle.popular ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)",
+                  borderRadius: "10px",
+                  padding: "20px",
+                  textAlign: "center",
+                  position: "relative",
+                  border: bundle.popular ? "3px solid #fff" : "2px solid rgba(255,255,255,0.3)",
+                }}
+              >
+                {bundle.popular && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "-12px",
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      background: "#4CAF50",
+                      color: "white",
+                      padding: "4px 12px",
+                      borderRadius: "10px",
+                      fontSize: "11px",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    BEST VALUE
+                  </div>
+                )}
+                <div style={{ fontSize: "32px", marginBottom: "5px" }}>💰</div>
+                <div style={{ fontSize: "28px", fontWeight: "bold", marginBottom: "5px" }}>
+                  {bundle.gold.toLocaleString()}
+                </div>
+                <div style={{ fontSize: "14px", opacity: 0.8, marginBottom: "15px" }}>
+                  Gold
+                </div>
+                <button
+                  onClick={() => handleBuyCurrency(bundle)}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    fontSize: "18px",
+                    fontWeight: "bold",
+                    background: "#4CAF50",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {bundle.price}
+                </button>
+              </div>
+            ))}
+          </div>
+          <p style={{ margin: "15px 0 0 0", fontSize: "12px", textAlign: "center", opacity: 0.7 }}>
+            ⚠️ Test mode - No real money will be charged
+          </p>
         </div>
 
         {/* Content */}
