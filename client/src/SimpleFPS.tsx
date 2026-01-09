@@ -25,6 +25,9 @@ interface Weapon {
   reloadTime: number;
   fireRate: number; // shots per second, 0 for semi-auto
   bulletsPerKill: number;
+  tier: number;
+  pelletCount?: number; // for shotgun-type weapons
+  spreadAngle?: number; // spread angle in degrees
 }
 
 const weapons: Record<number, Weapon> = {
@@ -35,6 +38,7 @@ const weapons: Record<number, Weapon> = {
     reloadTime: 2000,
     fireRate: 0, // semi-auto
     bulletsPerKill: 1,
+    tier: 1,
   },
   2: {
     name: "Mustard Launcher",
@@ -43,6 +47,7 @@ const weapons: Record<number, Weapon> = {
     reloadTime: 3000,
     fireRate: 0, // semi-auto
     bulletsPerKill: 1,
+    tier: 2,
   },
   3: {
     name: "Topping Shooter",
@@ -51,6 +56,7 @@ const weapons: Record<number, Weapon> = {
     reloadTime: 2500,
     fireRate: 18, // 18 shots per second
     bulletsPerKill: 2,
+    tier: 3,
   },
   4: {
     name: "Lacerating Muffin Generator",
@@ -59,6 +65,18 @@ const weapons: Record<number, Weapon> = {
     reloadTime: 4000,
     fireRate: 12, // 12 shots per second
     bulletsPerKill: 2,
+    tier: 4,
+  },
+  5: {
+    name: "Spreadshot",
+    maxAmmo: 8, // 8 shells
+    damage: 34, // per pellet, 3 pellets = kill
+    reloadTime: 2500,
+    fireRate: 0, // semi-auto
+    bulletsPerKill: 3, // pellets to kill
+    tier: 2,
+    pelletCount: 12, // 12 pellets per shell
+    spreadAngle: 18, // 18 degree cone
   },
 };
 
@@ -236,6 +254,7 @@ interface GameState {
   lastShotTime: number;
   previousGamePhase: string | null; // Track where user came from (for settings back navigation)
   equippedWeaponSkins: Record<number, string>; // Track equipped skin per weapon (weapon id -> skin name)
+  loadout: Record<number, number>; // Tier -> weapon ID mapping (one weapon per tier)
 }
 
 interface ShopItem {
@@ -462,10 +481,11 @@ function Player({
   const isOnGroundRef = useRef(true);
   const mouseDownRef = useRef(false);
   const weaponAmmo = useRef<Record<number, number>>({
-    1: 15,
-    2: 20,
-    3: 40,
-    4: 100,
+    1: weapons[1].maxAmmo,
+    2: weapons[2].maxAmmo,
+    3: weapons[3].maxAmmo,
+    4: weapons[4].maxAmmo,
+    5: weapons[5].maxAmmo, // Spreadshot
   });
   const gameStateRef = useRef(gameState);
 
@@ -527,8 +547,8 @@ function Player({
           const now = Date.now();
           if (now - currentState.lastShotTime >= 100) {
             // Minimum delay for semi-auto
-            // Shoot bullet
-            const direction = new THREE.Vector3(
+            // Shoot bullet(s)
+            const baseDirection = new THREE.Vector3(
               -Math.sin(rotationRef.current.y),
               Math.sin(rotationRef.current.x),
               -Math.cos(rotationRef.current.y),
@@ -536,24 +556,66 @@ function Player({
 
             const bulletPos = camera.position
               .clone()
-              .add(direction.clone().multiplyScalar(1));
+              .add(baseDirection.clone().multiplyScalar(1));
 
             // Update weapon ammo ref
             weaponAmmo.current[currentState.currentWeapon] =
               currentState.ammo - 1;
 
+            // Create bullets - multiple for shotgun-type weapons
+            const newBullets: Array<{id: string; position: [number, number, number]; direction: [number, number, number]; damage: number}> = [];
+            
+            if (currentWeapon.pelletCount && currentWeapon.spreadAngle) {
+              // Shotgun-type weapon: create multiple pellets in a cone
+              const pelletCount = currentWeapon.pelletCount;
+              const spreadAngleRad = (currentWeapon.spreadAngle * Math.PI) / 180;
+              
+              for (let i = 0; i < pelletCount; i++) {
+                // Random spread within cone
+                const randomAngle = Math.random() * Math.PI * 2; // Random rotation around axis
+                const randomSpread = Math.random() * spreadAngleRad / 2; // Random angle from center
+                
+                // Create spread direction using spherical coordinates
+                const spreadDir = baseDirection.clone();
+                
+                // Create perpendicular vectors for spreading - use fallback up vector when looking near vertical
+                let up = new THREE.Vector3(0, 1, 0);
+                // If looking nearly straight up or down, use forward as the reference instead
+                if (Math.abs(baseDirection.dot(up)) > 0.9) {
+                  up = new THREE.Vector3(0, 0, 1);
+                }
+                const right = new THREE.Vector3().crossVectors(baseDirection, up).normalize();
+                const trueUp = new THREE.Vector3().crossVectors(right, baseDirection).normalize();
+                
+                // Apply random spread
+                const offsetX = Math.cos(randomAngle) * Math.sin(randomSpread);
+                const offsetY = Math.sin(randomAngle) * Math.sin(randomSpread);
+                
+                spreadDir.add(right.clone().multiplyScalar(offsetX));
+                spreadDir.add(trueUp.clone().multiplyScalar(offsetY));
+                spreadDir.normalize();
+                
+                newBullets.push({
+                  id: `bullet_${Date.now()}_${i}`,
+                  position: [bulletPos.x, bulletPos.y, bulletPos.z],
+                  direction: [spreadDir.x, spreadDir.y, spreadDir.z],
+                  damage: currentWeapon.damage,
+                });
+              }
+            } else {
+              // Regular single bullet
+              newBullets.push({
+                id: `bullet_${Date.now()}`,
+                position: [bulletPos.x, bulletPos.y, bulletPos.z],
+                direction: [baseDirection.x, baseDirection.y, baseDirection.z],
+                damage: currentWeapon.damage,
+              });
+            }
+
             setGameState((prev) => ({
               ...prev,
               ammo: prev.ammo - 1,
-              bullets: [
-                ...prev.bullets,
-                {
-                  id: `bullet_${Date.now()}`,
-                  position: [bulletPos.x, bulletPos.y, bulletPos.z],
-                  direction: [direction.x, direction.y, direction.z],
-                  damage: currentWeapon.damage,
-                },
-              ],
+              bullets: [...prev.bullets, ...newBullets],
               lastShotTime: now,
             }));
 
@@ -740,59 +802,30 @@ function Player({
       playerRef.current.position.copy(newPos);
     }
 
-    // Weapon switching (only unlocked weapons)
-    if (
-      keys.weapon1 &&
-      gameState.currentWeapon !== 1 &&
-      gameState.unlockedWeapons.includes(1)
-    ) {
-      weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
-      setGameState((prev) => ({
-        ...prev,
-        currentWeapon: 1,
-        ammo: weaponAmmo.current[1],
-        isReloading: false,
-      }));
-    }
-    if (
-      keys.weapon2 &&
-      gameState.currentWeapon !== 2 &&
-      gameState.unlockedWeapons.includes(2)
-    ) {
-      weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
-      setGameState((prev) => ({
-        ...prev,
-        currentWeapon: 2,
-        ammo: weaponAmmo.current[2],
-        isReloading: false,
-      }));
-    }
-    if (
-      keys.weapon3 &&
-      gameState.currentWeapon !== 3 &&
-      gameState.unlockedWeapons.includes(3)
-    ) {
-      weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
-      setGameState((prev) => ({
-        ...prev,
-        currentWeapon: 3,
-        ammo: weaponAmmo.current[3],
-        isReloading: false,
-      }));
-    }
-    if (
-      keys.weapon4 &&
-      gameState.currentWeapon !== 4 &&
-      gameState.unlockedWeapons.includes(4)
-    ) {
-      weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
-      setGameState((prev) => ({
-        ...prev,
-        currentWeapon: 4,
-        ammo: weaponAmmo.current[4],
-        isReloading: false,
-      }));
-    }
+    // Weapon switching via loadout (keys 1-4 select tier, loadout determines weapon)
+    // Default loadout if not set: T1=1, T2=2, T3=3, T4=4
+    const currentLoadout = gameState.loadout || { 1: 1, 2: 2, 3: 3, 4: 4 };
+    const switchToTier = (tier: number) => {
+      const weaponId = currentLoadout[tier];
+      if (weaponId && gameState.currentWeapon !== weaponId && gameState.unlockedWeapons.includes(weaponId)) {
+        weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
+        // Ensure we have a valid ammo value for the new weapon
+        const newAmmo = weaponAmmo.current[weaponId] !== undefined 
+          ? weaponAmmo.current[weaponId] 
+          : weapons[weaponId].maxAmmo;
+        setGameState((prev) => ({
+          ...prev,
+          currentWeapon: weaponId,
+          ammo: newAmmo,
+          isReloading: false,
+        }));
+      }
+    };
+    
+    if (keys.weapon1) switchToTier(1);
+    if (keys.weapon2) switchToTier(2);
+    if (keys.weapon3) switchToTier(3);
+    if (keys.weapon4) switchToTier(4);
 
     // Reload
     const weapon = weapons[gameState.currentWeapon];
@@ -1726,6 +1759,8 @@ function InventoryPage({
   const [loadingInventory, setLoadingInventory] = useState(true);
   const [selectedWeapon, setSelectedWeapon] = useState<number | null>(null);
   const [currency, setCurrency] = useState(gameState.user.currency);
+  const [showLoadoutPopup, setShowLoadoutPopup] = useState(false);
+  const [loadout, setLoadout] = useState<Record<number, number>>(gameState.loadout || { 1: 1, 2: 2, 3: 3, 4: 4 });
 
   // Define available weapons with their skins
   // shopPrefix must match the weapon names stored in the database items table
@@ -1735,30 +1770,41 @@ function InventoryPage({
       name: "Ketchup Squirter",
       shopPrefix: "Ketchup Squirter",
       skins: ["Default", "Gold Plated", "Neon Green", "Shadow Black"],
+      tier: 1,
     },
     {
       id: 2,
       name: "Mustard Launcher",
       shopPrefix: "Mustard Launcher",
       skins: ["Default", "Desert Camo", "Arctic White", "Blood Moon"],
+      tier: 2,
     },
     {
       id: 3,
       name: "Topping Shooter",
       shopPrefix: "Topping Shooter",
       skins: ["Default", "Ghillie", "Chrome", "Midnight"],
+      tier: 3,
     },
     {
       id: 4,
       name: "Lacerating Muffin Generator",
       shopPrefix: "Lacerating Muffin Generator",
       skins: ["Default", "Electric Blue", "Magma", "Void Purple"],
+      tier: 4,
+    },
+    {
+      id: 5,
+      name: "Spreadshot",
+      shopPrefix: "Spreadshot",
+      skins: ["Default", "Buckshot Blue", "Scatter Red", "Pellet Storm"],
+      tier: 2,
     },
   ];
 
   // Track equipped skins per weapon - initialize from gameState
   const [weaponSkins, setWeaponSkins] = useState<Record<number, string>>(
-    gameState.equippedWeaponSkins || { 1: "Default", 2: "Default", 3: "Default", 4: "Default" }
+    gameState.equippedWeaponSkins || { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" }
   );
 
   useEffect(() => {
@@ -1830,6 +1876,21 @@ function InventoryPage({
             {currency === 67 ? "∞" : currency} Gold
           </span>
           <button
+            onClick={() => setShowLoadoutPopup(true)}
+            style={{
+              padding: "10px 20px",
+              fontSize: "16px",
+              fontWeight: "bold",
+              background: "#4CAF50",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer",
+            }}
+          >
+            LOADOUT
+          </button>
+          <button
             onClick={() =>
               setGameState((prev) => ({ ...prev, gamePhase: "menu" }))
             }
@@ -1848,6 +1909,151 @@ function InventoryPage({
           </button>
         </div>
       </div>
+
+      {/* Loadout Popup */}
+      {showLoadoutPopup && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            background: "rgba(0,0,0,0.8)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 2000,
+          }}
+          onClick={() => setShowLoadoutPopup(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)",
+              borderRadius: "15px",
+              padding: "30px",
+              maxWidth: "600px",
+              width: "90%",
+              border: "3px solid #4CAF50",
+            }}
+          >
+            <h2 style={{ margin: "0 0 20px 0", fontSize: "28px", textAlign: "center" }}>
+              WEAPON LOADOUT
+            </h2>
+            <p style={{ textAlign: "center", opacity: 0.9, marginBottom: "25px" }}>
+              Press 1-4 in game to switch between tier weapons
+            </p>
+            
+            {/* Tier Slots */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+              {[1, 2, 3, 4].map((tier) => {
+                const tierWeapons = allWeapons.filter((w) => w.tier === tier);
+                const equippedWeaponId = loadout[tier];
+                const equippedWeapon = allWeapons.find((w) => w.id === equippedWeaponId);
+                
+                return (
+                  <div
+                    key={tier}
+                    style={{
+                      background: "rgba(0,0,0,0.3)",
+                      borderRadius: "10px",
+                      padding: "15px",
+                      border: "2px solid rgba(255,255,255,0.3)",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                      <span style={{ fontSize: "14px", fontWeight: "bold", color: "#FFC107" }}>
+                        TIER {tier} (Key: {tier})
+                      </span>
+                      {tierWeapons.length > 1 && (
+                        <span style={{ fontSize: "12px", opacity: 0.7 }}>
+                          {tierWeapons.length} weapons available
+                        </span>
+                      )}
+                    </div>
+                    
+                    {tierWeapons.length === 1 ? (
+                      // Single weapon tier - just display it
+                      <div
+                        style={{
+                          padding: "12px",
+                          background: "rgba(76, 175, 80, 0.3)",
+                          borderRadius: "8px",
+                          border: "2px solid #4CAF50",
+                        }}
+                      >
+                        <p style={{ margin: 0, fontWeight: "bold", fontSize: "18px" }}>
+                          {tierWeapons[0].name}
+                        </p>
+                        <p style={{ margin: "5px 0 0 0", fontSize: "12px", opacity: 0.8 }}>
+                          {weapons[tierWeapons[0].id]?.maxAmmo} ammo | {weapons[tierWeapons[0].id]?.pelletCount ? `${weapons[tierWeapons[0].id].pelletCount} pellets` : `${weapons[tierWeapons[0].id]?.damage} damage`}
+                        </p>
+                      </div>
+                    ) : (
+                      // Multiple weapons - allow selection
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                        {tierWeapons.map((weapon) => {
+                          const isEquipped = equippedWeaponId === weapon.id;
+                          const weaponStats = weapons[weapon.id];
+                          return (
+                            <div
+                              key={weapon.id}
+                              onClick={() => {
+                                const newLoadout = { ...loadout, [tier]: weapon.id };
+                                setLoadout(newLoadout);
+                                setGameState((prev) => ({ ...prev, loadout: newLoadout }));
+                              }}
+                              style={{
+                                padding: "12px",
+                                background: isEquipped ? "rgba(76, 175, 80, 0.5)" : "rgba(255,255,255,0.1)",
+                                borderRadius: "8px",
+                                border: isEquipped ? "2px solid #4CAF50" : "1px solid rgba(255,255,255,0.3)",
+                                cursor: "pointer",
+                                transition: "all 0.2s",
+                              }}
+                            >
+                              <p style={{ margin: 0, fontWeight: "bold", fontSize: "16px" }}>
+                                {weapon.name}
+                              </p>
+                              <p style={{ margin: "5px 0 0 0", fontSize: "11px", opacity: 0.8 }}>
+                                {weaponStats?.maxAmmo} ammo | {weaponStats?.pelletCount ? `${weaponStats.pelletCount} pellets, ${weaponStats.spreadAngle}° spread` : `${weaponStats?.damage} damage`}
+                              </p>
+                              {isEquipped && (
+                                <p style={{ margin: "5px 0 0 0", fontSize: "12px", color: "#4CAF50", fontWeight: "bold" }}>
+                                  EQUIPPED
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            
+            <button
+              onClick={() => setShowLoadoutPopup(false)}
+              style={{
+                width: "100%",
+                marginTop: "20px",
+                padding: "15px",
+                fontSize: "18px",
+                fontWeight: "bold",
+                background: "#fdc830",
+                color: "#333",
+                border: "none",
+                borderRadius: "8px",
+                cursor: "pointer",
+              }}
+            >
+              DONE
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Inventory Content */}
       <div
@@ -2528,7 +2734,8 @@ function ProfilePage({
           setGameState((prev) => ({ 
             ...prev, 
             gamePhase: "login",
-            equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default" },
+            equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" },
+            loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
           }));
           return;
         }
@@ -3380,7 +3587,8 @@ function HUD({
                         equippedSkin: null,
                       },
                       // Reset weapon skins to default for new login session
-                      equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default" },
+                      equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" },
+                      loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
                     }));
 
                     // Load user settings after login
@@ -3590,7 +3798,8 @@ function HUD({
                         equippedSkin: null,
                       },
                       // Reset weapon skins to default for new account
-                      equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default" },
+                      equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" },
+                      loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
                     }));
                   } else {
                     const error = await response.json();
@@ -4305,13 +4514,16 @@ function HUD({
     const nextLevel = LEVELS[gameState.level.currentLevel + 1];
 
     // Determine weapon unlock for this level
+    // Weapons are grouped by tier: T1=[1], T2=[2,5], T3=[3], T4=[4]
     let weaponUnlock = null;
+    let additionalUnlocks: number[] = [];
     if (gameState.level.currentLevel === 0) {
-      weaponUnlock = { id: 2, name: weapons[2].name }; // Rifle after level 1
+      weaponUnlock = { id: 2, name: weapons[2].name }; // Mustard Launcher after level 1
+      additionalUnlocks = [5]; // Also unlock Spreadshot (both are tier 2)
     } else if (gameState.level.currentLevel === 1) {
-      weaponUnlock = { id: 3, name: weapons[3].name }; // Assault Rifle after level 2
+      weaponUnlock = { id: 3, name: weapons[3].name }; // Topping Shooter after level 2
     } else if (gameState.level.currentLevel === 3) {
-      weaponUnlock = { id: 4, name: weapons[4].name }; // LMG after level 4
+      weaponUnlock = { id: 4, name: weapons[4].name }; // Lacerating Muffin Generator after level 4
     }
 
     const canAffordToken = gameState.coins >= 2;
@@ -4392,11 +4604,19 @@ function HUD({
                   marginBottom: "5px",
                 }}
               >
-                🔓 WEAPON UNLOCKED!
+                🔓 {additionalUnlocks.length > 0 ? "TIER 2 WEAPONS UNLOCKED!" : "WEAPON UNLOCKED!"}
               </h3>
               <p style={{ fontSize: "18px", fontWeight: "bold" }}>
                 {weaponUnlock.name}
+                {additionalUnlocks.length > 0 && (
+                  <> & {weapons[additionalUnlocks[0]]?.name}</>
+                )}
               </p>
+              {additionalUnlocks.length > 0 && (
+                <p style={{ fontSize: "14px", opacity: 0.8, marginTop: "5px" }}>
+                  Use the Loadout menu to switch between tier 2 weapons!
+                </p>
+              )}
             </div>
           )}
 
@@ -4541,12 +4761,17 @@ function HUD({
           <button
             onClick={() => {
               setGameState((prev) => {
-                // Add weapon unlock
-                const newUnlockedWeapons =
-                  weaponUnlock &&
-                  !prev.unlockedWeapons.includes(weaponUnlock.id)
-                    ? [...prev.unlockedWeapons, weaponUnlock.id]
-                    : prev.unlockedWeapons;
+                // Add weapon unlock (main weapon + any additional tier unlocks)
+                let newUnlockedWeapons = prev.unlockedWeapons;
+                if (weaponUnlock && !prev.unlockedWeapons.includes(weaponUnlock.id)) {
+                  newUnlockedWeapons = [...newUnlockedWeapons, weaponUnlock.id];
+                }
+                // Add additional tier weapons (e.g., Spreadshot when Mustard Launcher unlocks)
+                for (const additionalId of additionalUnlocks) {
+                  if (!newUnlockedWeapons.includes(additionalId)) {
+                    newUnlockedWeapons = [...newUnlockedWeapons, additionalId];
+                  }
+                }
 
                 return {
                   ...prev,
@@ -5079,7 +5304,8 @@ function HUD({
                     equippedSkin: null,
                   },
                   // Reset weapon skins when logging out
-                  equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default" },
+                  equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" },
+                  loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
                 }));
               }}
               style={{
@@ -5472,7 +5698,8 @@ function Game() {
     reloadStartTime: 0,
     lastShotTime: 0,
     previousGamePhase: null,
-    equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default" },
+    equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" },
+    loadout: { 1: 1, 2: 2, 3: 3, 4: 4 }, // Tier -> weapon ID: T1=Ketchup, T2=Mustard(default), T3=Topping, T4=Muffin
   });
 
   if (gameState.gamePhase !== "playing" && gameState.gamePhase !== "paused") {
