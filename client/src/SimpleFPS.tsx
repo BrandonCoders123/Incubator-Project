@@ -3161,6 +3161,59 @@ function HUD({
     }
   }, [gameState.gamePhase]);
 
+  // Currency bundle options (mock purchases - no real payment yet)
+  const currencyBundles = [
+    { id: 1, price: "$1", gold: 100, popular: false },
+    { id: 2, price: "$5", gold: 520, popular: false },
+    { id: 3, price: "$10", gold: 1100, popular: true },
+    { id: 4, price: "$50", gold: 6000, popular: false },
+  ];
+
+  // Handle mock currency purchase
+  const handleBuyCurrency = async (bundle: typeof currencyBundles[0]) => {
+    if (gameState.user.isGuest) {
+      alert("Please log in to purchase gold!");
+      return;
+    }
+
+    // Mock purchase - just add gold (no real payment)
+    const confirmPurchase = window.confirm(
+      `Purchase ${bundle.gold} gold for ${bundle.price}?\n\n(This is a test purchase - no real money will be charged)`
+    );
+
+    if (!confirmPurchase) return;
+
+    try {
+      const newCurrency = gameState.user.currency + bundle.gold;
+      
+      // Update currency in database
+      const response = await fetch("/api/update-currency", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          username: gameState.user.username,
+          currency: newCurrency 
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update currency");
+      }
+
+      // Update local state
+      setGameState((prev) => ({
+        ...prev,
+        user: { ...prev.user, currency: newCurrency },
+      }));
+
+      alert(`Successfully purchased ${bundle.gold} gold!`);
+    } catch (err) {
+      console.error("Currency purchase error:", err);
+      alert("Purchase failed. Please try again.");
+    }
+  };
+
   // Handle item purchases - now calls the API
   const handleBuyItem = async (item: ShopItem) => {
     if (gameState.user.isGuest) {
