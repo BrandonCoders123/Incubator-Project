@@ -69,14 +69,14 @@ const weapons: Record<number, Weapon> = {
   },
   5: {
     name: "Spreadshot",
-    maxAmmo: 8, // 8 shells
+    maxAmmo: 6, // 6 shells
     damage: 34, // per pellet, 3 pellets = kill
     reloadTime: 2500,
     fireRate: 0, // semi-auto
     bulletsPerKill: 3, // pellets to kill
     tier: 2,
-    pelletCount: 12, // 12 pellets per shell
-    spreadAngle: 18, // 18 degree cone
+    pelletCount: 8, // 8 pellets per shell
+    spreadAngle: 25, // 25 degree cone
   },
 };
 
@@ -868,9 +868,9 @@ function Player({
         .map((bullet) => ({
           ...bullet,
           position: [
-            bullet.position[0] + bullet.direction[0] * 50 * deltaTime,
-            bullet.position[1] + bullet.direction[1] * 50 * deltaTime,
-            bullet.position[2] + bullet.direction[2] * 50 * deltaTime,
+            bullet.position[0] + bullet.direction[0] * 120 * deltaTime,
+            bullet.position[1] + bullet.direction[1] * 120 * deltaTime,
+            bullet.position[2] + bullet.direction[2] * 120 * deltaTime,
           ] as [number, number, number],
         }))
         .filter(
@@ -1293,17 +1293,48 @@ function Enemy({
   );
 }
 
-// Bullet Component (invisible)
+// Bullet Component with comet tail effect
 function Bullet({
   bullet,
 }: {
-  bullet: { id: string; position: [number, number, number] };
+  bullet: { id: string; position: [number, number, number]; direction: [number, number, number] };
 }) {
+  const tailLength = 5;
+  const tailSegments = useMemo(() => {
+    const segments = [];
+    for (let i = 0; i < tailLength; i++) {
+      const t = i / tailLength;
+      segments.push({
+        offset: t * 0.4,
+        scale: 1 - t * 0.7,
+        opacity: 1 - t * 0.8,
+      });
+    }
+    return segments;
+  }, []);
+
   return (
-    <mesh position={bullet.position}>
-      <sphereGeometry args={[0.05]} />
-      <meshBasicMaterial transparent opacity={0} />
-    </mesh>
+    <group position={bullet.position}>
+      {/* Main bullet - small white orb */}
+      <mesh>
+        <sphereGeometry args={[0.06, 8, 8]} />
+        <meshBasicMaterial color="#ffffff" />
+      </mesh>
+      {/* Comet tail - fading trail segments */}
+      {tailSegments.map((seg, i) => (
+        <mesh
+          key={i}
+          position={[
+            -bullet.direction[0] * seg.offset,
+            -bullet.direction[1] * seg.offset,
+            -bullet.direction[2] * seg.offset,
+          ]}
+        >
+          <sphereGeometry args={[0.05 * seg.scale, 6, 6]} />
+          <meshBasicMaterial color="#ffeecc" transparent opacity={seg.opacity * 0.6} />
+        </mesh>
+      ))}
+    </group>
   );
 }
 
