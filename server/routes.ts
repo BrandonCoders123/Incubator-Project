@@ -522,6 +522,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete user (admin only)
+  app.delete("/api/admin/users/:userId", requireAdmin, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      // Prevent admin from deleting themselves
+      if (userId === req.session.userId) {
+        return res.status(400).json({ success: false, error: "Cannot delete your own account" });
+      }
+      await storage.deleteUser(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Admin delete user error:", error);
+      res.status(500).json({ success: false, error: "Failed to delete user" });
+    }
+  });
+
+  // Ban user (admin only)
+  app.post("/api/admin/users/:userId/ban", requireAdmin, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const { reason } = req.body;
+      // Prevent admin from banning themselves
+      if (userId === req.session.userId) {
+        return res.status(400).json({ success: false, error: "Cannot ban your own account" });
+      }
+      await storage.banUser(userId, reason || null);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Admin ban user error:", error);
+      res.status(500).json({ success: false, error: "Failed to ban user" });
+    }
+  });
+
+  // Unban user (admin only)
+  app.post("/api/admin/users/:userId/unban", requireAdmin, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      await storage.unbanUser(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Admin unban user error:", error);
+      res.status(500).json({ success: false, error: "Failed to unban user" });
+    }
+  });
+
+  // Warn user (admin only)
+  app.post("/api/admin/users/:userId/warn", requireAdmin, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      await storage.warnUser(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Admin warn user error:", error);
+      res.status(500).json({ success: false, error: "Failed to warn user" });
+    }
+  });
+
   // Get all items (admin only)
   app.get("/api/admin/items", requireAdmin, async (req, res) => {
     try {

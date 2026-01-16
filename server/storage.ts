@@ -44,6 +44,10 @@ export interface IStorage {
   updateItem(itemId: number, name: string, type: string, price: number, isCosmetic: boolean): Promise<void>;
   deleteItem(itemId: number): Promise<void>;
   setUserGold(userId: number, gold: number): Promise<void>;
+  deleteUser(userId: number): Promise<void>;
+  banUser(userId: number, reason: string | null): Promise<void>;
+  unbanUser(userId: number): Promise<void>;
+  warnUser(userId: number): Promise<void>;
 }
 
 /**
@@ -558,7 +562,10 @@ class MySQLStorage implements IStorage {
     try {
       const [rows] = await this.pool.execute(
         `SELECT a.user_id, a.username, a.email, a.created_at, a.last_login,
-                COALESCE((SELECT gold FROM inventory_items WHERE user_id = a.user_id LIMIT 1), 1000) as gold
+                COALESCE((SELECT gold FROM inventory_items WHERE user_id = a.user_id LIMIT 1), 1000) as gold,
+                COALESCE(a.is_banned, 0) as is_banned,
+                a.ban_reason,
+                COALESCE(a.warning_count, 0) as warning_count
          FROM accounts a
          ORDER BY a.user_id ASC`
       );
@@ -626,6 +633,63 @@ class MySQLStorage implements IStorage {
       );
     } catch (err) {
       console.error('Error setting user gold:', err);
+      throw err;
+    }
+  }
+
+  async deleteUser(userId: number): Promise<void> {
+    try {
+      // Delete related records first (inventory, settings, etc.) - ignore errors for optional tables
+      try {
+        await this.pool.execute(`DELETE FROM inventory_items WHERE user_id = ?`, [userId]);
+      } catch (e) {
+        console.log('No inventory_items to delete or table does not exist');
+      }
+      try {
+        await this.pool.execute(`DELETE FROM user_settings WHERE user_id = ?`, [userId]);
+      } catch (e) {
+        console.log('No user_settings to delete or table does not exist');
+      }
+      // Delete the user account
+      await this.pool.execute(`DELETE FROM accounts WHERE user_id = ?`, [userId]);
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      throw err;
+    }
+  }
+
+  async banUser(userId: number, reason: string | null): Promise<void> {
+    try {
+      await this.pool.execute(
+        `UPDATE accounts SET is_banned = 1, ban_reason = ?, banned_at = NOW() WHERE user_id = ?`,
+        [reason, userId]
+      );
+    } catch (err) {
+      console.error('Error banning user:', err);
+      throw err;
+    }
+  }
+
+  async unbanUser(userId: number): Promise<void> {
+    try {
+      await this.pool.execute(
+        `UPDATE accounts SET is_banned = 0, ban_reason = NULL, banned_at = NULL WHERE user_id = ?`,
+        [userId]
+      );
+    } catch (err) {
+      console.error('Error unbanning user:', err);
+      throw err;
+    }
+  }
+
+  async warnUser(userId: number): Promise<void> {
+    try {
+      await this.pool.execute(
+        `UPDATE accounts SET warning_count = COALESCE(warning_count, 0) + 1 WHERE user_id = ?`,
+        [userId]
+      );
+    } catch (err) {
+      console.error('Error warning user:', err);
       throw err;
     }
   }

@@ -5,6 +5,9 @@ interface User {
   username: string;
   email: string;
   gold: number;
+  is_banned: boolean | number;
+  ban_reason: string | null;
+  warning_count: number;
   created_at: string;
   last_login: string;
 }
@@ -21,6 +24,7 @@ export default function AdminPanel() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [adminName, setAdminName] = useState("");
+  const [adminId, setAdminId] = useState<number | null>(null);
   
   const [activeTab, setActiveTab] = useState<"users" | "items">("users");
   const [users, setUsers] = useState<User[]>([]);
@@ -33,6 +37,10 @@ export default function AdminPanel() {
   const [newItem, setNewItem] = useState({ name: "", type: "weapon_skin", price: 100, isCosmetic: true });
   const [editingItem, setEditingItem] = useState<Item | null>(null);
 
+  const [banModal, setBanModal] = useState<{ userId: number; username: string } | null>(null);
+  const [banReason, setBanReason] = useState("");
+  const [warnModal, setWarnModal] = useState<{ userId: number; username: string } | null>(null);
+
   useEffect(() => {
     checkSession();
   }, []);
@@ -44,6 +52,7 @@ export default function AdminPanel() {
       if (data.isAdmin) {
         setIsAdmin(true);
         setAdminName(data.admin.username);
+        setAdminId(data.admin.id);
         fetchData();
       }
     } catch (err) {
@@ -78,6 +87,80 @@ export default function AdminPanel() {
       fetchData();
     } catch (err) {
       console.error("Set gold error:", err);
+    }
+  };
+
+  const handleDeleteUser = async (userId: number, username: string) => {
+    if (userId === adminId) {
+      alert("You cannot delete your own account!");
+      return;
+    }
+    if (!confirm(`Are you sure you want to permanently delete user "${username}"? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        fetchData();
+      } else {
+        alert(data.error || "Failed to delete user");
+      }
+    } catch (err) {
+      console.error("Delete user error:", err);
+      alert("Failed to delete user");
+    }
+  };
+
+  const handleBanUser = async () => {
+    if (!banModal) return;
+    try {
+      const res = await fetch(`/api/admin/users/${banModal.userId}/ban`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: banReason })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBanModal(null);
+        setBanReason("");
+        fetchData();
+      } else {
+        alert(data.error || "Failed to ban user");
+      }
+    } catch (err) {
+      console.error("Ban user error:", err);
+      alert("Failed to ban user");
+    }
+  };
+
+  const handleUnbanUser = async (userId: number) => {
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/unban`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        fetchData();
+      } else {
+        alert(data.error || "Failed to unban user");
+      }
+    } catch (err) {
+      console.error("Unban user error:", err);
+      alert("Failed to unban user");
+    }
+  };
+
+  const handleWarnUser = async () => {
+    if (!warnModal) return;
+    try {
+      const res = await fetch(`/api/admin/users/${warnModal.userId}/warn`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setWarnModal(null);
+        fetchData();
+      } else {
+        alert(data.error || "Failed to warn user");
+      }
+    } catch (err) {
+      console.error("Warn user error:", err);
+      alert("Failed to warn user");
     }
   };
 
@@ -147,8 +230,9 @@ export default function AdminPanel() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#1a1a2e", color: "white", fontFamily: "Inter, sans-serif" }}>
-      <header style={{ background: "#16213e", padding: "15px 30px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#1a1a2e", color: "white", fontFamily: "Inter, sans-serif" }}>
+      {/* Fixed Header */}
+      <header style={{ background: "#16213e", padding: "15px 30px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: "24px" }}>Admin Panel</h1>
         <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
           <span>Welcome, {adminName}</span>
@@ -158,7 +242,8 @@ export default function AdminPanel() {
         </div>
       </header>
 
-      <div style={{ padding: "20px 30px" }}>
+      {/* Scrollable Content */}
+      <div style={{ flex: 1, overflow: "auto", padding: "20px 30px" }}>
         <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
           <button
             onClick={() => setActiveTab("users")}
@@ -176,50 +261,97 @@ export default function AdminPanel() {
 
         {activeTab === "users" && (
           <div style={{ background: "#16213e", borderRadius: "10px", overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: "#0f3460" }}>
-                  <th style={{ padding: "12px", textAlign: "left" }}>ID</th>
-                  <th style={{ padding: "12px", textAlign: "left" }}>Username</th>
-                  <th style={{ padding: "12px", textAlign: "left" }}>Email</th>
-                  <th style={{ padding: "12px", textAlign: "left" }}>Gold</th>
-                  <th style={{ padding: "12px", textAlign: "left" }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr key={user.user_id} style={{ borderBottom: "1px solid #333" }}>
-                    <td style={{ padding: "12px" }}>{user.user_id}</td>
-                    <td style={{ padding: "12px" }}>{user.username}</td>
-                    <td style={{ padding: "12px" }}>{user.email}</td>
-                    <td style={{ padding: "12px" }}>
-                      {editingGold === user.user_id ? (
-                        <div style={{ display: "flex", gap: "5px" }}>
-                          <input
-                            type="number"
-                            value={goldValue}
-                            onChange={(e) => setGoldValue(e.target.value)}
-                            style={{ width: "80px", padding: "5px", borderRadius: "3px", border: "none" }}
-                          />
-                          <button onClick={() => handleSetGold(user.user_id)} style={{ padding: "5px 10px", background: "#4CAF50", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Save</button>
-                          <button onClick={() => setEditingGold(null)} style={{ padding: "5px 10px", background: "#666", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>X</button>
-                        </div>
-                      ) : (
-                        <span>{user.gold === 67 ? "∞" : user.gold.toLocaleString()}</span>
-                      )}
-                    </td>
-                    <td style={{ padding: "12px" }}>
-                      <button
-                        onClick={() => { setEditingGold(user.user_id); setGoldValue(String(user.gold)); }}
-                        style={{ padding: "5px 10px", background: "#3498db", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}
-                      >
-                        Edit Gold
-                      </button>
-                    </td>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px" }}>
+                <thead>
+                  <tr style={{ background: "#0f3460" }}>
+                    <th style={{ padding: "12px", textAlign: "left" }}>ID</th>
+                    <th style={{ padding: "12px", textAlign: "left" }}>Username</th>
+                    <th style={{ padding: "12px", textAlign: "left" }}>Email</th>
+                    <th style={{ padding: "12px", textAlign: "left" }}>Gold</th>
+                    <th style={{ padding: "12px", textAlign: "left" }}>Status</th>
+                    <th style={{ padding: "12px", textAlign: "left" }}>Warnings</th>
+                    <th style={{ padding: "12px", textAlign: "left" }}>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <tr key={user.user_id} style={{ borderBottom: "1px solid #333" }}>
+                      <td style={{ padding: "12px" }}>{user.user_id}</td>
+                      <td style={{ padding: "12px" }}>{user.username}</td>
+                      <td style={{ padding: "12px" }}>{user.email}</td>
+                      <td style={{ padding: "12px" }}>
+                        {editingGold === user.user_id ? (
+                          <div style={{ display: "flex", gap: "5px" }}>
+                            <input
+                              type="number"
+                              value={goldValue}
+                              onChange={(e) => setGoldValue(e.target.value)}
+                              style={{ width: "80px", padding: "5px", borderRadius: "3px", border: "none" }}
+                            />
+                            <button onClick={() => handleSetGold(user.user_id)} style={{ padding: "5px 10px", background: "#4CAF50", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Save</button>
+                            <button onClick={() => setEditingGold(null)} style={{ padding: "5px 10px", background: "#666", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>X</button>
+                          </div>
+                        ) : (
+                          <span>{user.gold === 67 ? "∞" : user.gold.toLocaleString()}</span>
+                        )}
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        {user.is_banned ? (
+                          <span style={{ color: "#e74c3c", fontWeight: "bold" }} title={user.ban_reason || ""}>BANNED</span>
+                        ) : (
+                          <span style={{ color: "#2ecc71" }}>Active</span>
+                        )}
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        <span style={{ color: user.warning_count > 0 ? "#f39c12" : "#888" }}>
+                          {user.warning_count || 0}
+                        </span>
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+                          <button
+                            onClick={() => { setEditingGold(user.user_id); setGoldValue(String(user.gold)); }}
+                            style={{ padding: "5px 8px", background: "#3498db", border: "none", borderRadius: "3px", color: "white", cursor: "pointer", fontSize: "12px" }}
+                          >
+                            Gold
+                          </button>
+                          <button
+                            onClick={() => setWarnModal({ userId: user.user_id, username: user.username })}
+                            style={{ padding: "5px 8px", background: "#f39c12", border: "none", borderRadius: "3px", color: "white", cursor: "pointer", fontSize: "12px" }}
+                          >
+                            Warn
+                          </button>
+                          {user.is_banned ? (
+                            <button
+                              onClick={() => handleUnbanUser(user.user_id)}
+                              style={{ padding: "5px 8px", background: "#27ae60", border: "none", borderRadius: "3px", color: "white", cursor: "pointer", fontSize: "12px" }}
+                            >
+                              Unban
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setBanModal({ userId: user.user_id, username: user.username })}
+                              style={{ padding: "5px 8px", background: "#e67e22", border: "none", borderRadius: "3px", color: "white", cursor: "pointer", fontSize: "12px" }}
+                              disabled={user.user_id === adminId}
+                            >
+                              Ban
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDeleteUser(user.user_id, user.username)}
+                            style={{ padding: "5px 8px", background: "#e74c3c", border: "none", borderRadius: "3px", color: "white", cursor: "pointer", fontSize: "12px" }}
+                            disabled={user.user_id === adminId}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -273,83 +405,126 @@ export default function AdminPanel() {
             )}
 
             <div style={{ background: "#16213e", borderRadius: "10px", overflow: "hidden" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ background: "#0f3460" }}>
-                    <th style={{ padding: "12px", textAlign: "left" }}>ID</th>
-                    <th style={{ padding: "12px", textAlign: "left" }}>Name</th>
-                    <th style={{ padding: "12px", textAlign: "left" }}>Type</th>
-                    <th style={{ padding: "12px", textAlign: "left" }}>Price</th>
-                    <th style={{ padding: "12px", textAlign: "left" }}>Cosmetic</th>
-                    <th style={{ padding: "12px", textAlign: "left" }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => (
-                    <tr key={item.item_id} style={{ borderBottom: "1px solid #333" }}>
-                      <td style={{ padding: "12px" }}>{item.item_id}</td>
-                      <td style={{ padding: "12px" }}>
-                        {editingItem?.item_id === item.item_id ? (
-                          <input
-                            value={editingItem.item_name}
-                            onChange={(e) => setEditingItem({ ...editingItem, item_name: e.target.value })}
-                            style={{ padding: "5px", borderRadius: "3px", border: "none" }}
-                          />
-                        ) : item.item_name}
-                      </td>
-                      <td style={{ padding: "12px" }}>
-                        {editingItem?.item_id === item.item_id ? (
-                          <select
-                            value={editingItem.item_type}
-                            onChange={(e) => setEditingItem({ ...editingItem, item_type: e.target.value })}
-                            style={{ padding: "5px", borderRadius: "3px", border: "none" }}
-                          >
-                            <option value="weapon_skin">Weapon Skin</option>
-                            <option value="powerup">Powerup</option>
-                            <option value="cosmetic">Cosmetic</option>
-                          </select>
-                        ) : item.item_type}
-                      </td>
-                      <td style={{ padding: "12px" }}>
-                        {editingItem?.item_id === item.item_id ? (
-                          <input
-                            type="number"
-                            value={editingItem.store_price}
-                            onChange={(e) => setEditingItem({ ...editingItem, store_price: parseInt(e.target.value) || 0 })}
-                            style={{ padding: "5px", borderRadius: "3px", border: "none", width: "60px" }}
-                          />
-                        ) : item.store_price}
-                      </td>
-                      <td style={{ padding: "12px" }}>
-                        {editingItem?.item_id === item.item_id ? (
-                          <input
-                            type="checkbox"
-                            checked={!!editingItem.is_cosmetic}
-                            onChange={(e) => setEditingItem({ ...editingItem, is_cosmetic: e.target.checked })}
-                          />
-                        ) : (item.is_cosmetic ? "Yes" : "No")}
-                      </td>
-                      <td style={{ padding: "12px" }}>
-                        {editingItem?.item_id === item.item_id ? (
-                          <div style={{ display: "flex", gap: "5px" }}>
-                            <button onClick={handleUpdateItem} style={{ padding: "5px 10px", background: "#4CAF50", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Save</button>
-                            <button onClick={() => setEditingItem(null)} style={{ padding: "5px 10px", background: "#666", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Cancel</button>
-                          </div>
-                        ) : (
-                          <div style={{ display: "flex", gap: "5px" }}>
-                            <button onClick={() => setEditingItem(item)} style={{ padding: "5px 10px", background: "#3498db", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Edit</button>
-                            <button onClick={() => handleDeleteItem(item.item_id)} style={{ padding: "5px 10px", background: "#e74c3c", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Delete</button>
-                          </div>
-                        )}
-                      </td>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
+                  <thead>
+                    <tr style={{ background: "#0f3460" }}>
+                      <th style={{ padding: "12px", textAlign: "left" }}>ID</th>
+                      <th style={{ padding: "12px", textAlign: "left" }}>Name</th>
+                      <th style={{ padding: "12px", textAlign: "left" }}>Type</th>
+                      <th style={{ padding: "12px", textAlign: "left" }}>Price</th>
+                      <th style={{ padding: "12px", textAlign: "left" }}>Cosmetic</th>
+                      <th style={{ padding: "12px", textAlign: "left" }}>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {items.map((item) => (
+                      <tr key={item.item_id} style={{ borderBottom: "1px solid #333" }}>
+                        <td style={{ padding: "12px" }}>{item.item_id}</td>
+                        <td style={{ padding: "12px" }}>
+                          {editingItem?.item_id === item.item_id ? (
+                            <input
+                              value={editingItem.item_name}
+                              onChange={(e) => setEditingItem({ ...editingItem, item_name: e.target.value })}
+                              style={{ padding: "5px", borderRadius: "3px", border: "none" }}
+                            />
+                          ) : item.item_name}
+                        </td>
+                        <td style={{ padding: "12px" }}>
+                          {editingItem?.item_id === item.item_id ? (
+                            <select
+                              value={editingItem.item_type}
+                              onChange={(e) => setEditingItem({ ...editingItem, item_type: e.target.value })}
+                              style={{ padding: "5px", borderRadius: "3px", border: "none" }}
+                            >
+                              <option value="weapon_skin">Weapon Skin</option>
+                              <option value="powerup">Powerup</option>
+                              <option value="cosmetic">Cosmetic</option>
+                            </select>
+                          ) : item.item_type}
+                        </td>
+                        <td style={{ padding: "12px" }}>
+                          {editingItem?.item_id === item.item_id ? (
+                            <input
+                              type="number"
+                              value={editingItem.store_price}
+                              onChange={(e) => setEditingItem({ ...editingItem, store_price: parseInt(e.target.value) || 0 })}
+                              style={{ padding: "5px", borderRadius: "3px", border: "none", width: "60px" }}
+                            />
+                          ) : item.store_price}
+                        </td>
+                        <td style={{ padding: "12px" }}>
+                          {editingItem?.item_id === item.item_id ? (
+                            <input
+                              type="checkbox"
+                              checked={!!editingItem.is_cosmetic}
+                              onChange={(e) => setEditingItem({ ...editingItem, is_cosmetic: e.target.checked })}
+                            />
+                          ) : (item.is_cosmetic ? "Yes" : "No")}
+                        </td>
+                        <td style={{ padding: "12px" }}>
+                          {editingItem?.item_id === item.item_id ? (
+                            <div style={{ display: "flex", gap: "5px" }}>
+                              <button onClick={handleUpdateItem} style={{ padding: "5px 10px", background: "#4CAF50", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Save</button>
+                              <button onClick={() => setEditingItem(null)} style={{ padding: "5px 10px", background: "#666", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Cancel</button>
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", gap: "5px" }}>
+                              <button onClick={() => setEditingItem(item)} style={{ padding: "5px 10px", background: "#3498db", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Edit</button>
+                              <button onClick={() => handleDeleteItem(item.item_id)} style={{ padding: "5px 10px", background: "#e74c3c", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Delete</button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* Ban Modal */}
+      {banModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 }}>
+          <div style={{ background: "#16213e", padding: "30px", borderRadius: "10px", maxWidth: "400px", width: "90%" }}>
+            <h3 style={{ marginTop: 0 }}>Ban User: {banModal.username}</h3>
+            <input
+              placeholder="Reason for ban (optional)"
+              value={banReason}
+              onChange={(e) => setBanReason(e.target.value)}
+              style={{ width: "100%", padding: "10px", borderRadius: "5px", border: "none", marginBottom: "15px", boxSizing: "border-box" }}
+            />
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={handleBanUser} style={{ flex: 1, padding: "10px", background: "#e74c3c", border: "none", borderRadius: "5px", color: "white", cursor: "pointer" }}>
+                Confirm Ban
+              </button>
+              <button onClick={() => { setBanModal(null); setBanReason(""); }} style={{ flex: 1, padding: "10px", background: "#666", border: "none", borderRadius: "5px", color: "white", cursor: "pointer" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Warn Modal */}
+      {warnModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 }}>
+          <div style={{ background: "#16213e", padding: "30px", borderRadius: "10px", maxWidth: "400px", width: "90%" }}>
+            <h3 style={{ marginTop: 0 }}>Warn User: {warnModal.username}</h3>
+            <p style={{ color: "#888" }}>This will increase the user's warning count by 1.</p>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={handleWarnUser} style={{ flex: 1, padding: "10px", background: "#f39c12", border: "none", borderRadius: "5px", color: "white", cursor: "pointer" }}>
+                Confirm Warning
+              </button>
+              <button onClick={() => setWarnModal(null)} style={{ flex: 1, padding: "10px", background: "#666", border: "none", borderRadius: "5px", color: "white", cursor: "pointer" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
