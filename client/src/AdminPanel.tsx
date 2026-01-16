@@ -1,0 +1,405 @@
+import React, { useState, useEffect } from "react";
+
+interface User {
+  user_id: number;
+  username: string;
+  email: string;
+  gold: number;
+  created_at: string;
+  last_login: string;
+}
+
+interface Item {
+  item_id: number;
+  item_name: string;
+  item_type: string;
+  store_price: number;
+  is_cosmetic: boolean | number;
+}
+
+export default function AdminPanel() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [adminName, setAdminName] = useState("");
+  
+  const [activeTab, setActiveTab] = useState<"users" | "items">("users");
+  const [users, setUsers] = useState<User[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+  
+  const [editingGold, setEditingGold] = useState<number | null>(null);
+  const [goldValue, setGoldValue] = useState("");
+  
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [newItem, setNewItem] = useState({ name: "", type: "weapon_skin", price: 100, isCosmetic: true });
+  const [editingItem, setEditingItem] = useState<Item | null>(null);
+
+  useEffect(() => {
+    checkSession();
+  }, []);
+
+  const checkSession = async () => {
+    try {
+      const res = await fetch("/api/admin/session");
+      const data = await res.json();
+      if (data.isAdmin) {
+        setIsLoggedIn(true);
+        setAdminName(data.admin.username);
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Session check error:", err);
+    }
+    setLoading(false);
+  };
+
+  const fetchData = async () => {
+    try {
+      const [usersRes, itemsRes] = await Promise.all([
+        fetch("/api/admin/users"),
+        fetch("/api/admin/items")
+      ]);
+      const usersData = await usersRes.json();
+      const itemsData = await itemsRes.json();
+      if (usersData.success) setUsers(usersData.users);
+      if (itemsData.success) setItems(itemsData.items);
+    } catch (err) {
+      console.error("Fetch data error:", err);
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsLoggedIn(true);
+        setAdminName(data.admin.username);
+        fetchData();
+      } else {
+        setError(data.error || "Login failed");
+      }
+    } catch (err) {
+      setError("Login failed");
+    }
+  };
+
+  const handleLogout = async () => {
+    await fetch("/api/admin/logout", { method: "POST" });
+    setIsLoggedIn(false);
+    setAdminName("");
+  };
+
+  const handleSetGold = async (userId: number) => {
+    try {
+      await fetch(`/api/admin/users/${userId}/gold`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gold: parseInt(goldValue) })
+      });
+      setEditingGold(null);
+      fetchData();
+    } catch (err) {
+      console.error("Set gold error:", err);
+    }
+  };
+
+  const handleAddItem = async () => {
+    try {
+      await fetch("/api/admin/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newItem)
+      });
+      setShowAddItem(false);
+      setNewItem({ name: "", type: "weapon_skin", price: 100, isCosmetic: true });
+      fetchData();
+    } catch (err) {
+      console.error("Add item error:", err);
+    }
+  };
+
+  const handleUpdateItem = async () => {
+    if (!editingItem) return;
+    try {
+      await fetch(`/api/admin/items/${editingItem.item_id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editingItem.item_name,
+          type: editingItem.item_type,
+          price: editingItem.store_price,
+          isCosmetic: editingItem.is_cosmetic
+        })
+      });
+      setEditingItem(null);
+      fetchData();
+    } catch (err) {
+      console.error("Update item error:", err);
+    }
+  };
+
+  const handleDeleteItem = async (itemId: number) => {
+    if (!confirm("Are you sure you want to delete this item?")) return;
+    try {
+      await fetch(`/api/admin/items/${itemId}`, { method: "DELETE" });
+      fetchData();
+    } catch (err) {
+      console.error("Delete item error:", err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#1a1a2e", color: "white" }}>
+        Loading...
+      </div>
+    );
+  }
+
+  if (!isLoggedIn) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#1a1a2e" }}>
+        <form onSubmit={handleLogin} style={{ background: "#16213e", padding: "40px", borderRadius: "10px", width: "300px" }}>
+          <h1 style={{ color: "white", textAlign: "center", marginBottom: "20px" }}>Admin Login</h1>
+          {error && <div style={{ color: "#ff6b6b", marginBottom: "15px", textAlign: "center" }}>{error}</div>}
+          <input
+            type="text"
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            style={{ width: "100%", padding: "12px", marginBottom: "15px", borderRadius: "5px", border: "none", boxSizing: "border-box" }}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ width: "100%", padding: "12px", marginBottom: "15px", borderRadius: "5px", border: "none", boxSizing: "border-box" }}
+          />
+          <button type="submit" style={{ width: "100%", padding: "12px", background: "#4CAF50", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" }}>
+            Login
+          </button>
+          <div style={{ marginTop: "15px", textAlign: "center" }}>
+            <a href="/" style={{ color: "#888", textDecoration: "none" }}>Back to Game</a>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#1a1a2e", color: "white", fontFamily: "Inter, sans-serif" }}>
+      <header style={{ background: "#16213e", padding: "15px 30px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h1 style={{ margin: 0, fontSize: "24px" }}>Admin Panel</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+          <span>Welcome, {adminName}</span>
+          <button onClick={handleLogout} style={{ padding: "8px 16px", background: "#e74c3c", border: "none", borderRadius: "5px", color: "white", cursor: "pointer" }}>
+            Logout
+          </button>
+        </div>
+      </header>
+
+      <div style={{ padding: "20px 30px" }}>
+        <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+          <button
+            onClick={() => setActiveTab("users")}
+            style={{ padding: "10px 20px", background: activeTab === "users" ? "#4CAF50" : "#333", border: "none", borderRadius: "5px", color: "white", cursor: "pointer" }}
+          >
+            Users ({users.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("items")}
+            style={{ padding: "10px 20px", background: activeTab === "items" ? "#4CAF50" : "#333", border: "none", borderRadius: "5px", color: "white", cursor: "pointer" }}
+          >
+            Items ({items.length})
+          </button>
+        </div>
+
+        {activeTab === "users" && (
+          <div style={{ background: "#16213e", borderRadius: "10px", overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "#0f3460" }}>
+                  <th style={{ padding: "12px", textAlign: "left" }}>ID</th>
+                  <th style={{ padding: "12px", textAlign: "left" }}>Username</th>
+                  <th style={{ padding: "12px", textAlign: "left" }}>Email</th>
+                  <th style={{ padding: "12px", textAlign: "left" }}>Gold</th>
+                  <th style={{ padding: "12px", textAlign: "left" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.user_id} style={{ borderBottom: "1px solid #333" }}>
+                    <td style={{ padding: "12px" }}>{user.user_id}</td>
+                    <td style={{ padding: "12px" }}>{user.username}</td>
+                    <td style={{ padding: "12px" }}>{user.email}</td>
+                    <td style={{ padding: "12px" }}>
+                      {editingGold === user.user_id ? (
+                        <div style={{ display: "flex", gap: "5px" }}>
+                          <input
+                            type="number"
+                            value={goldValue}
+                            onChange={(e) => setGoldValue(e.target.value)}
+                            style={{ width: "80px", padding: "5px", borderRadius: "3px", border: "none" }}
+                          />
+                          <button onClick={() => handleSetGold(user.user_id)} style={{ padding: "5px 10px", background: "#4CAF50", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Save</button>
+                          <button onClick={() => setEditingGold(null)} style={{ padding: "5px 10px", background: "#666", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>X</button>
+                        </div>
+                      ) : (
+                        <span>{user.gold === 67 ? "∞" : user.gold.toLocaleString()}</span>
+                      )}
+                    </td>
+                    <td style={{ padding: "12px" }}>
+                      <button
+                        onClick={() => { setEditingGold(user.user_id); setGoldValue(String(user.gold)); }}
+                        style={{ padding: "5px 10px", background: "#3498db", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}
+                      >
+                        Edit Gold
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {activeTab === "items" && (
+          <div>
+            <button
+              onClick={() => setShowAddItem(true)}
+              style={{ marginBottom: "15px", padding: "10px 20px", background: "#4CAF50", border: "none", borderRadius: "5px", color: "white", cursor: "pointer" }}
+            >
+              + Add New Item
+            </button>
+
+            {showAddItem && (
+              <div style={{ background: "#16213e", padding: "20px", borderRadius: "10px", marginBottom: "15px" }}>
+                <h3 style={{ marginTop: 0 }}>Add New Item</h3>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <input
+                    placeholder="Item Name"
+                    value={newItem.name}
+                    onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                    style={{ padding: "8px", borderRadius: "5px", border: "none" }}
+                  />
+                  <select
+                    value={newItem.type}
+                    onChange={(e) => setNewItem({ ...newItem, type: e.target.value })}
+                    style={{ padding: "8px", borderRadius: "5px", border: "none" }}
+                  >
+                    <option value="weapon_skin">Weapon Skin</option>
+                    <option value="powerup">Powerup</option>
+                    <option value="cosmetic">Cosmetic</option>
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="Price"
+                    value={newItem.price}
+                    onChange={(e) => setNewItem({ ...newItem, price: parseInt(e.target.value) || 0 })}
+                    style={{ padding: "8px", borderRadius: "5px", border: "none", width: "80px" }}
+                  />
+                  <label style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                    <input
+                      type="checkbox"
+                      checked={newItem.isCosmetic}
+                      onChange={(e) => setNewItem({ ...newItem, isCosmetic: e.target.checked })}
+                    />
+                    Cosmetic
+                  </label>
+                  <button onClick={handleAddItem} style={{ padding: "8px 16px", background: "#4CAF50", border: "none", borderRadius: "5px", color: "white", cursor: "pointer" }}>Add</button>
+                  <button onClick={() => setShowAddItem(false)} style={{ padding: "8px 16px", background: "#666", border: "none", borderRadius: "5px", color: "white", cursor: "pointer" }}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            <div style={{ background: "#16213e", borderRadius: "10px", overflow: "hidden" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#0f3460" }}>
+                    <th style={{ padding: "12px", textAlign: "left" }}>ID</th>
+                    <th style={{ padding: "12px", textAlign: "left" }}>Name</th>
+                    <th style={{ padding: "12px", textAlign: "left" }}>Type</th>
+                    <th style={{ padding: "12px", textAlign: "left" }}>Price</th>
+                    <th style={{ padding: "12px", textAlign: "left" }}>Cosmetic</th>
+                    <th style={{ padding: "12px", textAlign: "left" }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.item_id} style={{ borderBottom: "1px solid #333" }}>
+                      <td style={{ padding: "12px" }}>{item.item_id}</td>
+                      <td style={{ padding: "12px" }}>
+                        {editingItem?.item_id === item.item_id ? (
+                          <input
+                            value={editingItem.item_name}
+                            onChange={(e) => setEditingItem({ ...editingItem, item_name: e.target.value })}
+                            style={{ padding: "5px", borderRadius: "3px", border: "none" }}
+                          />
+                        ) : item.item_name}
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        {editingItem?.item_id === item.item_id ? (
+                          <select
+                            value={editingItem.item_type}
+                            onChange={(e) => setEditingItem({ ...editingItem, item_type: e.target.value })}
+                            style={{ padding: "5px", borderRadius: "3px", border: "none" }}
+                          >
+                            <option value="weapon_skin">Weapon Skin</option>
+                            <option value="powerup">Powerup</option>
+                            <option value="cosmetic">Cosmetic</option>
+                          </select>
+                        ) : item.item_type}
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        {editingItem?.item_id === item.item_id ? (
+                          <input
+                            type="number"
+                            value={editingItem.store_price}
+                            onChange={(e) => setEditingItem({ ...editingItem, store_price: parseInt(e.target.value) || 0 })}
+                            style={{ padding: "5px", borderRadius: "3px", border: "none", width: "60px" }}
+                          />
+                        ) : item.store_price}
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        {editingItem?.item_id === item.item_id ? (
+                          <input
+                            type="checkbox"
+                            checked={!!editingItem.is_cosmetic}
+                            onChange={(e) => setEditingItem({ ...editingItem, is_cosmetic: e.target.checked })}
+                          />
+                        ) : (item.is_cosmetic ? "Yes" : "No")}
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        {editingItem?.item_id === item.item_id ? (
+                          <div style={{ display: "flex", gap: "5px" }}>
+                            <button onClick={handleUpdateItem} style={{ padding: "5px 10px", background: "#4CAF50", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Save</button>
+                            <button onClick={() => setEditingItem(null)} style={{ padding: "5px 10px", background: "#666", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Cancel</button>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", gap: "5px" }}>
+                            <button onClick={() => setEditingItem(item)} style={{ padding: "5px 10px", background: "#3498db", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Edit</button>
+                            <button onClick={() => handleDeleteItem(item.item_id)} style={{ padding: "5px 10px", background: "#e74c3c", border: "none", borderRadius: "3px", color: "white", cursor: "pointer" }}>Delete</button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

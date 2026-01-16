@@ -35,6 +35,16 @@ export interface IStorage {
   updateUserGold(userId: number, newGold: number): Promise<void>;
   getUserSettings(userId: number): Promise<any>;
   saveUserSettings(userId: number, settings: any): Promise<void>;
+  
+  // Admin methods
+  getAdminByUsername(username: string): Promise<any | undefined>;
+  updateAdminLastLogin(adminId: number): Promise<void>;
+  getAllUsers(): Promise<any[]>;
+  getAllItems(): Promise<any[]>;
+  addItem(name: string, type: string, price: number, isCosmetic: boolean): Promise<any>;
+  updateItem(itemId: number, name: string, type: string, price: number, isCosmetic: boolean): Promise<void>;
+  deleteItem(itemId: number): Promise<void>;
+  setUserGold(userId: number, gold: number): Promise<void>;
 }
 
 /**
@@ -499,6 +509,110 @@ class MySQLStorage implements IStorage {
       }
     } catch (err) {
       console.error('Error saving user settings:', err);
+      throw err;
+    }
+  }
+
+  // ---------- Admin methods ----------
+
+  async getAdminByUsername(username: string): Promise<any | undefined> {
+    try {
+      const [rows] = await this.pool.execute(
+        `SELECT admin_id, admin_username, admin_password_hash, access_level, is_active 
+         FROM admin WHERE admin_username = ? AND is_active = 1`,
+        [username]
+      );
+      const admins = rows as any[];
+      return admins[0];
+    } catch (err) {
+      console.error('Error fetching admin:', err);
+      return undefined;
+    }
+  }
+
+  async updateAdminLastLogin(adminId: number): Promise<void> {
+    try {
+      await this.pool.execute(
+        `UPDATE admin SET last_login = NOW() WHERE admin_id = ?`,
+        [adminId]
+      );
+    } catch (err) {
+      console.error('Error updating admin last login:', err);
+    }
+  }
+
+  async getAllUsers(): Promise<any[]> {
+    try {
+      const [rows] = await this.pool.execute(
+        `SELECT a.user_id, a.username, a.email, a.created_at, a.last_login,
+                COALESCE((SELECT gold FROM inventory_items WHERE user_id = a.user_id LIMIT 1), 1000) as gold
+         FROM accounts a
+         ORDER BY a.user_id ASC`
+      );
+      return rows as any[];
+    } catch (err) {
+      console.error('Error fetching all users:', err);
+      return [];
+    }
+  }
+
+  async getAllItems(): Promise<any[]> {
+    try {
+      const [rows] = await this.pool.execute(
+        `SELECT item_id, item_name, item_type, store_price, is_cosmetic
+         FROM items
+         ORDER BY item_id ASC`
+      );
+      return rows as any[];
+    } catch (err) {
+      console.error('Error fetching all items:', err);
+      return [];
+    }
+  }
+
+  async addItem(name: string, type: string, price: number, isCosmetic: boolean): Promise<any> {
+    try {
+      const [result] = await this.pool.execute(
+        `INSERT INTO items (item_name, item_type, store_price, is_cosmetic) VALUES (?, ?, ?, ?)`,
+        [name, type, price, isCosmetic ? 1 : 0]
+      );
+      const insertResult = result as any;
+      return { item_id: insertResult.insertId, item_name: name, item_type: type, store_price: price, is_cosmetic: isCosmetic };
+    } catch (err) {
+      console.error('Error adding item:', err);
+      throw err;
+    }
+  }
+
+  async updateItem(itemId: number, name: string, type: string, price: number, isCosmetic: boolean): Promise<void> {
+    try {
+      await this.pool.execute(
+        `UPDATE items SET item_name = ?, item_type = ?, store_price = ?, is_cosmetic = ? WHERE item_id = ?`,
+        [name, type, price, isCosmetic ? 1 : 0, itemId]
+      );
+    } catch (err) {
+      console.error('Error updating item:', err);
+      throw err;
+    }
+  }
+
+  async deleteItem(itemId: number): Promise<void> {
+    try {
+      await this.pool.execute(`DELETE FROM items WHERE item_id = ?`, [itemId]);
+    } catch (err) {
+      console.error('Error deleting item:', err);
+      throw err;
+    }
+  }
+
+  async setUserGold(userId: number, gold: number): Promise<void> {
+    try {
+      await this.pool.execute(
+        `UPDATE inventory_items SET gold = ? WHERE user_id = ?`,
+        [gold, userId]
+      );
+    } catch (err) {
+      console.error('Error setting user gold:', err);
       throw err;
     }
   }

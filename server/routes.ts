@@ -12,6 +12,9 @@ declare module "express-session" {
   interface SessionData {
     userId: number;
     username: string;
+    adminId?: number;
+    adminUsername?: string;
+    isAdmin?: boolean;
   }
 }
 
@@ -20,6 +23,28 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.userId) {
     return res.status(401).json({ error: "Authentication required" });
   }
+  next();
+}
+
+// Admin authentication middleware with DB validation
+async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.isAdmin || !req.session.adminId) {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  
+  // Verify admin is still active in database
+  try {
+    const admin = await storage.getAdminByUsername(req.session.adminUsername || "");
+    if (!admin || admin.admin_id !== req.session.adminId) {
+      req.session.isAdmin = false;
+      req.session.adminId = undefined;
+      return res.status(403).json({ error: "Admin session invalid" });
+    }
+  } catch (err) {
+    console.error("Admin validation error:", err);
+    return res.status(500).json({ error: "Admin validation failed" });
+  }
+  
   next();
 }
 
@@ -451,6 +476,158 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Save settings error:", error);
       res.status(500).json({ success: false, error: "Failed to save settings" });
+    }
+  });
+
+  // ============ ADMIN ROUTES ============
+
+  // Admin login
+  app.post("/api/admin/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+
+      const admin = await storage.getAdminByUsername(username);
+      if (!admin) {
+        return res.status(401).json({ error: "Invalid admin credentials" });
+      }
+
+      const passwordMatch = await bcrypt.compare(password, admin.admin_password_hash);
+      if (!passwordMatch) {
+        return res.status(401).json({ error: "Invalid admin credentials" });
+      }
+
+      // Update last login
+      await storage.updateAdminLastLogin(admin.admin_id);
+
+      // Regenerate session to prevent session fixation attacks
+      req.session.regenerate((err) => {
+        if (err) {
+          console.error("Admin session regeneration error:", err);
+          return res.status(500).json({ error: "Login failed" });
+        }
+
+        // Set admin session
+        req.session.adminId = admin.admin_id;
+        req.session.adminUsername = admin.admin_username;
+        req.session.isAdmin = true;
+
+        req.session.save((err) => {
+          if (err) {
+            console.error("Admin session save error:", err);
+            return res.status(500).json({ error: "Login failed" });
+          }
+          res.json({
+            success: true,
+            admin: {
+              id: admin.admin_id,
+              username: admin.admin_username,
+              accessLevel: admin.access_level
+            }
+          });
+        });
+      });
+    } catch (error) {
+      console.error("Admin login error:", error);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  // Admin logout - destroy session completely
+  app.post("/api/admin/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("Admin logout error:", err);
+        return res.status(500).json({ error: "Logout failed" });
+      }
+      res.clearCookie("connect.sid");
+      res.json({ success: true });
+    });
+  });
+
+  // Check admin session
+  app.get("/api/admin/session", (req, res) => {
+    if (req.session.isAdmin && req.session.adminId) {
+      res.json({
+        isAdmin: true,
+        admin: {
+          id: req.session.adminId,
+          username: req.session.adminUsername
+        }
+      });
+    } else {
+      res.json({ isAdmin: false });
+    }
+  });
+
+  // Get all users (admin only)
+  app.get("/api/admin/users", requireAdmin, async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json({ success: true, users });
+    } catch (error) {
+      console.error("Admin get users error:", error);
+      res.status(500).json({ error: "Failed to fetch users" });
+    }
+  });
+
+  // Set user gold (admin only)
+  app.post("/api/admin/users/:userId/gold", requireAdmin, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const { gold } = req.body;
+      await storage.setUserGold(userId, gold);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Admin set gold error:", error);
+      res.status(500).json({ error: "Failed to set user gold" });
+    }
+  });
+
+  // Get all items (admin only)
+  app.get("/api/admin/items", requireAdmin, async (req, res) => {
+    try {
+      const items = await storage.getAllItems();
+      res.json({ success: true, items });
+    } catch (error) {
+      console.error("Admin get items error:", error);
+      res.status(500).json({ error: "Failed to fetch items" });
+    }
+  });
+
+  // Add item (admin only)
+  app.post("/api/admin/items", requireAdmin, async (req, res) => {
+    try {
+      const { name, type, price, isCosmetic } = req.body;
+      const item = await storage.addItem(name, type, price, isCosmetic);
+      res.json({ success: true, item });
+    } catch (error) {
+      console.error("Admin add item error:", error);
+      res.status(500).json({ error: "Failed to add item" });
+    }
+  });
+
+  // Update item (admin only)
+  app.put("/api/admin/items/:itemId", requireAdmin, async (req, res) => {
+    try {
+      const itemId = parseInt(req.params.itemId);
+      const { name, type, price, isCosmetic } = req.body;
+      await storage.updateItem(itemId, name, type, price, isCosmetic);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Admin update item error:", error);
+      res.status(500).json({ error: "Failed to update item" });
+    }
+  });
+
+  // Delete item (admin only)
+  app.delete("/api/admin/items/:itemId", requireAdmin, async (req, res) => {
+    try {
+      const itemId = parseInt(req.params.itemId);
+      await storage.deleteItem(itemId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Admin delete item error:", error);
+      res.status(500).json({ error: "Failed to delete item" });
     }
   });
 
