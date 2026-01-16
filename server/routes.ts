@@ -12,8 +12,6 @@ declare module "express-session" {
   interface SessionData {
     userId: number;
     username: string;
-    adminId?: number;
-    adminUsername?: string;
     isAdmin?: boolean;
   }
 }
@@ -26,19 +24,17 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// Admin authentication middleware with DB validation
+// Admin authentication middleware - checks user session + adminCheck in DB
 async function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.isAdmin || !req.session.adminId) {
-    return res.status(403).json({ error: "Admin access required" });
+  if (!req.session.userId) {
+    return res.status(401).json({ error: "Authentication required" });
   }
   
-  // Verify admin is still active in database
+  // Verify user is admin in database
   try {
-    const admin = await storage.getAdminByUsername(req.session.adminUsername || "");
-    if (!admin || admin.admin_id !== req.session.adminId) {
-      req.session.isAdmin = false;
-      req.session.adminId = undefined;
-      return res.status(403).json({ error: "Admin session invalid" });
+    const isAdmin = await storage.isUserAdmin(req.session.userId);
+    if (!isAdmin) {
+      return res.status(403).json({ error: "Admin access required" });
     }
   } catch (err) {
     console.error("Admin validation error:", err);
@@ -171,6 +167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Save user session
         req.session.userId = user.id;
         req.session.username = user.username;
+        req.session.isAdmin = (user as any).adminCheck === 1;
 
         req.session.save((err) => {
           if (err) {
@@ -186,6 +183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 user: { username: user.username, id: user.id },
                 currency: userData?.currency || 500,
                 cosmetics: userData?.cosmetics || [],
+                isAdmin: (user as any).adminCheck === 1,
               });
             })
             .catch(() => {
@@ -194,6 +192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 user: { username: user.username, id: user.id },
                 currency: 500,
                 cosmetics: [],
+                isAdmin: (user as any).adminCheck === 1,
               });
             });
         });
@@ -481,86 +480,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ============ ADMIN ROUTES ============
 
-  // Admin login
-  app.post("/api/admin/login", async (req, res) => {
-    try {
-      const { username, password } = req.body;
-      console.log("Admin login attempt for:", username);
-
-      const admin = await storage.getAdminByUsername(username);
-      console.log("Admin found:", admin ? "yes" : "no");
-      if (!admin) {
-        return res.status(401).json({ error: "Invalid admin credentials" });
-      }
-
-      console.log("Password hash from DB:", admin.admin_password_hash ? "exists" : "missing");
-      const passwordMatch = await bcrypt.compare(password, admin.admin_password_hash);
-      console.log("Password match:", passwordMatch);
-      if (!passwordMatch) {
-        return res.status(401).json({ error: "Invalid admin credentials" });
-      }
-
-      // Update last login
-      await storage.updateAdminLastLogin(admin.admin_id);
-
-      // Regenerate session to prevent session fixation attacks
-      req.session.regenerate((err) => {
-        if (err) {
-          console.error("Admin session regeneration error:", err);
-          return res.status(500).json({ error: "Login failed" });
-        }
-
-        // Set admin session
-        req.session.adminId = admin.admin_id;
-        req.session.adminUsername = admin.admin_username;
-        req.session.isAdmin = true;
-
-        req.session.save((err) => {
-          if (err) {
-            console.error("Admin session save error:", err);
-            return res.status(500).json({ error: "Login failed" });
+  // Check admin session - uses regular user session + adminCheck from DB
+  app.get("/api/admin/session", async (req, res) => {
+    if (req.session.userId) {
+      const isAdmin = await storage.isUserAdmin(req.session.userId);
+      if (isAdmin) {
+        res.json({
+          isAdmin: true,
+          admin: {
+            id: req.session.userId,
+            username: req.session.username
           }
-          res.json({
-            success: true,
-            admin: {
-              id: admin.admin_id,
-              username: admin.admin_username,
-              accessLevel: admin.access_level
-            }
-          });
         });
-      });
-    } catch (error) {
-      console.error("Admin login error:", error);
-      res.status(500).json({ error: "Login failed" });
-    }
-  });
-
-  // Admin logout - destroy session completely
-  app.post("/api/admin/logout", (req, res) => {
-    req.session.destroy((err) => {
-      if (err) {
-        console.error("Admin logout error:", err);
-        return res.status(500).json({ error: "Logout failed" });
+        return;
       }
-      res.clearCookie("connect.sid");
-      res.json({ success: true });
-    });
-  });
-
-  // Check admin session
-  app.get("/api/admin/session", (req, res) => {
-    if (req.session.isAdmin && req.session.adminId) {
-      res.json({
-        isAdmin: true,
-        admin: {
-          id: req.session.adminId,
-          username: req.session.adminUsername
-        }
-      });
-    } else {
-      res.json({ isAdmin: false });
     }
+    res.json({ isAdmin: false });
   });
 
   // Get all users (admin only)

@@ -37,8 +37,7 @@ export interface IStorage {
   saveUserSettings(userId: number, settings: any): Promise<void>;
   
   // Admin methods
-  getAdminByUsername(username: string): Promise<any | undefined>;
-  updateAdminLastLogin(adminId: number): Promise<void>;
+  isUserAdmin(userId: number): Promise<boolean>;
   getAllUsers(): Promise<any[]>;
   getAllItems(): Promise<any[]>;
   addItem(name: string, type: string, price: number, isCosmetic: boolean): Promise<any>;
@@ -96,11 +95,25 @@ class MySQLStorage implements IStorage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [rows] = await this.pool.execute(
-      "SELECT user_id AS id, username, password_hash AS password, email FROM accounts WHERE username = ?",
+      "SELECT user_id AS id, username, password_hash AS password, email, COALESCE(adminCheck, 0) as adminCheck FROM accounts WHERE username = ?",
       [username]
     );
     const users = rows as any[];
     return users[0];
+  }
+
+  async isUserAdmin(userId: number): Promise<boolean> {
+    try {
+      const [rows] = await this.pool.execute(
+        "SELECT COALESCE(adminCheck, 0) as adminCheck FROM accounts WHERE user_id = ?",
+        [userId]
+      );
+      const users = rows as any[];
+      return users[0]?.adminCheck === 1;
+    } catch (err) {
+      console.error('Error checking admin status:', err);
+      return false;
+    }
   }
 
   // ---------- User creation (FIXED) ----------

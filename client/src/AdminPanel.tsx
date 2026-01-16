@@ -18,11 +18,8 @@ interface Item {
 }
 
 export default function AdminPanel() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [adminName, setAdminName] = useState("");
   
   const [activeTab, setActiveTab] = useState<"users" | "items">("users");
@@ -45,7 +42,7 @@ export default function AdminPanel() {
       const res = await fetch("/api/admin/session");
       const data = await res.json();
       if (data.isAdmin) {
-        setIsLoggedIn(true);
+        setIsAdmin(true);
         setAdminName(data.admin.username);
         fetchData();
       }
@@ -68,34 +65,6 @@ export default function AdminPanel() {
     } catch (err) {
       console.error("Fetch data error:", err);
     }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    try {
-      const res = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setIsLoggedIn(true);
-        setAdminName(data.admin.username);
-        fetchData();
-      } else {
-        setError(data.error || "Login failed");
-      }
-    } catch (err) {
-      setError("Login failed");
-    }
-  };
-
-  const handleLogout = async () => {
-    await fetch("/api/admin/logout", { method: "POST" });
-    setIsLoggedIn(false);
-    setAdminName("");
   };
 
   const handleSetGold = async (userId: number) => {
@@ -165,33 +134,14 @@ export default function AdminPanel() {
     );
   }
 
-  if (!isLoggedIn) {
+  if (!isAdmin) {
     return (
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#1a1a2e" }}>
-        <form onSubmit={handleLogin} style={{ background: "#16213e", padding: "40px", borderRadius: "10px", width: "300px" }}>
-          <h1 style={{ color: "white", textAlign: "center", marginBottom: "20px" }}>Admin Login</h1>
-          {error && <div style={{ color: "#ff6b6b", marginBottom: "15px", textAlign: "center" }}>{error}</div>}
-          <input
-            type="text"
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            style={{ width: "100%", padding: "12px", marginBottom: "15px", borderRadius: "5px", border: "none", boxSizing: "border-box" }}
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ width: "100%", padding: "12px", marginBottom: "15px", borderRadius: "5px", border: "none", boxSizing: "border-box" }}
-          />
-          <button type="submit" style={{ width: "100%", padding: "12px", background: "#4CAF50", color: "white", border: "none", borderRadius: "5px", cursor: "pointer", fontWeight: "bold" }}>
-            Login
-          </button>
-          <div style={{ marginTop: "15px", textAlign: "center" }}>
-            <a href="/" style={{ color: "#888", textDecoration: "none" }}>Back to Game</a>
-          </div>
-        </form>
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", background: "#1a1a2e", color: "white" }}>
+        <h1 style={{ marginBottom: "20px" }}>Access Denied</h1>
+        <p style={{ marginBottom: "20px", color: "#888" }}>You must be logged in as an admin to access this page.</p>
+        <a href="/" style={{ padding: "12px 24px", background: "#4CAF50", color: "white", textDecoration: "none", borderRadius: "8px" }}>
+          Back to Game
+        </a>
       </div>
     );
   }
@@ -202,9 +152,9 @@ export default function AdminPanel() {
         <h1 style={{ margin: 0, fontSize: "24px" }}>Admin Panel</h1>
         <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
           <span>Welcome, {adminName}</span>
-          <button onClick={handleLogout} style={{ padding: "8px 16px", background: "#e74c3c", border: "none", borderRadius: "5px", color: "white", cursor: "pointer" }}>
-            Logout
-          </button>
+          <a href="/" style={{ padding: "8px 16px", background: "#666", border: "none", borderRadius: "5px", color: "white", textDecoration: "none" }}>
+            Back to Game
+          </a>
         </div>
       </header>
 

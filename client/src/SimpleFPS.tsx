@@ -255,6 +255,7 @@ interface GameState {
   previousGamePhase: string | null; // Track where user came from (for settings back navigation)
   equippedWeaponSkins: Record<number, string>; // Track equipped skin per weapon (weapon id -> skin name)
   loadout: Record<number, number>; // Tier -> weapon ID mapping (one weapon per tier)
+  isAdmin: boolean; // Whether user has admin privileges
 }
 
 interface ShopItem {
@@ -3308,24 +3309,26 @@ function ProfilePage({
           )}
         </div>
 
-        {/* Admin Button */}
-        <button
-          onClick={() => window.location.href = "/admin"}
-          style={{
-            width: "100%",
-            background: "#27ae60",
-            border: "2px solid #2ecc71",
-            borderRadius: "12px",
-            padding: "12px",
-            color: "white",
-            fontSize: "18px",
-            cursor: "pointer",
-            fontWeight: "bold",
-            marginBottom: "10px",
-          }}
-        >
-          ADMIN
-        </button>
+        {/* Admin Button - only shown if user is admin */}
+        {gameState.isAdmin && (
+          <button
+            onClick={() => window.location.href = "/admin"}
+            style={{
+              width: "100%",
+              background: "#27ae60",
+              border: "2px solid #2ecc71",
+              borderRadius: "12px",
+              padding: "12px",
+              color: "white",
+              fontSize: "18px",
+              cursor: "pointer",
+              fontWeight: "bold",
+              marginBottom: "10px",
+            }}
+          >
+            ADMIN
+          </button>
+        )}
 
         {/* Back to Menu */}
         <button
@@ -3639,6 +3642,7 @@ function HUD({
                       // Reset weapon skins to default for new login session
                       equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" },
                       loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
+                      isAdmin: data.isAdmin || false,
                     }));
 
                     // Load user settings after login
@@ -5314,6 +5318,7 @@ function HUD({
                   // Reset weapon skins when logging out
                   equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" },
                   loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
+                  isAdmin: false,
                 }));
               }}
               style={{
@@ -5708,6 +5713,7 @@ function Game() {
     previousGamePhase: null,
     equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" },
     loadout: { 1: 1, 2: 2, 3: 3, 4: 4 }, // Tier -> weapon ID: T1=Ketchup, T2=Mustard(default), T3=Topping, T4=Muffin
+    isAdmin: false,
   });
 
   if (gameState.gamePhase !== "playing" && gameState.gamePhase !== "paused") {
