@@ -485,13 +485,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/login", async (req, res) => {
     try {
       const { username, password } = req.body;
+      console.log("Admin login attempt for:", username);
 
       const admin = await storage.getAdminByUsername(username);
+      console.log("Admin found:", admin ? "yes" : "no");
       if (!admin) {
         return res.status(401).json({ error: "Invalid admin credentials" });
       }
 
+      console.log("Password hash from DB:", admin.admin_password_hash ? "exists" : "missing");
       const passwordMatch = await bcrypt.compare(password, admin.admin_password_hash);
+      console.log("Password match:", passwordMatch);
       if (!passwordMatch) {
         return res.status(401).json({ error: "Invalid admin credentials" });
       }
