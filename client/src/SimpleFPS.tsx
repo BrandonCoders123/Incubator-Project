@@ -3308,6 +3308,25 @@ function ProfilePage({
           )}
         </div>
 
+        {/* Admin Button */}
+        <button
+          onClick={() => window.location.href = "/admin"}
+          style={{
+            width: "100%",
+            background: "#27ae60",
+            border: "2px solid #2ecc71",
+            borderRadius: "12px",
+            padding: "12px",
+            color: "white",
+            fontSize: "18px",
+            cursor: "pointer",
+            fontWeight: "bold",
+            marginBottom: "10px",
+          }}
+        >
+          ADMIN
+        </button>
+
         {/* Back to Menu */}
         <button
           onClick={() =>
