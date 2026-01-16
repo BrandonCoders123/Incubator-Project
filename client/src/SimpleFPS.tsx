@@ -4270,86 +4270,44 @@ function HUD({
           </div>
         </div>
 
-        {/* Buy Gold Section */}
+        {/* Buy Gold Section - Compact */}
         <div
           style={{
-            marginBottom: "20px",
-            padding: "20px",
+            marginBottom: "15px",
+            padding: "12px 15px",
             background: "linear-gradient(135deg, #f39c12 0%, #e74c3c 100%)",
-            borderRadius: "10px",
+            borderRadius: "8px",
           }}
         >
-          <h2 style={{ margin: "0 0 15px 0", fontSize: "24px", textAlign: "center" }}>
-            💎 BUY GOLD
-          </h2>
-          <p style={{ margin: "0 0 15px 0", fontSize: "14px", textAlign: "center", opacity: 0.9 }}>
-            Get more gold to purchase weapon skins!
-          </p>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              gap: "15px",
-            }}
-          >
-            {currencyBundles.map((bundle) => (
-              <div
-                key={bundle.id}
-                style={{
-                  background: bundle.popular ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)",
-                  borderRadius: "10px",
-                  padding: "20px",
-                  textAlign: "center",
-                  position: "relative",
-                  border: bundle.popular ? "3px solid #fff" : "2px solid rgba(255,255,255,0.3)",
-                }}
-              >
-                {bundle.popular && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "-12px",
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      background: "#4CAF50",
-                      color: "white",
-                      padding: "4px 12px",
-                      borderRadius: "10px",
-                      fontSize: "11px",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    BEST VALUE
-                  </div>
-                )}
-                <div style={{ fontSize: "32px", marginBottom: "5px" }}>💰</div>
-                <div style={{ fontSize: "28px", fontWeight: "bold", marginBottom: "5px" }}>
-                  {bundle.gold.toLocaleString()}
-                </div>
-                <div style={{ fontSize: "14px", opacity: 0.8, marginBottom: "15px" }}>
-                  Gold
-                </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "15px" }}>
+            <div style={{ flexShrink: 0 }}>
+              <span style={{ fontSize: "16px", fontWeight: "bold" }}>💎 BUY GOLD</span>
+            </div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {currencyBundles.map((bundle) => (
                 <button
+                  key={bundle.id}
                   onClick={() => handleBuyCurrency(bundle)}
                   style={{
-                    width: "100%",
-                    padding: "12px",
-                    fontSize: "18px",
-                    fontWeight: "bold",
-                    background: "#4CAF50",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "8px",
+                    background: bundle.popular ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.3)",
+                    border: bundle.popular ? "2px solid #fff" : "1px solid rgba(255,255,255,0.3)",
+                    borderRadius: "6px",
+                    padding: "6px 12px",
                     cursor: "pointer",
+                    color: "white",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
                   }}
                 >
-                  {bundle.price}
+                  <span style={{ fontSize: "14px", fontWeight: "bold" }}>{bundle.gold.toLocaleString()} 💰</span>
+                  <span style={{ fontSize: "12px", background: "#4CAF50", padding: "2px 6px", borderRadius: "4px" }}>{bundle.price}</span>
                 </button>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-          <p style={{ margin: "15px 0 0 0", fontSize: "12px", textAlign: "center", opacity: 0.7 }}>
-            ⚠️ Test mode - No real money will be charged
+          <p style={{ margin: "8px 0 0 0", fontSize: "11px", textAlign: "center", opacity: 0.7 }}>
+            ⚠️ Test mode - No real charges
           </p>
         </div>
 
