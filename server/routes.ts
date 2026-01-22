@@ -157,6 +157,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
+      // Check if user is banned
+      if ((user as any).is_banned === 1) {
+        const banReason = (user as any).ban_reason || "No reason provided";
+        return res.status(403).json({ 
+          error: "Account banned", 
+          banned: true,
+          ban_reason: banReason 
+        });
+      }
+
       // Regenerate session to prevent session fixation attacks
       req.session.regenerate((err) => {
         if (err) {

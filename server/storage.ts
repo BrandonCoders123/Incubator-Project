@@ -16,7 +16,7 @@ export interface IStorage {
   getUserProfile(
     userId: number
   ): Promise<
-    { username: string; email: string; profilePicture: string | null } | undefined
+    { username: string; email: string; profilePicture: string | null; warning_count: number; isAdmin: boolean } | undefined
   >;
 
   updateUsername(userId: number, newUsername: string): Promise<void>;
@@ -102,7 +102,7 @@ class MySQLStorage implements IStorage {
 
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [rows] = await this.pool.execute(
-      "SELECT user_id AS id, username, password_hash AS password, email, COALESCE(adminCheck, 0) as adminCheck FROM accounts WHERE username = ?",
+      "SELECT user_id AS id, username, password_hash AS password, email, COALESCE(adminCheck, 0) as adminCheck, COALESCE(is_banned, 0) as is_banned, ban_reason FROM accounts WHERE username = ?",
       [username]
     );
     const users = rows as any[];
@@ -243,14 +243,20 @@ class MySQLStorage implements IStorage {
   async getUserProfile(
     userId: number
   ): Promise<
-    { username: string; email: string; profilePicture: string | null } | undefined
+    { username: string; email: string; profilePicture: string | null; warning_count: number; isAdmin: boolean } | undefined
   > {
     const [rows] = await this.pool.execute(
-      "SELECT username, email, profile_pic AS profilePicture FROM accounts WHERE user_id = ?",
+      "SELECT username, email, profile_pic AS profilePicture, COALESCE(warning_count, 0) as warning_count, COALESCE(adminCheck, 0) as adminCheck FROM accounts WHERE user_id = ?",
       [userId]
     );
     const profiles = rows as any[];
-    return profiles[0];
+    if (profiles[0]) {
+      return {
+        ...profiles[0],
+        isAdmin: profiles[0].adminCheck === 1
+      };
+    }
+    return undefined;
   }
 
   async updateUsername(userId: number, newUsername: string): Promise<void> {

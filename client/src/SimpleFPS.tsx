@@ -1595,7 +1595,17 @@ function IntroCutscene({
       return () => clearTimeout(timer);
     } else {
       const timer = setTimeout(() => {
-        setGameState((prev) => ({ ...prev, gamePhase: "playing" }));
+        setGameState((prev) => {
+          // Check if admin has enabled full loadout
+          const adminFullLoadout = localStorage.getItem("adminFullLoadout") === "true" && prev.isAdmin;
+          const newUnlockedWeapons = adminFullLoadout ? [1, 2, 3, 4, 5] : prev.unlockedWeapons;
+          
+          return { 
+            ...prev, 
+            gamePhase: "playing",
+            unlockedWeapons: newUnlockedWeapons,
+          };
+        });
         document.body.requestPointerLock();
       }, scenes[currentScene].duration);
 
@@ -1683,7 +1693,17 @@ function IntroCutscene({
 
         <button
           onClick={() => {
-            setGameState((prev) => ({ ...prev, gamePhase: "playing" }));
+            setGameState((prev) => {
+              // Check if admin has enabled full loadout
+              const adminFullLoadout = localStorage.getItem("adminFullLoadout") === "true" && prev.isAdmin;
+              const newUnlockedWeapons = adminFullLoadout ? [1, 2, 3, 4, 5] : prev.unlockedWeapons;
+              
+              return { 
+                ...prev, 
+                gamePhase: "playing",
+                unlockedWeapons: newUnlockedWeapons,
+              };
+            });
             document.body.requestPointerLock();
           }}
           style={{
@@ -2370,6 +2390,251 @@ function InventoryPage({
   );
 }
 
+// Leaderboard Page Component
+function LeaderboardPage({ onBack }: { onBack: () => void }) {
+  const [entries, setEntries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [category, setCategory] = useState<"time_played" | "kills" | "gold">("time_played");
+
+  useEffect(() => {
+    fetchLeaderboard();
+  }, [category]);
+
+  const fetchLeaderboard = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/leaderboard?category=${category}`);
+      if (res.ok) {
+        const data = await res.json();
+        setEntries(data);
+      }
+    } catch (err) {
+      console.error("Error fetching leaderboard:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatTime = (seconds: number): string => {
+    if (!seconds) return "0h 0m";
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours}h ${minutes}m`;
+  };
+
+  const formatNumber = (num: number): string => {
+    if (!num) return "0";
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    return num.toString();
+  };
+
+  const getValue = (entry: any): string => {
+    switch (category) {
+      case "time_played": return formatTime(entry.time_played);
+      case "kills": return formatNumber(entry.total_kills);
+      case "gold": return formatNumber(entry.gold_collected);
+    }
+  };
+
+  const getRankColor = (index: number): string => {
+    if (index === 0) return "#FFD700";
+    if (index === 1) return "#C0C0C0";
+    if (index === 2) return "#CD7F32";
+    return "#fff";
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100vw",
+        height: "100vh",
+        background: "linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)",
+        display: "flex",
+        flexDirection: "column",
+        color: "white",
+        fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+        zIndex: 1000,
+        overflow: "hidden",
+      }}
+    >
+      {/* Header */}
+      <div style={{ padding: "20px 30px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+        <h1 style={{ margin: 0, fontSize: "32px", textShadow: "2px 2px 4px rgba(0,0,0,0.5)" }}>🏆 LEADERBOARD</h1>
+        <button
+          onClick={onBack}
+          style={{
+            padding: "10px 25px",
+            fontSize: "16px",
+            fontWeight: "bold",
+            background: "rgba(255,255,255,0.1)",
+            color: "#fff",
+            border: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: "10px",
+            cursor: "pointer",
+            fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+          }}
+        >
+          ← Back to Menu
+        </button>
+      </div>
+
+      {/* Category Tabs */}
+      <div style={{ display: "flex", justifyContent: "center", gap: "15px", padding: "25px" }}>
+        {[
+          { key: "time_played" as const, label: "⏱️ Most Time Played" },
+          { key: "kills" as const, label: "💀 Most Kills" },
+          { key: "gold" as const, label: "💰 Most Gold" },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setCategory(tab.key)}
+            style={{
+              padding: "12px 25px",
+              fontSize: "16px",
+              fontWeight: category === tab.key ? "bold" : "normal",
+              background: category === tab.key
+                ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                : "rgba(255,255,255,0.1)",
+              color: "#fff",
+              border: "none",
+              borderRadius: "10px",
+              cursor: "pointer",
+              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+              boxShadow: category === tab.key ? "0 4px 15px rgba(102, 126, 234, 0.4)" : "none",
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Leaderboard Content */}
+      <div style={{ flex: 1, overflow: "auto", padding: "0 30px 30px" }}>
+        <div
+          style={{
+            maxWidth: "700px",
+            margin: "0 auto",
+            background: "rgba(255,255,255,0.05)",
+            borderRadius: "15px",
+            overflow: "hidden",
+          }}
+        >
+          {/* Table Header */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "60px 1fr 120px",
+              padding: "15px 20px",
+              background: "rgba(0,0,0,0.3)",
+              fontWeight: "bold",
+              fontSize: "14px",
+              color: "#888",
+              textTransform: "uppercase",
+            }}
+          >
+            <span>Rank</span>
+            <span>Player</span>
+            <span style={{ textAlign: "right" }}>
+              {category === "time_played" ? "Time" : category === "kills" ? "Kills" : "Gold"}
+            </span>
+          </div>
+
+          {/* Loading */}
+          {loading && (
+            <div style={{ padding: "50px", textAlign: "center", color: "#888" }}>
+              Loading leaderboard...
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!loading && entries.length === 0 && (
+            <div style={{ padding: "50px", textAlign: "center", color: "#888" }}>
+              <div style={{ fontSize: "48px", marginBottom: "15px" }}>🏆</div>
+              <p style={{ fontSize: "18px", margin: 0 }}>No leaderboard data yet</p>
+              <p style={{ fontSize: "14px", marginTop: "10px" }}>Be the first to make it on the board!</p>
+            </div>
+          )}
+
+          {/* Entries */}
+          {!loading && entries.map((entry, index) => (
+            <div
+              key={entry.leaderboard_id || index}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "60px 1fr 120px",
+                padding: "12px 20px",
+                alignItems: "center",
+                borderBottom: index < entries.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                background: index < 3 ? `rgba(255,255,255,${0.05 - index * 0.015})` : "transparent",
+              }}
+            >
+              {/* Rank */}
+              <div
+                style={{
+                  width: "35px",
+                  height: "35px",
+                  borderRadius: "50%",
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  fontWeight: "bold",
+                  fontSize: "16px",
+                  background: index === 0 ? "linear-gradient(135deg, #FFD700, #FFA500)"
+                    : index === 1 ? "linear-gradient(135deg, #C0C0C0, #A0A0A0)"
+                    : index === 2 ? "linear-gradient(135deg, #CD7F32, #8B4513)"
+                    : "#2a3f5f",
+                  color: index < 2 ? "#000" : "#fff",
+                }}
+              >
+                {index + 1}
+              </div>
+
+              {/* Player */}
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div
+                  style={{
+                    width: "40px",
+                    height: "40px",
+                    borderRadius: "8px",
+                    background: `linear-gradient(135deg, hsl(${(entry.user_id * 37) % 360}, 70%, 50%), hsl(${(entry.user_id * 37 + 40) % 360}, 70%, 40%))`,
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    fontSize: "18px",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {entry.username ? entry.username.charAt(0).toUpperCase() : "?"}
+                </div>
+                <div>
+                  <div style={{ fontWeight: "600" }}>{entry.username || `Player #${entry.user_id}`}</div>
+                  <div style={{ fontSize: "11px", color: "#888" }}>ID: {entry.user_id}</div>
+                </div>
+              </div>
+
+              {/* Score */}
+              <div
+                style={{
+                  textAlign: "right",
+                  fontSize: "18px",
+                  fontWeight: "bold",
+                  color: getRankColor(index),
+                }}
+              >
+                {getValue(entry)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Settings Component
 function SettingsPage({
   gameState,
@@ -2718,7 +2983,12 @@ function ProfilePage({
     username: string;
     email: string;
     profilePicture: string | null;
+    warning_count: number;
+    isAdmin: boolean;
   } | null>(null);
+  const [fullLoadoutEnabled, setFullLoadoutEnabled] = useState(() => {
+    return localStorage.getItem("adminFullLoadout") === "true";
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -2998,6 +3268,61 @@ function ProfilePage({
             }}
           >
             {success}
+          </div>
+        )}
+
+        {/* Warning Count Display */}
+        {profile && profile.warning_count > 0 && (
+          <div
+            style={{
+              background: "rgba(255,165,0,0.2)",
+              border: "1px solid #f39c12",
+              borderRadius: "8px",
+              padding: "15px",
+              marginBottom: "20px",
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+            }}
+          >
+            <span style={{ fontSize: "28px" }}>⚠️</span>
+            <div>
+              <div style={{ fontWeight: "bold", color: "#f39c12", marginBottom: "4px" }}>
+                Account Warnings: {profile.warning_count}
+              </div>
+              <div style={{ fontSize: "13px", color: "#e0e0e0" }}>
+                Your account has received warnings from administrators. Please follow the rules to avoid further action.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Admin Full Loadout Checkbox */}
+        {profile?.isAdmin && (
+          <div
+            style={{
+              background: "rgba(102,126,234,0.2)",
+              border: "1px solid #667eea",
+              borderRadius: "8px",
+              padding: "15px",
+              marginBottom: "20px",
+            }}
+          >
+            <div style={{ fontWeight: "bold", color: "#667eea", marginBottom: "10px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "18px" }}>👑</span> Admin Options
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={fullLoadoutEnabled}
+                onChange={(e) => {
+                  setFullLoadoutEnabled(e.target.checked);
+                  localStorage.setItem("adminFullLoadout", e.target.checked ? "true" : "false");
+                }}
+                style={{ width: "20px", height: "20px", cursor: "pointer" }}
+              />
+              <span style={{ fontSize: "14px" }}>Enable full loadout at game start (all weapons unlocked)</span>
+            </label>
           </div>
         )}
 
@@ -3666,7 +3991,11 @@ function HUD({
                     }
                   } else {
                     const error = await response.json();
-                    alert(error.error || "Login failed");
+                    if (error.banned) {
+                      alert(`⛔ ACCOUNT BANNED\n\nReason: ${error.ban_reason}\n\nContact an administrator if you believe this is a mistake.`);
+                    } else {
+                      alert(error.error || "Login failed");
+                    }
                   }
                 } catch (error) {
                   alert("Network error during login");
@@ -4169,66 +4498,9 @@ function HUD({
   // Leaderboard Page
   if (gameState.gamePhase === "leaderboard") {
     return (
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100vw",
-          height: "100vh",
-          background: "linear-gradient(135deg, #4CAF50 0%, #2e7d32 100%)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "white",
-          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-          zIndex: 1000,
-        }}
-      >
-        <div
-          style={{
-            textAlign: "center",
-            padding: "50px",
-            background: "rgba(0,0,0,0.6)",
-            borderRadius: "20px",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
-            maxWidth: "800px",
-          }}
-        >
-          <h1
-            style={{
-              fontSize: "48px",
-              marginBottom: "30px",
-              textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
-            }}
-          >
-            🏆 LEADERBOARD
-          </h1>
-          <p style={{ fontSize: "20px", marginBottom: "40px" }}>
-            Coming soon! Track top players and compete for the highest scores.
-          </p>
-          <button
-            onClick={() => {
-              setGameState((prev) => ({ ...prev, gamePhase: "menu" }));
-            }}
-            style={{
-              padding: "15px 40px",
-              fontSize: "20px",
-              fontWeight: "bold",
-              background: "#fdc830",
-              color: "#333",
-              border: "none",
-              borderRadius: "12px",
-              cursor: "pointer",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-            }}
-          >
-            BACK TO MENU
-          </button>
-        </div>
-      </div>
+      <LeaderboardPage
+        onBack={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))}
+      />
     );
   }
 
