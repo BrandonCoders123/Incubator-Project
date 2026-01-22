@@ -1,12 +1,17 @@
 import SimpleFPS from "./SimpleFPS";
 import AdminPanel from "./AdminPanel";
+import Leaderboard from "./Leaderboard";
 
 // Main App component
 function App() {
-  const isAdminRoute = window.location.pathname === "/admin";
+  const pathname = window.location.pathname;
   
-  if (isAdminRoute) {
+  if (pathname === "/admin") {
     return <AdminPanel />;
+  }
+  
+  if (pathname === "/leaderboard") {
+    return <Leaderboard />;
   }
   
   return <SimpleFPS />;

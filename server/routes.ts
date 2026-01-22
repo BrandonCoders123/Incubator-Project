@@ -627,6 +627,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Leaderboard - public route
+  app.get("/api/leaderboard", async (req, res) => {
+    try {
+      const category = (req.query.category as string) || "time_played";
+      const limit = parseInt(req.query.limit as string) || 50;
+      const entries = await storage.getLeaderboard(category, limit);
+      res.json(entries);
+    } catch (error) {
+      console.error("Leaderboard fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch leaderboard" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

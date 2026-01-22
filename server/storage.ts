@@ -48,6 +48,9 @@ export interface IStorage {
   banUser(userId: number, reason: string | null): Promise<void>;
   unbanUser(userId: number): Promise<void>;
   warnUser(userId: number): Promise<void>;
+  
+  // Leaderboard methods
+  getLeaderboard(category: string, limit?: number): Promise<any[]>;
 }
 
 /**
@@ -691,6 +694,69 @@ class MySQLStorage implements IStorage {
     } catch (err) {
       console.error('Error warning user:', err);
       throw err;
+    }
+  }
+
+  async getLeaderboard(category: string, limit: number = 50): Promise<any[]> {
+    try {
+      // First check which columns exist in leaderboard_2
+      const [columns] = await this.pool.execute(
+        `SHOW COLUMNS FROM leaderboard_2`
+      );
+      const columnNames = (columns as any[]).map(c => c.Field);
+      
+      const hasTimePlayed = columnNames.includes('time_played');
+      const hasTotalKills = columnNames.includes('total_kills');
+      const hasGoldCollected = columnNames.includes('gold_collected');
+      
+      // Build dynamic query based on available columns
+      let selectFields = `lb.leaderboard_id, lb.user_id, a.username, lb.rank, lb.date_recorded`;
+      
+      if (hasTimePlayed) {
+        selectFields += `, COALESCE(lb.time_played, 0) as time_played`;
+      } else {
+        selectFields += `, 0 as time_played`;
+      }
+      
+      if (hasTotalKills) {
+        selectFields += `, COALESCE(lb.total_kills, 0) as total_kills`;
+      } else {
+        selectFields += `, 0 as total_kills`;
+      }
+      
+      if (hasGoldCollected) {
+        selectFields += `, COALESCE(lb.gold_collected, 0) as gold_collected`;
+      } else {
+        selectFields += `, 0 as gold_collected`;
+      }
+      
+      // Determine order by clause based on category and available columns
+      let orderBy: string;
+      switch (category) {
+        case "kills":
+          orderBy = hasTotalKills ? "total_kills DESC" : "lb.leaderboard_id DESC";
+          break;
+        case "gold":
+          orderBy = hasGoldCollected ? "gold_collected DESC" : "lb.leaderboard_id DESC";
+          break;
+        case "time_played":
+        default:
+          orderBy = hasTimePlayed ? "time_played DESC" : "lb.leaderboard_id DESC";
+          break;
+      }
+      
+      const [rows] = await this.pool.execute(
+        `SELECT ${selectFields}
+        FROM leaderboard_2 lb
+        LEFT JOIN accounts a ON lb.user_id = a.user_id
+        ORDER BY ${orderBy}
+        LIMIT ?`,
+        [limit]
+      );
+      return rows as any[];
+    } catch (err) {
+      console.error('Error fetching leaderboard:', err);
+      return [];
     }
   }
 }
