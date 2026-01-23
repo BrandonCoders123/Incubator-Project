@@ -69,13 +69,13 @@ const weapons: Record<number, Weapon> = {
   },
   5: {
     name: "Spreadshot",
-    maxAmmo: 6, // 6 shells
+    maxAmmo: 10000000000, // 6 shells
     damage: 34, // per pellet, 3 pellets = kill
     reloadTime: 2000,
-    fireRate: 0, // semi-auto
+    fireRate: 100, // semi-auto
     bulletsPerKill: 5, // pellets to kill
     tier: 2,
-    pelletCount: 8, // 8 pellets per shell
+    pelletCount: 100, // 8 pellets per shell
     spreadAngle: 20, // 20 degree cone
   },
 };
