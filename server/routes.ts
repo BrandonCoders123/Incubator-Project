@@ -650,6 +650,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Save leaderboard entry on level completion - requires authentication
+  app.post("/api/leaderboard", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { fastestRunTime } = req.body;
+      
+      if (!fastestRunTime) {
+        return res.status(400).json({ error: "fastestRunTime is required" });
+      }
+      
+      await storage.saveLeaderboardEntry(userId, fastestRunTime);
+      res.json({ success: true, message: "Leaderboard entry saved" });
+    } catch (error) {
+      console.error("Leaderboard save error:", error);
+      res.status(500).json({ error: "Failed to save leaderboard entry" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

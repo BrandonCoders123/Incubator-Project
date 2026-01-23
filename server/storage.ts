@@ -51,6 +51,7 @@ export interface IStorage {
   
   // Leaderboard methods
   getLeaderboard(category: string, limit?: number): Promise<any[]>;
+  saveLeaderboardEntry(userId: number, fastestRunTime: string): Promise<void>;
 }
 
 /**
@@ -763,6 +764,45 @@ class MySQLStorage implements IStorage {
     } catch (err) {
       console.error('Error fetching leaderboard:', err);
       return [];
+    }
+  }
+
+  async saveLeaderboardEntry(userId: number, fastestRunTime: string): Promise<void> {
+    try {
+      // Check if user already has a leaderboard entry
+      const [existing] = await this.pool.execute(
+        `SELECT leaderboard_id, fastest_run_time FROM leaderboard_2 WHERE user_id = ?`,
+        [userId]
+      );
+      
+      const existingRows = existing as any[];
+      
+      if (existingRows.length > 0) {
+        // User has existing entry - only update if new time is faster
+        // Compare times - lower is better for fastest run
+        const currentTime = existingRows[0].fastest_run_time;
+        
+        // Only update if new time is faster (smaller) or if no time was set before
+        if (!currentTime || fastestRunTime < currentTime) {
+          await this.pool.execute(
+            `UPDATE leaderboard_2 SET fastest_run_time = ?, date_recorded = NOW() WHERE user_id = ?`,
+            [fastestRunTime, userId]
+          );
+          console.log(`Updated leaderboard entry for user ${userId} with faster time: ${fastestRunTime}`);
+        } else {
+          console.log(`Kept existing faster time for user ${userId}: ${currentTime} vs new: ${fastestRunTime}`);
+        }
+      } else {
+        // Create new entry
+        await this.pool.execute(
+          `INSERT INTO leaderboard_2 (user_id, fastest_run_time, date_recorded) VALUES (?, ?, NOW())`,
+          [userId, fastestRunTime]
+        );
+        console.log(`Created new leaderboard entry for user ${userId} with time: ${fastestRunTime}`);
+      }
+    } catch (err) {
+      console.error('Error saving leaderboard entry:', err);
+      throw err;
     }
   }
 }

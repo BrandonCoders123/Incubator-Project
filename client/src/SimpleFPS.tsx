@@ -256,6 +256,7 @@ interface GameState {
   equippedWeaponSkins: Record<number, string>; // Track equipped skin per weapon (weapon id -> skin name)
   loadout: Record<number, number>; // Tier -> weapon ID mapping (one weapon per tier)
   isAdmin: boolean; // Whether user has admin privileges
+  gameStartTime: number | null; // Timestamp when game started (for leaderboard run time)
 }
 
 interface ShopItem {
@@ -1202,7 +1203,12 @@ function Enemy({
       if (bulletPos.distanceTo(enemyPos) < 1) {
         // Hit enemy
         setGameState((prev) => {
-          const enemyKilled = enemy.health - bullet.damage <= 0;
+          // Find current enemy health from state (not closure) to handle multiple pellet hits
+          const currentEnemy = prev.enemies.find((e) => e.id === enemy.id);
+          if (!currentEnemy) return prev; // Enemy already dead/removed
+          
+          const enemyKilled =
+            currentEnemy.health > 0 && currentEnemy.health - bullet.damage <= 0;
           const newCoins = enemyKilled ? prev.coins + 1 : prev.coins; // 1 coin per kill
 
           // Increment kill counter only if enemy died
@@ -1635,6 +1641,7 @@ function IntroCutscene({
             ...prev,
             gamePhase: "playing",
             unlockedWeapons: newUnlockedWeapons,
+            gameStartTime: Date.now(),
           };
         });
         document.body.requestPointerLock();
@@ -1737,6 +1744,7 @@ function IntroCutscene({
                 ...prev,
                 gamePhase: "playing",
                 unlockedWeapons: newUnlockedWeapons,
+                gameStartTime: Date.now(),
               };
             });
             document.body.requestPointerLock();
@@ -5494,6 +5502,28 @@ function HUD({
                   } catch (error) {
                     console.error("Failed to save currency:", error);
                   }
+
+                  // Save run time to leaderboard
+                  if (gameState.gameStartTime) {
+                    const runTimeMs = Date.now() - gameState.gameStartTime;
+                    const totalSeconds = Math.floor(runTimeMs / 1000);
+                    const hours = Math.floor(totalSeconds / 3600);
+                    const minutes = Math.floor((totalSeconds % 3600) / 60);
+                    const seconds = totalSeconds % 60;
+                    const fastestRunTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                    
+                    try {
+                      await fetch("/api/leaderboard", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "include",
+                        body: JSON.stringify({ fastestRunTime }),
+                      });
+                      console.log("Leaderboard entry saved:", fastestRunTime);
+                    } catch (error) {
+                      console.error("Failed to save leaderboard entry:", error);
+                    }
+                  }
                 }
 
                 setGameState((prev) => ({
@@ -5518,6 +5548,7 @@ function HUD({
                   },
                   unlockedWeapons: [1],
                   inventory: [],
+                  gameStartTime: Date.now(),
                   user: {
                     ...prev.user,
                     currency: newCurrency,
@@ -5558,6 +5589,28 @@ function HUD({
                   } catch (error) {
                     console.error("Failed to save currency:", error);
                   }
+
+                  // Save run time to leaderboard
+                  if (gameState.gameStartTime) {
+                    const runTimeMs = Date.now() - gameState.gameStartTime;
+                    const totalSeconds = Math.floor(runTimeMs / 1000);
+                    const hours = Math.floor(totalSeconds / 3600);
+                    const minutes = Math.floor((totalSeconds % 3600) / 60);
+                    const seconds = totalSeconds % 60;
+                    const fastestRunTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                    
+                    try {
+                      await fetch("/api/leaderboard", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "include",
+                        body: JSON.stringify({ fastestRunTime }),
+                      });
+                      console.log("Leaderboard entry saved:", fastestRunTime);
+                    } catch (error) {
+                      console.error("Failed to save leaderboard entry:", error);
+                    }
+                  }
                 }
 
                 setGameState((prev) => ({
@@ -5570,6 +5623,7 @@ function HUD({
                   bullets: [],
                   enemyProjectiles: [],
                   lastDamageTime: 0,
+                  gameStartTime: null,
                   story: {
                     currentSettlement: 0,
                     alliesRescued: 0,
@@ -6281,6 +6335,7 @@ function Game() {
     },
     loadout: { 1: 1, 2: 2, 3: 3, 4: 4 }, // Tier -> weapon ID: T1=Ketchup, T2=Mustard(default), T3=Topping, T4=Muffin
     isAdmin: false,
+    gameStartTime: null,
   });
 
   if (gameState.gamePhase !== "playing" && gameState.gamePhase !== "paused") {
