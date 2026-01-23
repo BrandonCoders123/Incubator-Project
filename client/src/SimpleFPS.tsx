@@ -60,22 +60,22 @@ const weapons: Record<number, Weapon> = {
   },
   4: {
     name: "Lacerating Muffin Generator",
-    maxAmmo: 60,
-    damage: 20,
+    maxAmmo: 200,
+    damage: 30,
     reloadTime: 3000,
-    fireRate: 12, // 12 shots per second
+    fireRate: 20, // 12 shots per second
     bulletsPerKill: 2,
     tier: 4,
   },
   5: {
     name: "Spreadshot",
-    maxAmmo: 10000000000, // 6 shells
+    maxAmmo: 8, // 6 shells
     damage: 34, // per pellet, 3 pellets = kill
     reloadTime: 2000,
-    fireRate: 100, // semi-auto
+    fireRate: 0, // semi-auto
     bulletsPerKill: 5, // pellets to kill
     tier: 2,
-    pelletCount: 100, // 8 pellets per shell
+    pelletCount: 8, // 8 pellets per shell
     spreadAngle: 20, // 20 degree cone
   },
 };
