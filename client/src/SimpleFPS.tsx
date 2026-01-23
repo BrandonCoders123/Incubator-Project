@@ -53,7 +53,7 @@ const weapons: Record<number, Weapon> = {
     name: "Topping Shooter",
     maxAmmo: 36,
     damage: 25,
-    reloadTime: 2500,
+    reloadTime: 2000,
     fireRate: 18, // 18 shots per second
     bulletsPerKill: 2,
     tier: 3,
@@ -62,7 +62,7 @@ const weapons: Record<number, Weapon> = {
     name: "Lacerating Muffin Generator",
     maxAmmo: 60,
     damage: 20,
-    reloadTime: 4000,
+    reloadTime: 3000,
     fireRate: 12, // 12 shots per second
     bulletsPerKill: 2,
     tier: 4,
@@ -71,12 +71,12 @@ const weapons: Record<number, Weapon> = {
     name: "Spreadshot",
     maxAmmo: 6, // 6 shells
     damage: 34, // per pellet, 3 pellets = kill
-    reloadTime: 2500,
+    reloadTime: 2000,
     fireRate: 0, // semi-auto
-    bulletsPerKill: 3, // pellets to kill
+    bulletsPerKill: 5, // pellets to kill
     tier: 2,
     pelletCount: 8, // 8 pellets per shell
-    spreadAngle: 25, // 25 degree cone
+    spreadAngle: 20, // 20 degree cone
   },
 };
 
@@ -564,38 +564,48 @@ function Player({
               currentState.ammo - 1;
 
             // Create bullets - multiple for shotgun-type weapons
-            const newBullets: Array<{id: string; position: [number, number, number]; direction: [number, number, number]; damage: number}> = [];
-            
+            const newBullets: Array<{
+              id: string;
+              position: [number, number, number];
+              direction: [number, number, number];
+              damage: number;
+            }> = [];
+
             if (currentWeapon.pelletCount && currentWeapon.spreadAngle) {
               // Shotgun-type weapon: create multiple pellets in a cone
               const pelletCount = currentWeapon.pelletCount;
-              const spreadAngleRad = (currentWeapon.spreadAngle * Math.PI) / 180;
-              
+              const spreadAngleRad =
+                (currentWeapon.spreadAngle * Math.PI) / 180;
+
               for (let i = 0; i < pelletCount; i++) {
                 // Random spread within cone
                 const randomAngle = Math.random() * Math.PI * 2; // Random rotation around axis
-                const randomSpread = Math.random() * spreadAngleRad / 2; // Random angle from center
-                
+                const randomSpread = (Math.random() * spreadAngleRad) / 2; // Random angle from center
+
                 // Create spread direction using spherical coordinates
                 const spreadDir = baseDirection.clone();
-                
+
                 // Create perpendicular vectors for spreading - use fallback up vector when looking near vertical
                 let up = new THREE.Vector3(0, 1, 0);
                 // If looking nearly straight up or down, use forward as the reference instead
                 if (Math.abs(baseDirection.dot(up)) > 0.9) {
                   up = new THREE.Vector3(0, 0, 1);
                 }
-                const right = new THREE.Vector3().crossVectors(baseDirection, up).normalize();
-                const trueUp = new THREE.Vector3().crossVectors(right, baseDirection).normalize();
-                
+                const right = new THREE.Vector3()
+                  .crossVectors(baseDirection, up)
+                  .normalize();
+                const trueUp = new THREE.Vector3()
+                  .crossVectors(right, baseDirection)
+                  .normalize();
+
                 // Apply random spread
                 const offsetX = Math.cos(randomAngle) * Math.sin(randomSpread);
                 const offsetY = Math.sin(randomAngle) * Math.sin(randomSpread);
-                
+
                 spreadDir.add(right.clone().multiplyScalar(offsetX));
                 spreadDir.add(trueUp.clone().multiplyScalar(offsetY));
                 spreadDir.normalize();
-                
+
                 newBullets.push({
                   id: `bullet_${Date.now()}_${i}`,
                   position: [bulletPos.x, bulletPos.y, bulletPos.z],
@@ -808,12 +818,17 @@ function Player({
     const currentLoadout = gameState.loadout || { 1: 1, 2: 2, 3: 3, 4: 4 };
     const switchToTier = (tier: number) => {
       const weaponId = currentLoadout[tier];
-      if (weaponId && gameState.currentWeapon !== weaponId && gameState.unlockedWeapons.includes(weaponId)) {
+      if (
+        weaponId &&
+        gameState.currentWeapon !== weaponId &&
+        gameState.unlockedWeapons.includes(weaponId)
+      ) {
         weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
         // Ensure we have a valid ammo value for the new weapon
-        const newAmmo = weaponAmmo.current[weaponId] !== undefined 
-          ? weaponAmmo.current[weaponId] 
-          : weapons[weaponId].maxAmmo;
+        const newAmmo =
+          weaponAmmo.current[weaponId] !== undefined
+            ? weaponAmmo.current[weaponId]
+            : weapons[weaponId].maxAmmo;
         setGameState((prev) => ({
           ...prev,
           currentWeapon: weaponId,
@@ -822,7 +837,7 @@ function Player({
         }));
       }
     };
-    
+
     if (keys.weapon1) switchToTier(1);
     if (keys.weapon2) switchToTier(2);
     if (keys.weapon3) switchToTier(3);
@@ -1298,7 +1313,11 @@ function Enemy({
 function Bullet({
   bullet,
 }: {
-  bullet: { id: string; position: [number, number, number]; direction: [number, number, number] };
+  bullet: {
+    id: string;
+    position: [number, number, number];
+    direction: [number, number, number];
+  };
 }) {
   const tailLength = 5;
   const tailSegments = useMemo(() => {
@@ -1332,7 +1351,11 @@ function Bullet({
           ]}
         >
           <sphereGeometry args={[0.05 * seg.scale, 6, 6]} />
-          <meshBasicMaterial color="#ffeecc" transparent opacity={seg.opacity * 0.6} />
+          <meshBasicMaterial
+            color="#ffeecc"
+            transparent
+            opacity={seg.opacity * 0.6}
+          />
         </mesh>
       ))}
     </group>
@@ -1447,35 +1470,40 @@ function WeaponSprite({ gameState }: { gameState: GameState }) {
 
   // Skin color mappings for each weapon type
   const skinColors: Record<number, Record<string, string>> = {
-    1: { // Pistol skins
-      "Default": "#888888",
+    1: {
+      // Pistol skins
+      Default: "#888888",
       "Gold Plated": "#FFD700",
       "Neon Green": "#39FF14",
       "Shadow Black": "#1a1a1a",
     },
-    2: { // Rifle skins
-      "Default": "#654321",
+    2: {
+      // Rifle skins
+      Default: "#654321",
       "Desert Camo": "#C2B280",
       "Arctic White": "#F0F0F0",
       "Blood Red": "#8B0000",
     },
-    3: { // Sniper skins
-      "Default": "#2e2e2e",
-      "Ghillie": "#355E3B",
-      "Chrome": "#C0C0C0",
-      "Midnight": "#191970",
+    3: {
+      // Sniper skins
+      Default: "#2e2e2e",
+      Ghillie: "#355E3B",
+      Chrome: "#C0C0C0",
+      Midnight: "#191970",
     },
-    4: { // Plasma/LMG skins
-      "Default": "#1a1a1a",
+    4: {
+      // Plasma/LMG skins
+      Default: "#1a1a1a",
       "Electric Blue": "#00BFFF",
-      "Magma": "#FF4500",
+      Magma: "#FF4500",
       "Void Purple": "#8B008B",
     },
   };
 
   // Get weapon color based on equipped skin from gameState
   const getWeaponColor = (weaponNum: number) => {
-    const equippedSkin = gameState.equippedWeaponSkins?.[weaponNum] || "Default";
+    const equippedSkin =
+      gameState.equippedWeaponSkins?.[weaponNum] || "Default";
     const weaponSkins = skinColors[weaponNum] || skinColors[1];
     return weaponSkins[equippedSkin] || weaponSkins["Default"];
   };
@@ -1597,11 +1625,14 @@ function IntroCutscene({
       const timer = setTimeout(() => {
         setGameState((prev) => {
           // Check if admin has enabled full loadout
-          const adminFullLoadout = localStorage.getItem("adminFullLoadout") === "true" && prev.isAdmin;
-          const newUnlockedWeapons = adminFullLoadout ? [1, 2, 3, 4, 5] : prev.unlockedWeapons;
-          
-          return { 
-            ...prev, 
+          const adminFullLoadout =
+            localStorage.getItem("adminFullLoadout") === "true" && prev.isAdmin;
+          const newUnlockedWeapons = adminFullLoadout
+            ? [1, 2, 3, 4, 5]
+            : prev.unlockedWeapons;
+
+          return {
+            ...prev,
             gamePhase: "playing",
             unlockedWeapons: newUnlockedWeapons,
           };
@@ -1695,11 +1726,15 @@ function IntroCutscene({
           onClick={() => {
             setGameState((prev) => {
               // Check if admin has enabled full loadout
-              const adminFullLoadout = localStorage.getItem("adminFullLoadout") === "true" && prev.isAdmin;
-              const newUnlockedWeapons = adminFullLoadout ? [1, 2, 3, 4, 5] : prev.unlockedWeapons;
-              
-              return { 
-                ...prev, 
+              const adminFullLoadout =
+                localStorage.getItem("adminFullLoadout") === "true" &&
+                prev.isAdmin;
+              const newUnlockedWeapons = adminFullLoadout
+                ? [1, 2, 3, 4, 5]
+                : prev.unlockedWeapons;
+
+              return {
+                ...prev,
                 gamePhase: "playing",
                 unlockedWeapons: newUnlockedWeapons,
               };
@@ -1812,7 +1847,9 @@ function InventoryPage({
   const [selectedWeapon, setSelectedWeapon] = useState<number | null>(null);
   const [currency, setCurrency] = useState(gameState.user.currency);
   const [showLoadoutPopup, setShowLoadoutPopup] = useState(false);
-  const [loadout, setLoadout] = useState<Record<number, number>>(gameState.loadout || { 1: 1, 2: 2, 3: 3, 4: 4 });
+  const [loadout, setLoadout] = useState<Record<number, number>>(
+    gameState.loadout || { 1: 1, 2: 2, 3: 3, 4: 4 },
+  );
 
   // Define available weapons with their skins
   // shopPrefix must match the weapon names stored in the database items table
@@ -1856,7 +1893,13 @@ function InventoryPage({
 
   // Track equipped skins per weapon - initialize from gameState
   const [weaponSkins, setWeaponSkins] = useState<Record<number, string>>(
-    gameState.equippedWeaponSkins || { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" }
+    gameState.equippedWeaponSkins || {
+      1: "Default",
+      2: "Default",
+      3: "Default",
+      4: "Default",
+      5: "Default",
+    },
   );
 
   useEffect(() => {
@@ -1990,20 +2033,36 @@ function InventoryPage({
               border: "3px solid #4CAF50",
             }}
           >
-            <h2 style={{ margin: "0 0 20px 0", fontSize: "28px", textAlign: "center" }}>
+            <h2
+              style={{
+                margin: "0 0 20px 0",
+                fontSize: "28px",
+                textAlign: "center",
+              }}
+            >
               WEAPON LOADOUT
             </h2>
-            <p style={{ textAlign: "center", opacity: 0.9, marginBottom: "25px" }}>
+            <p
+              style={{
+                textAlign: "center",
+                opacity: 0.9,
+                marginBottom: "25px",
+              }}
+            >
               Press 1-4 in game to switch between tier weapons
             </p>
-            
+
             {/* Tier Slots */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "15px" }}
+            >
               {[1, 2, 3, 4].map((tier) => {
                 const tierWeapons = allWeapons.filter((w) => w.tier === tier);
                 const equippedWeaponId = loadout[tier];
-                const equippedWeapon = allWeapons.find((w) => w.id === equippedWeaponId);
-                
+                const equippedWeapon = allWeapons.find(
+                  (w) => w.id === equippedWeaponId,
+                );
+
                 return (
                   <div
                     key={tier}
@@ -2014,8 +2073,21 @@ function InventoryPage({
                       border: "2px solid rgba(255,255,255,0.3)",
                     }}
                   >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                      <span style={{ fontSize: "14px", fontWeight: "bold", color: "#FFC107" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "10px",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "14px",
+                          fontWeight: "bold",
+                          color: "#FFC107",
+                        }}
+                      >
                         TIER {tier} (Key: {tier})
                       </span>
                       {tierWeapons.length > 1 && (
@@ -2024,7 +2096,7 @@ function InventoryPage({
                         </span>
                       )}
                     </div>
-                    
+
                     {tierWeapons.length === 1 ? (
                       // Single weapon tier - just display it
                       <div
@@ -2035,16 +2107,37 @@ function InventoryPage({
                           border: "2px solid #4CAF50",
                         }}
                       >
-                        <p style={{ margin: 0, fontWeight: "bold", fontSize: "18px" }}>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontWeight: "bold",
+                            fontSize: "18px",
+                          }}
+                        >
                           {tierWeapons[0].name}
                         </p>
-                        <p style={{ margin: "5px 0 0 0", fontSize: "12px", opacity: 0.8 }}>
-                          {weapons[tierWeapons[0].id]?.maxAmmo} ammo | {weapons[tierWeapons[0].id]?.pelletCount ? `${weapons[tierWeapons[0].id].pelletCount} pellets` : `${weapons[tierWeapons[0].id]?.damage} damage`}
+                        <p
+                          style={{
+                            margin: "5px 0 0 0",
+                            fontSize: "12px",
+                            opacity: 0.8,
+                          }}
+                        >
+                          {weapons[tierWeapons[0].id]?.maxAmmo} ammo |{" "}
+                          {weapons[tierWeapons[0].id]?.pelletCount
+                            ? `${weapons[tierWeapons[0].id].pelletCount} pellets`
+                            : `${weapons[tierWeapons[0].id]?.damage} damage`}
                         </p>
                       </div>
                     ) : (
                       // Multiple weapons - allow selection
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                          gap: "10px",
+                        }}
+                      >
                         {tierWeapons.map((weapon) => {
                           const isEquipped = equippedWeaponId === weapon.id;
                           const weaponStats = weapons[weapon.id];
@@ -2052,27 +2145,59 @@ function InventoryPage({
                             <div
                               key={weapon.id}
                               onClick={() => {
-                                const newLoadout = { ...loadout, [tier]: weapon.id };
+                                const newLoadout = {
+                                  ...loadout,
+                                  [tier]: weapon.id,
+                                };
                                 setLoadout(newLoadout);
-                                setGameState((prev) => ({ ...prev, loadout: newLoadout }));
+                                setGameState((prev) => ({
+                                  ...prev,
+                                  loadout: newLoadout,
+                                }));
                               }}
                               style={{
                                 padding: "12px",
-                                background: isEquipped ? "rgba(76, 175, 80, 0.5)" : "rgba(255,255,255,0.1)",
+                                background: isEquipped
+                                  ? "rgba(76, 175, 80, 0.5)"
+                                  : "rgba(255,255,255,0.1)",
                                 borderRadius: "8px",
-                                border: isEquipped ? "2px solid #4CAF50" : "1px solid rgba(255,255,255,0.3)",
+                                border: isEquipped
+                                  ? "2px solid #4CAF50"
+                                  : "1px solid rgba(255,255,255,0.3)",
                                 cursor: "pointer",
                                 transition: "all 0.2s",
                               }}
                             >
-                              <p style={{ margin: 0, fontWeight: "bold", fontSize: "16px" }}>
+                              <p
+                                style={{
+                                  margin: 0,
+                                  fontWeight: "bold",
+                                  fontSize: "16px",
+                                }}
+                              >
                                 {weapon.name}
                               </p>
-                              <p style={{ margin: "5px 0 0 0", fontSize: "11px", opacity: 0.8 }}>
-                                {weaponStats?.maxAmmo} ammo | {weaponStats?.pelletCount ? `${weaponStats.pelletCount} pellets, ${weaponStats.spreadAngle}° spread` : `${weaponStats?.damage} damage`}
+                              <p
+                                style={{
+                                  margin: "5px 0 0 0",
+                                  fontSize: "11px",
+                                  opacity: 0.8,
+                                }}
+                              >
+                                {weaponStats?.maxAmmo} ammo |{" "}
+                                {weaponStats?.pelletCount
+                                  ? `${weaponStats.pelletCount} pellets, ${weaponStats.spreadAngle}° spread`
+                                  : `${weaponStats?.damage} damage`}
                               </p>
                               {isEquipped && (
-                                <p style={{ margin: "5px 0 0 0", fontSize: "12px", color: "#4CAF50", fontWeight: "bold" }}>
+                                <p
+                                  style={{
+                                    margin: "5px 0 0 0",
+                                    fontSize: "12px",
+                                    color: "#4CAF50",
+                                    fontWeight: "bold",
+                                  }}
+                                >
                                   EQUIPPED
                                 </p>
                               )}
@@ -2085,7 +2210,7 @@ function InventoryPage({
                 );
               })}
             </div>
-            
+
             <button
               onClick={() => setShowLoadoutPopup(false)}
               style={{
@@ -2394,7 +2519,9 @@ function InventoryPage({
 function LeaderboardPage({ onBack }: { onBack: () => void }) {
   const [entries, setEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [category, setCategory] = useState<"time_played" | "kills" | "gold">("time_played");
+  const [category, setCategory] = useState<"time_played" | "kills" | "gold">(
+    "time_played",
+  );
 
   useEffect(() => {
     fetchLeaderboard();
@@ -2431,9 +2558,12 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
 
   const getValue = (entry: any): string => {
     switch (category) {
-      case "time_played": return formatTime(entry.time_played);
-      case "kills": return formatNumber(entry.total_kills);
-      case "gold": return formatNumber(entry.gold_collected);
+      case "time_played":
+        return formatTime(entry.time_played);
+      case "kills":
+        return formatNumber(entry.total_kills);
+      case "gold":
+        return formatNumber(entry.gold_collected);
     }
   };
 
@@ -2452,7 +2582,8 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
         left: 0,
         width: "100vw",
         height: "100vh",
-        background: "linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)",
+        background:
+          "linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)",
         display: "flex",
         flexDirection: "column",
         color: "white",
@@ -2462,8 +2593,24 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
       }}
     >
       {/* Header */}
-      <div style={{ padding: "20px 30px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-        <h1 style={{ margin: 0, fontSize: "32px", textShadow: "2px 2px 4px rgba(0,0,0,0.5)" }}>🏆 LEADERBOARD</h1>
+      <div
+        style={{
+          padding: "20px 30px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          borderBottom: "1px solid rgba(255,255,255,0.1)",
+        }}
+      >
+        <h1
+          style={{
+            margin: 0,
+            fontSize: "32px",
+            textShadow: "2px 2px 4px rgba(0,0,0,0.5)",
+          }}
+        >
+          🏆 LEADERBOARD
+        </h1>
         <button
           onClick={onBack}
           style={{
@@ -2483,7 +2630,14 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* Category Tabs */}
-      <div style={{ display: "flex", justifyContent: "center", gap: "15px", padding: "25px" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: "15px",
+          padding: "25px",
+        }}
+      >
         {[
           { key: "time_played" as const, label: "⏱️ Most Time Played" },
           { key: "kills" as const, label: "💀 Most Kills" },
@@ -2496,15 +2650,19 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
               padding: "12px 25px",
               fontSize: "16px",
               fontWeight: category === tab.key ? "bold" : "normal",
-              background: category === tab.key
-                ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-                : "rgba(255,255,255,0.1)",
+              background:
+                category === tab.key
+                  ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                  : "rgba(255,255,255,0.1)",
               color: "#fff",
               border: "none",
               borderRadius: "10px",
               cursor: "pointer",
               fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-              boxShadow: category === tab.key ? "0 4px 15px rgba(102, 126, 234, 0.4)" : "none",
+              boxShadow:
+                category === tab.key
+                  ? "0 4px 15px rgba(102, 126, 234, 0.4)"
+                  : "none",
             }}
           >
             {tab.label}
@@ -2539,96 +2697,127 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
             <span>Rank</span>
             <span>Player</span>
             <span style={{ textAlign: "right" }}>
-              {category === "time_played" ? "Time" : category === "kills" ? "Kills" : "Gold"}
+              {category === "time_played"
+                ? "Time"
+                : category === "kills"
+                  ? "Kills"
+                  : "Gold"}
             </span>
           </div>
 
           {/* Loading */}
           {loading && (
-            <div style={{ padding: "50px", textAlign: "center", color: "#888" }}>
+            <div
+              style={{ padding: "50px", textAlign: "center", color: "#888" }}
+            >
               Loading leaderboard...
             </div>
           )}
 
           {/* Empty State */}
           {!loading && entries.length === 0 && (
-            <div style={{ padding: "50px", textAlign: "center", color: "#888" }}>
+            <div
+              style={{ padding: "50px", textAlign: "center", color: "#888" }}
+            >
               <div style={{ fontSize: "48px", marginBottom: "15px" }}>🏆</div>
-              <p style={{ fontSize: "18px", margin: 0 }}>No leaderboard data yet</p>
-              <p style={{ fontSize: "14px", marginTop: "10px" }}>Be the first to make it on the board!</p>
+              <p style={{ fontSize: "18px", margin: 0 }}>
+                No leaderboard data yet
+              </p>
+              <p style={{ fontSize: "14px", marginTop: "10px" }}>
+                Be the first to make it on the board!
+              </p>
             </div>
           )}
 
           {/* Entries */}
-          {!loading && entries.map((entry, index) => (
-            <div
-              key={entry.leaderboard_id || index}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "60px 1fr 120px",
-                padding: "12px 20px",
-                alignItems: "center",
-                borderBottom: index < entries.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
-                background: index < 3 ? `rgba(255,255,255,${0.05 - index * 0.015})` : "transparent",
-              }}
-            >
-              {/* Rank */}
+          {!loading &&
+            entries.map((entry, index) => (
               <div
+                key={entry.leaderboard_id || index}
                 style={{
-                  width: "35px",
-                  height: "35px",
-                  borderRadius: "50%",
-                  display: "flex",
-                  justifyContent: "center",
+                  display: "grid",
+                  gridTemplateColumns: "60px 1fr 120px",
+                  padding: "12px 20px",
                   alignItems: "center",
-                  fontWeight: "bold",
-                  fontSize: "16px",
-                  background: index === 0 ? "linear-gradient(135deg, #FFD700, #FFA500)"
-                    : index === 1 ? "linear-gradient(135deg, #C0C0C0, #A0A0A0)"
-                    : index === 2 ? "linear-gradient(135deg, #CD7F32, #8B4513)"
-                    : "#2a3f5f",
-                  color: index < 2 ? "#000" : "#fff",
+                  borderBottom:
+                    index < entries.length - 1
+                      ? "1px solid rgba(255,255,255,0.05)"
+                      : "none",
+                  background:
+                    index < 3
+                      ? `rgba(255,255,255,${0.05 - index * 0.015})`
+                      : "transparent",
                 }}
               >
-                {index + 1}
-              </div>
-
-              {/* Player */}
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                {/* Rank */}
                 <div
                   style={{
-                    width: "40px",
-                    height: "40px",
-                    borderRadius: "8px",
-                    background: `linear-gradient(135deg, hsl(${(entry.user_id * 37) % 360}, 70%, 50%), hsl(${(entry.user_id * 37 + 40) % 360}, 70%, 40%))`,
+                    width: "35px",
+                    height: "35px",
+                    borderRadius: "50%",
                     display: "flex",
                     justifyContent: "center",
                     alignItems: "center",
-                    fontSize: "18px",
                     fontWeight: "bold",
+                    fontSize: "16px",
+                    background:
+                      index === 0
+                        ? "linear-gradient(135deg, #FFD700, #FFA500)"
+                        : index === 1
+                          ? "linear-gradient(135deg, #C0C0C0, #A0A0A0)"
+                          : index === 2
+                            ? "linear-gradient(135deg, #CD7F32, #8B4513)"
+                            : "#2a3f5f",
+                    color: index < 2 ? "#000" : "#fff",
                   }}
                 >
-                  {entry.username ? entry.username.charAt(0).toUpperCase() : "?"}
+                  {index + 1}
                 </div>
-                <div>
-                  <div style={{ fontWeight: "600" }}>{entry.username || `Player #${entry.user_id}`}</div>
-                  <div style={{ fontSize: "11px", color: "#888" }}>ID: {entry.user_id}</div>
-                </div>
-              </div>
 
-              {/* Score */}
-              <div
-                style={{
-                  textAlign: "right",
-                  fontSize: "18px",
-                  fontWeight: "bold",
-                  color: getRankColor(index),
-                }}
-              >
-                {getValue(entry)}
+                {/* Player */}
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: "10px" }}
+                >
+                  <div
+                    style={{
+                      width: "40px",
+                      height: "40px",
+                      borderRadius: "8px",
+                      background: `linear-gradient(135deg, hsl(${(entry.user_id * 37) % 360}, 70%, 50%), hsl(${(entry.user_id * 37 + 40) % 360}, 70%, 40%))`,
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      fontSize: "18px",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {entry.username
+                      ? entry.username.charAt(0).toUpperCase()
+                      : "?"}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: "600" }}>
+                      {entry.username || `Player #${entry.user_id}`}
+                    </div>
+                    <div style={{ fontSize: "11px", color: "#888" }}>
+                      ID: {entry.user_id}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Score */}
+                <div
+                  style={{
+                    textAlign: "right",
+                    fontSize: "18px",
+                    fontWeight: "bold",
+                    color: getRankColor(index),
+                  }}
+                >
+                  {getValue(entry)}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
         </div>
       </div>
     </div>
@@ -3033,10 +3222,16 @@ function ProfilePage({
       if (!res.ok) {
         if (res.status === 401) {
           setLoading(false);
-          setGameState((prev) => ({ 
-            ...prev, 
+          setGameState((prev) => ({
+            ...prev,
             gamePhase: "login",
-            equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" },
+            equippedWeaponSkins: {
+              1: "Default",
+              2: "Default",
+              3: "Default",
+              4: "Default",
+              5: "Default",
+            },
             loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
           }));
           return;
@@ -3287,11 +3482,18 @@ function ProfilePage({
           >
             <span style={{ fontSize: "28px" }}>⚠️</span>
             <div>
-              <div style={{ fontWeight: "bold", color: "#f39c12", marginBottom: "4px" }}>
+              <div
+                style={{
+                  fontWeight: "bold",
+                  color: "#f39c12",
+                  marginBottom: "4px",
+                }}
+              >
                 Account Warnings: {profile.warning_count}
               </div>
               <div style={{ fontSize: "13px", color: "#e0e0e0" }}>
-                Your account has received warnings from administrators. Please follow the rules to avoid further action.
+                Your account has received warnings from administrators. Please
+                follow the rules to avoid further action.
               </div>
             </div>
           </div>
@@ -3308,20 +3510,41 @@ function ProfilePage({
               marginBottom: "20px",
             }}
           >
-            <div style={{ fontWeight: "bold", color: "#667eea", marginBottom: "10px", display: "flex", alignItems: "center", gap: "8px" }}>
+            <div
+              style={{
+                fontWeight: "bold",
+                color: "#667eea",
+                marginBottom: "10px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
               <span style={{ fontSize: "18px" }}>👑</span> Admin Options
             </div>
-            <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                cursor: "pointer",
+              }}
+            >
               <input
                 type="checkbox"
                 checked={fullLoadoutEnabled}
                 onChange={(e) => {
                   setFullLoadoutEnabled(e.target.checked);
-                  localStorage.setItem("adminFullLoadout", e.target.checked ? "true" : "false");
+                  localStorage.setItem(
+                    "adminFullLoadout",
+                    e.target.checked ? "true" : "false",
+                  );
                 }}
                 style={{ width: "20px", height: "20px", cursor: "pointer" }}
               />
-              <span style={{ fontSize: "14px" }}>Enable full loadout at game start (all weapons unlocked)</span>
+              <span style={{ fontSize: "14px" }}>
+                Enable full loadout at game start (all weapons unlocked)
+              </span>
             </label>
           </div>
         )}
@@ -3637,7 +3860,7 @@ function ProfilePage({
         {/* Admin Button - only shown if user is admin */}
         {gameState.isAdmin && (
           <button
-            onClick={() => window.location.href = "/admin"}
+            onClick={() => (window.location.href = "/admin")}
             style={{
               width: "100%",
               background: "#27ae60",
@@ -3755,7 +3978,7 @@ function HUD({
   ];
 
   // Handle mock currency purchase
-  const handleBuyCurrency = async (bundle: typeof currencyBundles[0]) => {
+  const handleBuyCurrency = async (bundle: (typeof currencyBundles)[0]) => {
     if (gameState.user.isGuest) {
       alert("Please log in to purchase gold!");
       return;
@@ -3769,22 +3992,22 @@ function HUD({
 
     // Mock purchase - just add gold (no real payment)
     const confirmPurchase = window.confirm(
-      `Purchase ${bundle.gold} gold for ${bundle.price}?\n\n(This is a test purchase - no real money will be charged)`
+      `Purchase ${bundle.gold} gold for ${bundle.price}?\n\n(This is a test purchase - no real money will be charged)`,
     );
 
     if (!confirmPurchase) return;
 
     try {
       const newCurrency = gameState.user.currency + bundle.gold;
-      
+
       // Update currency in database
       const response = await fetch("/api/update-currency", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           username: gameState.user.username,
-          currency: newCurrency 
+          currency: newCurrency,
         }),
       });
 
@@ -3965,7 +4188,13 @@ function HUD({
                         equippedSkin: null,
                       },
                       // Reset weapon skins to default for new login session
-                      equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" },
+                      equippedWeaponSkins: {
+                        1: "Default",
+                        2: "Default",
+                        3: "Default",
+                        4: "Default",
+                        5: "Default",
+                      },
                       loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
                       isAdmin: data.isAdmin || false,
                     }));
@@ -3992,7 +4221,9 @@ function HUD({
                   } else {
                     const error = await response.json();
                     if (error.banned) {
-                      alert(`⛔ ACCOUNT BANNED\n\nReason: ${error.ban_reason}\n\nContact an administrator if you believe this is a mistake.`);
+                      alert(
+                        `⛔ ACCOUNT BANNED\n\nReason: ${error.ban_reason}\n\nContact an administrator if you believe this is a mistake.`,
+                      );
                     } else {
                       alert(error.error || "Login failed");
                     }
@@ -4181,7 +4412,13 @@ function HUD({
                         equippedSkin: null,
                       },
                       // Reset weapon skins to default for new account
-                      equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" },
+                      equippedWeaponSkins: {
+                        1: "Default",
+                        2: "Default",
+                        3: "Default",
+                        4: "Default",
+                        5: "Default",
+                      },
                       loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
                     }));
                   } else {
@@ -4543,7 +4780,8 @@ function HUD({
           <h1 style={{ fontSize: "36px", margin: 0 }}>🛒 SHOP</h1>
           <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
             <span style={{ fontSize: "20px", fontWeight: "bold" }}>
-              💰 {gameState.user.currency === 67 ? "∞" : gameState.user.currency}
+              💰{" "}
+              {gameState.user.currency === 67 ? "∞" : gameState.user.currency}
             </span>
             <button
               onClick={() =>
@@ -4574,18 +4812,38 @@ function HUD({
             borderRadius: "8px",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "15px" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "15px",
+            }}
+          >
             <div style={{ flexShrink: 0 }}>
-              <span style={{ fontSize: "16px", fontWeight: "bold" }}>💎 BUY GOLD</span>
+              <span style={{ fontSize: "16px", fontWeight: "bold" }}>
+                💎 BUY GOLD
+              </span>
             </div>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: "10px",
+                flexWrap: "wrap",
+                justifyContent: "flex-end",
+              }}
+            >
               {currencyBundles.map((bundle) => (
                 <button
                   key={bundle.id}
                   onClick={() => handleBuyCurrency(bundle)}
                   style={{
-                    background: bundle.popular ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.3)",
-                    border: bundle.popular ? "2px solid #fff" : "1px solid rgba(255,255,255,0.3)",
+                    background: bundle.popular
+                      ? "rgba(255,255,255,0.35)"
+                      : "rgba(0,0,0,0.3)",
+                    border: bundle.popular
+                      ? "2px solid #fff"
+                      : "1px solid rgba(255,255,255,0.3)",
                     borderRadius: "6px",
                     padding: "6px 12px",
                     cursor: "pointer",
@@ -4595,13 +4853,31 @@ function HUD({
                     gap: "8px",
                   }}
                 >
-                  <span style={{ fontSize: "14px", fontWeight: "bold" }}>{bundle.gold.toLocaleString()} 💰</span>
-                  <span style={{ fontSize: "12px", background: "#4CAF50", padding: "2px 6px", borderRadius: "4px" }}>{bundle.price}</span>
+                  <span style={{ fontSize: "14px", fontWeight: "bold" }}>
+                    {bundle.gold.toLocaleString()} 💰
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      background: "#4CAF50",
+                      padding: "2px 6px",
+                      borderRadius: "4px",
+                    }}
+                  >
+                    {bundle.price}
+                  </span>
                 </button>
               ))}
             </div>
           </div>
-          <p style={{ margin: "8px 0 0 0", fontSize: "11px", textAlign: "center", opacity: 0.7 }}>
+          <p
+            style={{
+              margin: "8px 0 0 0",
+              fontSize: "11px",
+              textAlign: "center",
+              opacity: 0.7,
+            }}
+          >
             ⚠️ Test mode - No real charges
           </p>
         </div>
@@ -4662,7 +4938,8 @@ function HUD({
             const isOwned = ownedItemIds.includes(item.id);
             // Special case: gold value of 67 means unlimited purchases
             const hasUnlimitedGold = gameState.user.currency === 67;
-            const canAfford = hasUnlimitedGold || gameState.user.currency >= item.price;
+            const canAfford =
+              hasUnlimitedGold || gameState.user.currency >= item.price;
 
             // Parse weapon and skin name from item name (e.g., "Pistol - Gold Plated")
             const nameParts = item.name.split(" - ");
@@ -4888,7 +5165,10 @@ function HUD({
                   marginBottom: "5px",
                 }}
               >
-                🔓 {additionalUnlocks.length > 0 ? "TIER 2 WEAPONS UNLOCKED!" : "WEAPON UNLOCKED!"}
+                🔓{" "}
+                {additionalUnlocks.length > 0
+                  ? "TIER 2 WEAPONS UNLOCKED!"
+                  : "WEAPON UNLOCKED!"}
               </h3>
               <p style={{ fontSize: "18px", fontWeight: "bold" }}>
                 {weaponUnlock.name}
@@ -5047,7 +5327,10 @@ function HUD({
               setGameState((prev) => {
                 // Add weapon unlock (main weapon + any additional tier unlocks)
                 let newUnlockedWeapons = prev.unlockedWeapons;
-                if (weaponUnlock && !prev.unlockedWeapons.includes(weaponUnlock.id)) {
+                if (
+                  weaponUnlock &&
+                  !prev.unlockedWeapons.includes(weaponUnlock.id)
+                ) {
                   newUnlockedWeapons = [...newUnlockedWeapons, weaponUnlock.id];
                 }
                 // Add additional tier weapons (e.g., Spreadshot when Mustard Launcher unlocks)
@@ -5588,7 +5871,13 @@ function HUD({
                     equippedSkin: null,
                   },
                   // Reset weapon skins when logging out
-                  equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" },
+                  equippedWeaponSkins: {
+                    1: "Default",
+                    2: "Default",
+                    3: "Default",
+                    4: "Default",
+                    5: "Default",
+                  },
                   loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
                   isAdmin: false,
                 }));
@@ -5983,7 +6272,13 @@ function Game() {
     reloadStartTime: 0,
     lastShotTime: 0,
     previousGamePhase: null,
-    equippedWeaponSkins: { 1: "Default", 2: "Default", 3: "Default", 4: "Default", 5: "Default" },
+    equippedWeaponSkins: {
+      1: "Default",
+      2: "Default",
+      3: "Default",
+      4: "Default",
+      5: "Default",
+    },
     loadout: { 1: 1, 2: 2, 3: 3, 4: 4 }, // Tier -> weapon ID: T1=Ketchup, T2=Mustard(default), T3=Topping, T4=Muffin
     isAdmin: false,
   });
