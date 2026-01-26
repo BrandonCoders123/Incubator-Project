@@ -1,0 +1,253 @@
+🎯 FEATURE GOAL
+
+Add a Crosshair Loadout system where:
+
+The user can select ONE of 10 predefined crosshairs in the Loadout UI
+
+The selected crosshair is saved locally (no server, no API)
+
+When the player starts the game, the selected crosshair renders in-game
+
+The crosshair appears in the center of the screen
+
+Only one crosshair can be active at a time
+
+🚫 HARD CONSTRAINTS
+
+❌ Do NOT use the internet
+
+❌ Do NOT add backend servers
+
+❌ Do NOT refactor gameplay logic
+
+❌ Do NOT exceed 10 crosshairs
+
+❌ Do NOT change weapon behavior
+
+✅ ALLOWED STORAGE
+
+Use localStorage as the “database”
+
+Persist selection between sessions
+
+📁 FILES TO CREATE
+1️⃣ client/src/data/crosshairs.ts
+
+Create a small “database” exporting exactly these 10 crosshairs:
+
+export type Crosshair = {
+  id: string;
+  name: string;
+  type: "dot" | "cross" | "circle";
+  size: number;
+  thickness?: number;
+  gap?: number;
+  color: string;
+};
+
+export const CROSSHAIRS: Crosshair[] = [
+  {
+    id: "classic-dot",
+    name: "Classic Dot",
+    type: "dot",
+    size: 4,
+    color: "#ffffff"
+  },
+  {
+    id: "large-dot",
+    name: "Large Dot",
+    type: "dot",
+    size: 8,
+    color: "#ff5555"
+  },
+  {
+    id: "thin-cross",
+    name: "Thin Cross",
+    type: "cross",
+    size: 10,
+    thickness: 1,
+    gap: 4,
+    color: "#ffffff"
+  },
+  {
+    id: "bold-cross",
+    name: "Bold Cross",
+    type: "cross",
+    size: 14,
+    thickness: 3,
+    gap: 6,
+    color: "#00ff99"
+  },
+  {
+    id: "tight-cross",
+    name: "Tight Cross",
+    type: "cross",
+    size: 8,
+    thickness: 2,
+    gap: 2,
+    color: "#ffff00"
+  },
+  {
+    id: "circle-small",
+    name: "Small Circle",
+    type: "circle",
+    size: 6,
+    thickness: 2,
+    color: "#ffffff"
+  },
+  {
+    id: "circle-large",
+    name: "Large Circle",
+    type: "circle",
+    size: 12,
+    thickness: 3,
+    color: "#ff8800"
+  },
+  {
+    id: "minimal-green",
+    name: "Minimal Green",
+    type: "dot",
+    size: 3,
+    color: "#00ff00"
+  },
+  {
+    id: "sniper-cross",
+    name: "Sniper Cross",
+    type: "cross",
+    size: 18,
+    thickness: 1,
+    gap: 10,
+    color: "#ff0000"
+  },
+  {
+    id: "training-default",
+    name: "Training Default",
+    type: "cross",
+    size: 12,
+    thickness: 2,
+    gap: 5,
+    color: "#ffffff"
+  }
+];
+
+2️⃣ client/src/utils/crosshairStorage.ts
+
+Implement local persistence:
+
+const STORAGE_KEY = "selectedCrosshairId";
+
+export const saveCrosshair = (id: string) => {
+  localStorage.setItem(STORAGE_KEY, id);
+};
+
+export const loadCrosshair = (): string | null => {
+  return localStorage.getItem(STORAGE_KEY);
+};
+
+✏️ MODIFY: Loadout UI FILE
+
+Locate the Loadout / Loadout selection UI.
+
+Add:
+
+A Crosshair Selection section
+
+Render all 10 crosshairs as clickable buttons
+
+Highlight the currently selected crosshair
+
+On click → call saveCrosshair(crosshair.id)
+
+Example logic:
+
+import { CROSSHAIRS } from "../data/crosshairs";
+import { saveCrosshair, loadCrosshair } from "../utils/crosshairStorage";
+
+
+Selection logic:
+
+const [selected, setSelected] = useState(loadCrosshair() ?? "classic-dot");
+
+
+On click:
+
+setSelected(c.id);
+saveCrosshair(c.id);
+
+🎮 MODIFY: SimpleFPS.tsx
+On game start:
+
+Load selected crosshair ID
+
+Find matching crosshair from CROSSHAIRS
+
+Store in state
+
+import { CROSSHAIRS } from "./data/crosshairs";
+import { loadCrosshair } from "./utils/crosshairStorage";
+
+const crosshairId = loadCrosshair();
+const activeCrosshair =
+  CROSSHAIRS.find(c => c.id === crosshairId) ?? CROSSHAIRS[0];
+
+🖌️ RENDERING THE CROSSHAIR (HUD)
+
+Add a function to draw crosshairs using HTML/CSS overlay or canvas:
+
+Dot:
+
+Centered div
+
+Width/height = size
+
+Background = color
+
+Border-radius = 50%
+
+Cross:
+
+Horizontal + vertical lines
+
+Use size, thickness, gap
+
+Circle:
+
+Border only
+
+Radius = size
+
+Border width = thickness
+
+The crosshair must:
+
+Be centered on screen
+
+Ignore pointer events
+
+Render above gameplay
+
+✅ ACCEPTANCE CHECKLIST
+
+ 10 crosshairs only
+
+ User can select one
+
+ Selection persists after refresh
+
+ Selected crosshair appears in-game
+
+ No backend added
+
+ No gameplay refactor
+
+🛑 IMPORTANT
+
+If any file paths differ:
+
+Use the closest existing structure
+
+Do NOT invent new systems
+
+Keep changes minimal and explicit
+
+🧠 END OF PROMPT
