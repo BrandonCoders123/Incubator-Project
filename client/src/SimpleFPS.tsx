@@ -1858,6 +1858,10 @@ function InventoryPage({
   const [loadout, setLoadout] = useState<Record<number, number>>(
     gameState.loadout || { 1: 1, 2: 2, 3: 3, 4: 4 },
   );
+  const [selectedCrosshair, setSelectedCrosshair] = useState(() => {
+    const saved = localStorage.getItem("selectedCrosshairId");
+    return saved ?? "classic-dot";
+  });
 
   // Define available weapons with their skins
   // shopPrefix must match the weapon names stored in the database items table
@@ -2217,6 +2221,67 @@ function InventoryPage({
                   </div>
                 );
               })}
+            </div>
+
+            {/* Crosshair Selection */}
+            <div style={{ marginTop: "25px", borderTop: "2px solid rgba(255,255,255,0.2)", paddingTop: "20px" }}>
+              <h3 style={{ margin: "0 0 15px 0", fontSize: "20px", textAlign: "center" }}>
+                CROSSHAIR
+              </h3>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "8px" }}>
+                {[
+                  { id: "classic-dot", name: "Classic Dot", type: "dot", size: 4, color: "#ffffff" },
+                  { id: "large-dot", name: "Large Dot", type: "dot", size: 8, color: "#ff5555" },
+                  { id: "thin-cross", name: "Thin Cross", type: "cross", size: 10, thickness: 1, gap: 4, color: "#ffffff" },
+                  { id: "bold-cross", name: "Bold Cross", type: "cross", size: 14, thickness: 3, gap: 6, color: "#00ff99" },
+                  { id: "tight-cross", name: "Tight Cross", type: "cross", size: 8, thickness: 2, gap: 2, color: "#ffff00" },
+                  { id: "circle-small", name: "Small Circle", type: "circle", size: 6, thickness: 2, color: "#ffffff" },
+                  { id: "circle-large", name: "Large Circle", type: "circle", size: 12, thickness: 3, color: "#ff8800" },
+                  { id: "minimal-green", name: "Minimal Green", type: "dot", size: 3, color: "#00ff00" },
+                  { id: "sniper-cross", name: "Sniper Cross", type: "cross", size: 18, thickness: 1, gap: 10, color: "#ff0000" },
+                  { id: "training-default", name: "Training Default", type: "cross", size: 12, thickness: 2, gap: 5, color: "#ffffff" },
+                ].map((c) => {
+                  const isSelected = selectedCrosshair === c.id;
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => {
+                        setSelectedCrosshair(c.id);
+                        localStorage.setItem("selectedCrosshairId", c.id);
+                      }}
+                      style={{
+                        padding: "10px 5px",
+                        background: isSelected ? "rgba(76, 175, 80, 0.5)" : "rgba(255,255,255,0.1)",
+                        border: isSelected ? "2px solid #4CAF50" : "1px solid rgba(255,255,255,0.3)",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <div style={{ width: "30px", height: "30px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", borderRadius: "4px" }}>
+                        {c.type === "dot" && (
+                          <div style={{ width: `${c.size}px`, height: `${c.size}px`, backgroundColor: c.color, borderRadius: "50%" }} />
+                        )}
+                        {c.type === "circle" && (
+                          <div style={{ width: `${c.size * 2}px`, height: `${c.size * 2}px`, border: `${c.thickness}px solid ${c.color}`, borderRadius: "50%" }} />
+                        )}
+                        {c.type === "cross" && (
+                          <div style={{ position: "relative", width: "30px", height: "30px" }}>
+                            <div style={{ position: "absolute", top: `calc(50% - ${Math.min(c.gap || 3, 3) + Math.min(c.size, 8)}px)`, left: "50%", transform: "translateX(-50%)", width: `${c.thickness}px`, height: `${Math.min(c.size, 8)}px`, backgroundColor: c.color }} />
+                            <div style={{ position: "absolute", top: `calc(50% + ${Math.min(c.gap || 3, 3)}px)`, left: "50%", transform: "translateX(-50%)", width: `${c.thickness}px`, height: `${Math.min(c.size, 8)}px`, backgroundColor: c.color }} />
+                            <div style={{ position: "absolute", top: "50%", left: `calc(50% - ${Math.min(c.gap || 3, 3) + Math.min(c.size, 8)}px)`, transform: "translateY(-50%)", width: `${Math.min(c.size, 8)}px`, height: `${c.thickness}px`, backgroundColor: c.color }} />
+                            <div style={{ position: "absolute", top: "50%", left: `calc(50% + ${Math.min(c.gap || 3, 3)}px)`, transform: "translateY(-50%)", width: `${Math.min(c.size, 8)}px`, height: `${c.thickness}px`, backgroundColor: c.color }} />
+                          </div>
+                        )}
+                      </div>
+                      <span style={{ color: "white", fontSize: "9px", textAlign: "center" }}>{c.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <button
