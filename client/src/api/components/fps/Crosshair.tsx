@@ -1,17 +1,66 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { CROSSHAIRS, Crosshair as CrosshairType } from '../../../data/crosshairs';
-import { loadCrosshair } from '../../../utils/crosshairStorage';
+
+interface CustomCrosshair {
+  id: string;
+  name: string;
+  type: "dot" | "cross" | "circle";
+  size: number;
+  thickness?: number;
+  gap?: number;
+  color: string;
+}
 
 export default function Crosshair() {
-  const [activeCrosshair, setActiveCrosshair] = useState<CrosshairType>(CROSSHAIRS[0]);
+  const [activeCrosshair, setActiveCrosshair] = useState<CrosshairType | CustomCrosshair>(CROSSHAIRS[0]);
 
-  useEffect(() => {
-    const crosshairId = loadCrosshair();
+  const loadActiveCrosshair = useCallback(() => {
+    const crosshairId = localStorage.getItem("selectedCrosshairId");
+    
+    if (crosshairId === "custom") {
+      const customData = localStorage.getItem("customCrosshair");
+      if (customData) {
+        try {
+          const custom = JSON.parse(customData);
+          setActiveCrosshair({
+            id: "custom",
+            name: "Custom",
+            type: custom.type || "cross",
+            size: custom.size || 10,
+            thickness: custom.thickness || 2,
+            gap: custom.gap || 4,
+            color: custom.color || "#ffffff",
+          });
+          return;
+        } catch (e) {
+          console.error("Failed to parse custom crosshair:", e);
+        }
+      }
+    }
+    
     const found = CROSSHAIRS.find(c => c.id === crosshairId);
     if (found) {
       setActiveCrosshair(found);
+    } else {
+      setActiveCrosshair(CROSSHAIRS[0]);
     }
   }, []);
+
+  useEffect(() => {
+    loadActiveCrosshair();
+    
+    const handleCrosshairChange = () => {
+      loadActiveCrosshair();
+    };
+    
+    window.addEventListener('storage', handleCrosshairChange);
+    window.addEventListener('crosshairChanged', handleCrosshairChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleCrosshairChange);
+      window.removeEventListener('crosshairChanged', handleCrosshairChange);
+    };
+  }, [loadActiveCrosshair]);
 
   const renderCrosshair = () => {
     const { type, size, thickness = 2, gap = 4, color } = activeCrosshair;

@@ -17,6 +17,9 @@ import "@fontsource/inter";
 
 import { useSettings } from "./lib/stores/useSettings"; // 👈 new
 
+import Crosshair from "./api/components/fps/Crosshair";
+
+
 // Weapon definitions
 interface Weapon {
   name: string;
@@ -2229,58 +2232,82 @@ function InventoryPage({
                 CROSSHAIR
               </h3>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "8px" }}>
-                {[
-                  { id: "classic-dot", name: "Classic Dot", type: "dot", size: 4, color: "#ffffff" },
-                  { id: "large-dot", name: "Large Dot", type: "dot", size: 8, color: "#ff5555" },
-                  { id: "thin-cross", name: "Thin Cross", type: "cross", size: 10, thickness: 1, gap: 4, color: "#ffffff" },
-                  { id: "bold-cross", name: "Bold Cross", type: "cross", size: 14, thickness: 3, gap: 6, color: "#00ff99" },
-                  { id: "tight-cross", name: "Tight Cross", type: "cross", size: 8, thickness: 2, gap: 2, color: "#ffff00" },
-                  { id: "circle-small", name: "Small Circle", type: "circle", size: 6, thickness: 2, color: "#ffffff" },
-                  { id: "circle-large", name: "Large Circle", type: "circle", size: 12, thickness: 3, color: "#ff8800" },
-                  { id: "minimal-green", name: "Minimal Green", type: "dot", size: 3, color: "#00ff00" },
-                  { id: "sniper-cross", name: "Sniper Cross", type: "cross", size: 18, thickness: 1, gap: 10, color: "#ff0000" },
-                  { id: "training-default", name: "Training Default", type: "cross", size: 12, thickness: 2, gap: 5, color: "#ffffff" },
-                ].map((c) => {
-                  const isSelected = selectedCrosshair === c.id;
-                  return (
-                    <div
-                      key={c.id}
-                      onClick={() => {
-                        setSelectedCrosshair(c.id);
-                        localStorage.setItem("selectedCrosshairId", c.id);
-                      }}
-                      style={{
-                        padding: "10px 5px",
-                        background: isSelected ? "rgba(76, 175, 80, 0.5)" : "rgba(255,255,255,0.1)",
-                        border: isSelected ? "2px solid #4CAF50" : "1px solid rgba(255,255,255,0.3)",
-                        borderRadius: "6px",
-                        cursor: "pointer",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        gap: "6px",
-                      }}
-                    >
-                      <div style={{ width: "30px", height: "30px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", borderRadius: "4px" }}>
-                        {c.type === "dot" && (
-                          <div style={{ width: `${c.size}px`, height: `${c.size}px`, backgroundColor: c.color, borderRadius: "50%" }} />
-                        )}
-                        {c.type === "circle" && (
-                          <div style={{ width: `${c.size * 2}px`, height: `${c.size * 2}px`, border: `${c.thickness}px solid ${c.color}`, borderRadius: "50%" }} />
-                        )}
-                        {c.type === "cross" && (
-                          <div style={{ position: "relative", width: "30px", height: "30px" }}>
-                            <div style={{ position: "absolute", top: `calc(50% - ${Math.min(c.gap || 3, 3) + Math.min(c.size, 8)}px)`, left: "50%", transform: "translateX(-50%)", width: `${c.thickness}px`, height: `${Math.min(c.size, 8)}px`, backgroundColor: c.color }} />
-                            <div style={{ position: "absolute", top: `calc(50% + ${Math.min(c.gap || 3, 3)}px)`, left: "50%", transform: "translateX(-50%)", width: `${c.thickness}px`, height: `${Math.min(c.size, 8)}px`, backgroundColor: c.color }} />
-                            <div style={{ position: "absolute", top: "50%", left: `calc(50% - ${Math.min(c.gap || 3, 3) + Math.min(c.size, 8)}px)`, transform: "translateY(-50%)", width: `${Math.min(c.size, 8)}px`, height: `${c.thickness}px`, backgroundColor: c.color }} />
-                            <div style={{ position: "absolute", top: "50%", left: `calc(50% + ${Math.min(c.gap || 3, 3)}px)`, transform: "translateY(-50%)", width: `${Math.min(c.size, 8)}px`, height: `${c.thickness}px`, backgroundColor: c.color }} />
-                          </div>
-                        )}
+                {(() => {
+                  const predefinedCrosshairs = [
+                    { id: "classic-dot", name: "Classic Dot", type: "dot", size: 4, color: "#ffffff", thickness: 2, gap: 4 },
+                    { id: "large-dot", name: "Large Dot", type: "dot", size: 8, color: "#ff5555", thickness: 2, gap: 4 },
+                    { id: "thin-cross", name: "Thin Cross", type: "cross", size: 10, thickness: 1, gap: 4, color: "#ffffff" },
+                    { id: "bold-cross", name: "Bold Cross", type: "cross", size: 14, thickness: 3, gap: 6, color: "#00ff99" },
+                    { id: "tight-cross", name: "Tight Cross", type: "cross", size: 8, thickness: 2, gap: 2, color: "#ffff00" },
+                    { id: "circle-small", name: "Small Circle", type: "circle", size: 6, thickness: 2, color: "#ffffff", gap: 4 },
+                    { id: "circle-large", name: "Large Circle", type: "circle", size: 12, thickness: 3, color: "#ff8800", gap: 4 },
+                    { id: "minimal-green", name: "Minimal Green", type: "dot", size: 3, color: "#00ff00", thickness: 2, gap: 4 },
+                    { id: "sniper-cross", name: "Sniper Cross", type: "cross", size: 18, thickness: 1, gap: 10, color: "#ff0000" },
+                    { id: "training-default", name: "Training Default", type: "cross", size: 12, thickness: 2, gap: 5, color: "#ffffff" },
+                  ];
+                  
+                  const customData = localStorage.getItem("customCrosshair");
+                  let customCrosshairItem = null;
+                  if (customData) {
+                    try {
+                      const parsed = JSON.parse(customData);
+                      customCrosshairItem = {
+                        id: "custom",
+                        name: "Custom",
+                        type: parsed.type || "cross",
+                        size: parsed.size || 10,
+                        thickness: parsed.thickness || 2,
+                        gap: parsed.gap || 4,
+                        color: parsed.color || "#ffffff",
+                      };
+                    } catch (e) {}
+                  }
+                  
+                  const allCrosshairs = customCrosshairItem ? [...predefinedCrosshairs, customCrosshairItem] : predefinedCrosshairs;
+                  
+                  return allCrosshairs.map((c) => {
+                    const isSelected = selectedCrosshair === c.id;
+                    return (
+                      <div
+                        key={c.id}
+                        onClick={() => {
+                          setSelectedCrosshair(c.id);
+                          localStorage.setItem("selectedCrosshairId", c.id);
+                          window.dispatchEvent(new Event("crosshairChanged"));
+                        }}
+                        style={{
+                          padding: "10px 5px",
+                          background: isSelected ? "rgba(76, 175, 80, 0.5)" : c.id === "custom" ? "rgba(255, 215, 0, 0.2)" : "rgba(255,255,255,0.1)",
+                          border: isSelected ? "2px solid #4CAF50" : c.id === "custom" ? "2px solid #FFD700" : "1px solid rgba(255,255,255,0.3)",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: "6px",
+                        }}
+                      >
+                        <div style={{ width: "30px", height: "30px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", borderRadius: "4px", position: "relative" }}>
+                          {c.type === "dot" && (
+                            <div style={{ width: `${c.size}px`, height: `${c.size}px`, backgroundColor: c.color, borderRadius: "50%" }} />
+                          )}
+                          {c.type === "circle" && (
+                            <div style={{ width: `${Math.min(c.size * 2, 24)}px`, height: `${Math.min(c.size * 2, 24)}px`, border: `${c.thickness}px solid ${c.color}`, borderRadius: "50%" }} />
+                          )}
+                          {c.type === "cross" && (
+                            <>
+                              <div style={{ position: "absolute", top: `calc(50% - ${Math.min(c.gap || 3, 3) + Math.min(c.size, 8)}px)`, left: "50%", transform: "translateX(-50%)", width: `${c.thickness}px`, height: `${Math.min(c.size, 8)}px`, backgroundColor: c.color }} />
+                              <div style={{ position: "absolute", top: `calc(50% + ${Math.min(c.gap || 3, 3)}px)`, left: "50%", transform: "translateX(-50%)", width: `${c.thickness}px`, height: `${Math.min(c.size, 8)}px`, backgroundColor: c.color }} />
+                              <div style={{ position: "absolute", top: "50%", left: `calc(50% - ${Math.min(c.gap || 3, 3) + Math.min(c.size, 8)}px)`, transform: "translateY(-50%)", width: `${Math.min(c.size, 8)}px`, height: `${c.thickness}px`, backgroundColor: c.color }} />
+                              <div style={{ position: "absolute", top: "50%", left: `calc(50% + ${Math.min(c.gap || 3, 3)}px)`, transform: "translateY(-50%)", width: `${Math.min(c.size, 8)}px`, height: `${c.thickness}px`, backgroundColor: c.color }} />
+                            </>
+                          )}
+                        </div>
+                        <span style={{ color: c.id === "custom" ? "#FFD700" : "white", fontSize: "9px", textAlign: "center", fontWeight: c.id === "custom" ? "bold" : "normal" }}>{c.name}</span>
                       </div>
-                      <span style={{ color: "white", fontSize: "9px", textAlign: "center" }}>{c.name}</span>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </div>
             </div>
 
@@ -2922,6 +2949,26 @@ function SettingsPage({
   const [message, setMessage] = useState("");
   const [listeningFor, setListeningFor] = useState<string | null>(null);
 
+  // Custom crosshair state
+  const [customCrosshair, setCustomCrosshair] = useState(() => {
+    const saved = localStorage.getItem("customCrosshair");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return { type: "cross", size: 10, thickness: 2, gap: 4, color: "#ffffff" };
+      }
+    }
+    return { type: "cross", size: 10, thickness: 2, gap: 4, color: "#ffffff" };
+  });
+
+  const saveCustomCrosshair = () => {
+    localStorage.setItem("customCrosshair", JSON.stringify(customCrosshair));
+    localStorage.setItem("selectedCrosshairId", "custom");
+    window.dispatchEvent(new Event("crosshairChanged"));
+    setMessage("Custom crosshair saved and equipped!");
+  };
+
   // Keybind display names
   const keybindLabels: Record<string, string> = {
     move_forward_key: "Move Forward",
@@ -3160,13 +3207,169 @@ function SettingsPage({
               ))}
             </div>
 
+            {/* Custom Crosshair Creator */}
+            <h2
+              style={{
+                fontSize: "24px",
+                marginBottom: "15px",
+                marginTop: "30px",
+                textAlign: "left",
+              }}
+            >
+              Custom Crosshair
+            </h2>
+            <p
+              style={{
+                fontSize: "14px",
+                opacity: 0.8,
+                marginBottom: "15px",
+                textAlign: "left",
+              }}
+            >
+              Create your own crosshair. After saving, go to Loadout to equip it.
+            </p>
+
+            <div style={{ background: "rgba(255,255,255,0.1)", padding: "20px", borderRadius: "10px", marginBottom: "20px" }}>
+              {/* Preview */}
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "20px" }}>
+                <div style={{ width: "80px", height: "80px", background: "rgba(0,0,0,0.8)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                  {customCrosshair.type === "dot" && (
+                    <div style={{ width: `${customCrosshair.size}px`, height: `${customCrosshair.size}px`, backgroundColor: customCrosshair.color, borderRadius: "50%" }} />
+                  )}
+                  {customCrosshair.type === "circle" && (
+                    <div style={{ width: `${customCrosshair.size * 2}px`, height: `${customCrosshair.size * 2}px`, border: `${customCrosshair.thickness}px solid ${customCrosshair.color}`, borderRadius: "50%" }} />
+                  )}
+                  {customCrosshair.type === "cross" && (
+                    <>
+                      <div style={{ position: "absolute", top: `calc(50% - ${customCrosshair.gap + customCrosshair.size}px)`, left: "50%", transform: "translateX(-50%)", width: `${customCrosshair.thickness}px`, height: `${customCrosshair.size}px`, backgroundColor: customCrosshair.color }} />
+                      <div style={{ position: "absolute", top: `calc(50% + ${customCrosshair.gap}px)`, left: "50%", transform: "translateX(-50%)", width: `${customCrosshair.thickness}px`, height: `${customCrosshair.size}px`, backgroundColor: customCrosshair.color }} />
+                      <div style={{ position: "absolute", top: "50%", left: `calc(50% - ${customCrosshair.gap + customCrosshair.size}px)`, transform: "translateY(-50%)", width: `${customCrosshair.size}px`, height: `${customCrosshair.thickness}px`, backgroundColor: customCrosshair.color }} />
+                      <div style={{ position: "absolute", top: "50%", left: `calc(50% + ${customCrosshair.gap}px)`, transform: "translateY(-50%)", width: `${customCrosshair.size}px`, height: `${customCrosshair.thickness}px`, backgroundColor: customCrosshair.color }} />
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Type Selection */}
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ fontSize: "14px", fontWeight: "bold", display: "block", marginBottom: "8px" }}>Type</label>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  {["dot", "cross", "circle"].map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setCustomCrosshair((prev: any) => ({ ...prev, type: t }))}
+                      style={{
+                        padding: "8px 16px",
+                        background: customCrosshair.type === t ? "#4CAF50" : "rgba(255,255,255,0.2)",
+                        border: "none",
+                        borderRadius: "6px",
+                        color: "white",
+                        cursor: "pointer",
+                        fontWeight: "bold",
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Color */}
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ fontSize: "14px", fontWeight: "bold", display: "block", marginBottom: "8px" }}>Color</label>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {["#ffffff", "#00ff00", "#ff0000", "#ffff00", "#00ffff", "#ff00ff", "#ff8800", "#00ff99"].map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setCustomCrosshair((prev: any) => ({ ...prev, color: c }))}
+                      style={{
+                        width: "30px",
+                        height: "30px",
+                        background: c,
+                        border: customCrosshair.color === c ? "3px solid white" : "2px solid rgba(255,255,255,0.3)",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                      }}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    value={customCrosshair.color}
+                    onChange={(e) => setCustomCrosshair((prev: any) => ({ ...prev, color: e.target.value }))}
+                    style={{ width: "30px", height: "30px", border: "none", cursor: "pointer" }}
+                  />
+                </div>
+              </div>
+
+              {/* Size */}
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ fontSize: "14px", fontWeight: "bold", display: "block", marginBottom: "8px" }}>Size: {customCrosshair.size}</label>
+                <input
+                  type="range"
+                  min="2"
+                  max="20"
+                  value={customCrosshair.size}
+                  onChange={(e) => setCustomCrosshair((prev: any) => ({ ...prev, size: parseInt(e.target.value) }))}
+                  style={{ width: "100%" }}
+                />
+              </div>
+
+              {/* Thickness (for cross and circle) */}
+              {(customCrosshair.type === "cross" || customCrosshair.type === "circle") && (
+                <div style={{ marginBottom: "15px" }}>
+                  <label style={{ fontSize: "14px", fontWeight: "bold", display: "block", marginBottom: "8px" }}>Thickness: {customCrosshair.thickness}</label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="6"
+                    value={customCrosshair.thickness}
+                    onChange={(e) => setCustomCrosshair((prev: any) => ({ ...prev, thickness: parseInt(e.target.value) }))}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              )}
+
+              {/* Gap (for cross only) */}
+              {customCrosshair.type === "cross" && (
+                <div style={{ marginBottom: "15px" }}>
+                  <label style={{ fontSize: "14px", fontWeight: "bold", display: "block", marginBottom: "8px" }}>Gap: {customCrosshair.gap}</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="15"
+                    value={customCrosshair.gap}
+                    onChange={(e) => setCustomCrosshair((prev: any) => ({ ...prev, gap: parseInt(e.target.value) }))}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              )}
+
+              <button
+                onClick={saveCustomCrosshair}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  fontSize: "16px",
+                  fontWeight: "bold",
+                  background: "#4CAF50",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                }}
+              >
+                SAVE CUSTOM CROSSHAIR
+              </button>
+            </div>
+
             {/* Message */}
             {message && (
               <p
                 style={{
                   marginTop: "20px",
                   padding: "10px",
-                  background: message.includes("success")
+                  background: message.includes("success") || message.includes("saved")
                     ? "rgba(76, 175, 80, 0.3)"
                     : "rgba(244, 67, 54, 0.3)",
                   borderRadius: "8px",
@@ -6056,44 +6259,7 @@ function HUD({
         fontFamily: "Inter, sans-serif",
       }}
     >
-      {/* Crosshair */}
-      <div
-        style={{
-          position: "fixed",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          width: "20px",
-          height: "20px",
-          pointerEvents: "none",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            width: "2px",
-            height: "20px",
-            backgroundColor: "white",
-            boxShadow: "0 0 2px black",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            width: "20px",
-            height: "2px",
-            backgroundColor: "white",
-            boxShadow: "0 0 2px black",
-          }}
-        />
-      </div>
-
+      <Crosshair />
       {/* Health */}
       <div
         style={{
