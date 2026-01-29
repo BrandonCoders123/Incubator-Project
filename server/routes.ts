@@ -650,17 +650,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Save leaderboard entry on level completion - requires authentication
+  // Save leaderboard entry on level/wave completion - requires authentication
   app.post("/api/leaderboard", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId!;
-      const { fastestRunTime } = req.body;
+      const { fastestRunTime, totalKills } = req.body;
       
-      if (!fastestRunTime) {
-        return res.status(400).json({ error: "fastestRunTime is required" });
+      // At least one stat must be provided
+      if (!fastestRunTime && (totalKills === undefined || totalKills === null)) {
+        return res.status(400).json({ error: "At least fastestRunTime or totalKills is required" });
       }
       
-      await storage.saveLeaderboardEntry(userId, fastestRunTime);
+      await storage.saveLeaderboardEntry(userId, fastestRunTime || null, totalKills ?? null);
       res.json({ success: true, message: "Leaderboard entry saved" });
     } catch (error) {
       console.error("Leaderboard save error:", error);

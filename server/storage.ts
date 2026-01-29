@@ -51,7 +51,7 @@ export interface IStorage {
   
   // Leaderboard methods
   getLeaderboard(category: string, limit?: number): Promise<any[]>;
-  saveLeaderboardEntry(userId: number, fastestRunTime: string): Promise<void>;
+  saveLeaderboardEntry(userId: number, fastestRunTime: string | null, totalKills: number | null): Promise<void>;
 }
 
 /**
@@ -767,38 +767,54 @@ class MySQLStorage implements IStorage {
     }
   }
 
-  async saveLeaderboardEntry(userId: number, fastestRunTime: string): Promise<void> {
+  async saveLeaderboardEntry(userId: number, fastestRunTime: string | null, totalKills: number | null): Promise<void> {
     try {
       // Check if user already has a leaderboard entry
       const [existing] = await this.pool.execute(
-        `SELECT leaderboard_id, fastest_run_time FROM leaderboard_2 WHERE user_id = ?`,
+        `SELECT leaderboard_id, fastest_run_time, total_kills FROM leaderboard_2 WHERE user_id = ?`,
         [userId]
       );
       
       const existingRows = existing as any[];
       
       if (existingRows.length > 0) {
-        // User has existing entry - only update if new time is faster
-        // Compare times - lower is better for fastest run
         const currentTime = existingRows[0].fastest_run_time;
+        const currentKills = existingRows[0].total_kills || 0;
         
-        // Only update if new time is faster (smaller) or if no time was set before
-        if (!currentTime || fastestRunTime < currentTime) {
+        // Build dynamic update query
+        const updates: string[] = [];
+        const params: any[] = [];
+        
+        // Update fastest_run_time only if new time is faster
+        if (fastestRunTime && (!currentTime || fastestRunTime < currentTime)) {
+          updates.push('fastest_run_time = ?');
+          params.push(fastestRunTime);
+          console.log(`Updated fastest time for user ${userId}: ${fastestRunTime}`);
+        }
+        
+        // Update total_kills - accumulate kills over time
+        if (totalKills !== null && totalKills > 0) {
+          const newTotalKills = currentKills + totalKills;
+          updates.push('total_kills = ?');
+          params.push(newTotalKills);
+          console.log(`Updated total kills for user ${userId}: ${currentKills} + ${totalKills} = ${newTotalKills}`);
+        }
+        
+        if (updates.length > 0) {
+          updates.push('date_recorded = NOW()');
+          params.push(userId);
           await this.pool.execute(
-            `UPDATE leaderboard_2 SET fastest_run_time = ?, date_recorded = NOW() WHERE user_id = ?`,
-            [fastestRunTime, userId]
+            `UPDATE leaderboard_2 SET ${updates.join(', ')} WHERE user_id = ?`,
+            params
           );
-          console.log(`Updated leaderboard entry for user ${userId} with faster time: ${fastestRunTime}`);
-        } else {
-          console.log(`Kept existing faster time for user ${userId}: ${currentTime} vs new: ${fastestRunTime}`);
         }
       } else {
         // Create new entry
         await this.pool.execute(
-          `INSERT INTO leaderboard_2 (user_id, fastest_run_time, date_recorded) VALUES (?, ?, NOW())`,
-          [userId, fastestRunTime]
+          `INSERT INTO leaderboard_2 (user_id, fastest_run_time, total_kills, date_recorded) VALUES (?, ?, ?, NOW())`,
+          [userId, fastestRunTime, totalKills || 0]
         );
-        console.log(`Created new leaderboard entry for user ${userId} with time: ${fastestRunTime}`);
+        console.log(`Created new leaderboard entry for user ${userId}: time=${fastestRunTime}, kills=${totalKills}`);
       }
     } catch (err) {
       console.error('Error saving leaderboard entry:', err);

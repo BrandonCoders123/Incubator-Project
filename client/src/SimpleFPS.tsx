@@ -4245,6 +4245,67 @@ function HUD({
     }
   }, [gameState.gamePhase]);
 
+  // Save leaderboard data after each level/wave completion
+  const lastSavedGameStart = React.useRef<number | null>(null);
+  const savedLevelsThisRun = React.useRef<Set<string>>(new Set());
+  
+  useEffect(() => {
+    // Reset tracking when a new game run starts
+    if (gameState.gameStartTime && gameState.gameStartTime !== lastSavedGameStart.current) {
+      lastSavedGameStart.current = gameState.gameStartTime;
+      savedLevelsThisRun.current = new Set();
+    }
+    
+    // Only save for logged-in users (not guests)
+    if (gameState.user.isGuest) return;
+    
+    // Build unique key for this level completion
+    const saveKey = `${gameState.gamePhase}_level${gameState.level.currentLevel}_run${gameState.gameStartTime}`;
+    
+    // Save when completing a level (levelTransition) or winning (victory)
+    const shouldSave = 
+      (gameState.gamePhase === "levelTransition" || gameState.gamePhase === "victory") &&
+      !savedLevelsThisRun.current.has(saveKey);
+    
+    if (!shouldSave) return;
+    
+    // Mark as saved to prevent duplicate saves
+    savedLevelsThisRun.current.add(saveKey);
+    
+    // Calculate run time if available (only for victory)
+    let fastestRunTime: string | null = null;
+    if (gameState.gamePhase === "victory" && gameState.gameStartTime) {
+      const runTimeMs = Date.now() - gameState.gameStartTime;
+      const totalSeconds = Math.floor(runTimeMs / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      fastestRunTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    // Get kills from this level
+    const killsThisLevel = gameState.level.killsThisLevel;
+    
+    // Save to leaderboard
+    fetch("/api/leaderboard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        fastestRunTime: fastestRunTime,
+        totalKills: killsThisLevel,
+      }),
+    })
+      .then((res) => {
+        if (res.ok) {
+          console.log(`Leaderboard saved: phase=${gameState.gamePhase}, kills=${killsThisLevel}, time=${fastestRunTime}`);
+        } else {
+          console.error("Failed to save leaderboard entry");
+        }
+      })
+      .catch((err) => console.error("Error saving leaderboard:", err));
+  }, [gameState.gamePhase, gameState.level.currentLevel, gameState.level.killsThisLevel, gameState.gameStartTime, gameState.user.isGuest]);
+
   // Currency bundle options (mock purchases - no real payment yet)
   const currencyBundles = [
     { id: 1, price: "$1", gold: 100, popular: false },
