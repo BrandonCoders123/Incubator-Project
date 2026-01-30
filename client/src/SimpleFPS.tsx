@@ -19,6 +19,9 @@ import { useSettings } from "./lib/stores/useSettings"; // 👈 new
 
 import Crosshair from "./api/components/fps/Crosshair";
 
+import Menu from "./api/components/fps/Menu";
+import { useGame } from "./lib/stores/useGame";
+
 
 // Weapon definitions
 interface Weapon {

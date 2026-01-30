@@ -1,43 +1,37 @@
 import { create } from "zustand";
-import { subscribeWithSelector } from "zustand/middleware";
 
-export type GamePhase = "ready" | "playing" | "ended";
+/**
+ * Game modes
+ */
+export type GameMode = "story" | "endless";
 
+/**
+ * Game phases
+ */
+export type GamePhase =
+  | "menu"
+  | "playing"
+  | "levelTransition"
+  | "victory"
+  | "gameover";
+
+/**
+ * Game store
+ */
 interface GameState {
-  phase: GamePhase;
-  
-  // Actions
-  start: () => void;
-  restart: () => void;
-  end: () => void;
+  gamePhase: GamePhase;
+  setGamePhase: (phase: GamePhase) => void;
+
+  gameMode: GameMode;
+  setGameMode: (mode: GameMode) => void;
 }
 
-export const useGame = create<GameState>()(
-  subscribeWithSelector((set) => ({
-    phase: "ready",
-    
-    start: () => {
-      set((state) => {
-        // Only transition from ready to playing
-        if (state.phase === "ready") {
-          return { phase: "playing" };
-        }
-        return {};
-      });
-    },
-    
-    restart: () => {
-      set(() => ({ phase: "ready" }));
-    },
-    
-    end: () => {
-      set((state) => {
-        // Only transition from playing to ended
-        if (state.phase === "playing") {
-          return { phase: "ended" };
-        }
-        return {};
-      });
-    }
-  }))
-);
+export const useGame = create<GameState>((set) => ({
+  // Default state
+  gamePhase: "menu",
+  gameMode: "story",
+
+  // Setters
+  setGamePhase: (phase) => set({ gamePhase: phase }),
+  setGameMode: (mode) => set({ gameMode: mode }),
+}));
