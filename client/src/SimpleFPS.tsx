@@ -6686,10 +6686,12 @@ function Game() {
   );
 }
 
+// Main App
 export default function SimpleFPS() {
+  // 👇 grab the current keybindings from your settings store
   const { keybindings } = useSettings();
-  const { gameState } = useFPS(); // 👈 THIS WAS MISSING
 
+  // 👇 convert { forward: ["KeyW"], ... } into the array that KeyboardControls expects
   const controls = useMemo(
     () =>
       Object.entries(keybindings).map(([name, keys]) => ({
@@ -6698,11 +6700,6 @@ export default function SimpleFPS() {
       })),
     [keybindings],
   );
-
-  // ✅ DO NOT RENDER THE GAME UNLESS WE ARE PLAYING
-  if (gameState !== "playing") {
-    return <Menu />;
-  }
 
   return (
     <div style={{ width: "100vw", height: "100vh", overflow: "hidden" }}>
