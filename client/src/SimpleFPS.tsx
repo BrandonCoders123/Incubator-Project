@@ -4288,6 +4288,61 @@ function HUD({
       .catch((err) => console.error("Error saving leaderboard:", err));
   }, [gameState.gamePhase, gameState.gameStartTime, gameState.story.totalKills, gameState.user.isGuest]);
 
+  // Save total kills to localStorage after every wave (level transition)
+  const levelTransitionSavedRef = React.useRef<number>(-1);
+  
+  useEffect(() => {
+    if (gameState.gamePhase !== "levelTransition") return;
+    
+    // Prevent duplicate saves for the same level
+    if (levelTransitionSavedRef.current === gameState.level.currentLevel) return;
+    levelTransitionSavedRef.current = gameState.level.currentLevel;
+    
+    const totalKills = gameState.story.totalKills;
+    const savedKills = getLocalStorage("savedTotalKills") || 0;
+    
+    // Only save if current kills are higher
+    if (totalKills > savedKills) {
+      setLocalStorage("savedTotalKills", totalKills);
+      console.log(`Saved total kills after wave: ${totalKills}`);
+    }
+  }, [gameState.gamePhase, gameState.level.currentLevel, gameState.story.totalKills]);
+
+  // Save fastest time to localStorage when completing the whole game (victory)
+  const fastestTimeSavedRef = React.useRef<number | null>(null);
+  
+  useEffect(() => {
+    if (gameState.gamePhase !== "victory") return;
+    
+    // Prevent duplicate saves for the same victory
+    if (fastestTimeSavedRef.current === gameState.gameStartTime) return;
+    fastestTimeSavedRef.current = gameState.gameStartTime;
+    
+    if (gameState.gameStartTime) {
+      const runTimeMs = Date.now() - gameState.gameStartTime;
+      const savedFastestTime = getLocalStorage("savedFastestTime") as number | null;
+      
+      // Only save if this is a new best time (or first completion)
+      if (savedFastestTime === null || runTimeMs < savedFastestTime) {
+        setLocalStorage("savedFastestTime", runTimeMs);
+        const totalSeconds = Math.floor(runTimeMs / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        console.log(`New fastest time saved: ${timeStr}`);
+      }
+    }
+    
+    // Also save final total kills on victory
+    const totalKills = gameState.story.totalKills;
+    const savedKills = getLocalStorage("savedTotalKills") || 0;
+    if (totalKills > savedKills) {
+      setLocalStorage("savedTotalKills", totalKills);
+      console.log(`Saved final total kills: ${totalKills}`);
+    }
+  }, [gameState.gamePhase, gameState.gameStartTime, gameState.story.totalKills]);
+
   // Currency bundle options (mock purchases - no real payment yet)
   const currencyBundles = [
     { id: 1, price: "$1", gold: 100, popular: false },
