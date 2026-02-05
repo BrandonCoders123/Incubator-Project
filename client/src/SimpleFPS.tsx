@@ -16,6 +16,7 @@ import * as THREE from "three";
 import "@fontsource/inter";
 
 import { useSettings } from "./lib/stores/useSettings"; // 👈 new
+import { getLocalStorage, setLocalStorage } from "./lib/utils";
 
 import Crosshair from "./api/components/fps/Crosshair";
 
