@@ -264,6 +264,7 @@ interface GameState {
   loadout: Record<number, number>; // Tier -> weapon ID mapping (one weapon per tier)
   isAdmin: boolean; // Whether user has admin privileges
   gameStartTime: number | null; // Timestamp when game started (for leaderboard run time)
+  gameMode: "story" | "endless"; // Game mode: story (with levels) or endless (wave survival)
 }
 
 interface ShopItem {
@@ -4343,6 +4344,47 @@ function HUD({
     }
   }, [gameState.gamePhase, gameState.gameStartTime, gameState.story.totalKills]);
 
+  // Save total kills to leaderboard on death in endless mode
+  const endlessDeathSavedRef = React.useRef<number | null>(null);
+  
+  useEffect(() => {
+    // Only trigger on gameover in endless mode
+    if (gameState.gamePhase !== "gameover") return;
+    if (gameState.gameMode !== "endless") return;
+    
+    // Only save for logged-in users (not guests)
+    if (gameState.user.isGuest) return;
+    
+    // Prevent duplicate saves using gameStartTime as unique identifier
+    if (endlessDeathSavedRef.current === gameState.gameStartTime) return;
+    endlessDeathSavedRef.current = gameState.gameStartTime;
+    
+    const totalKills = gameState.story.totalKills;
+    
+    // Save to leaderboard
+    fetch("/api/leaderboard", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ totalKills }),
+    })
+      .then((res) => {
+        if (res.ok) {
+          console.log(`Endless mode: Saved ${totalKills} kills to leaderboard on death`);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to save endless mode kills to leaderboard:", error);
+      });
+    
+    // Also save to localStorage
+    const savedKills = getLocalStorage("savedTotalKills") || 0;
+    if (totalKills > savedKills) {
+      setLocalStorage("savedTotalKills", totalKills);
+      console.log(`Saved endless mode total kills to localStorage: ${totalKills}`);
+    }
+  }, [gameState.gamePhase, gameState.gameMode, gameState.gameStartTime, gameState.story.totalKills, gameState.user.isGuest]);
+
   // Currency bundle options (mock purchases - no real payment yet)
   const currencyBundles = [
     { id: 1, price: "$1", gold: 100, popular: false },
@@ -4931,6 +4973,7 @@ function HUD({
                 setGameState((prev) => ({
                   ...prev,
                   gamePhase: "introCutscene",
+                  gameMode: "story",
                 }));
               }}
               style={{
@@ -4981,6 +5024,87 @@ function HUD({
               }}
             >
               🏆 LEADERBOARD
+            </button>
+
+            <button
+              onClick={() => {
+                setGameState((prev) => ({
+                  ...prev,
+                  gamePhase: "playing",
+                  gameMode: "endless",
+                  gameStartTime: Date.now(),
+                  health: prev.maxHealth,
+                  ammo: 12,
+                  coins: 0,
+                  enemies: [],
+                  bullets: [],
+                  enemyProjectiles: [],
+                  story: {
+                    currentSettlement: 0,
+                    alliesRescued: 0,
+                    settlementsConquered: [],
+                    totalKills: 0,
+                  },
+                  level: {
+                    currentLevel: 1,
+                    killsThisLevel: 0,
+                    giantsSpawnedThisLevel: 0,
+                  },
+                }));
+                document.body.requestPointerLock();
+              }}
+              style={{
+                padding: "20px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                background: "#E91E63",
+                color: "white",
+                border: "none",
+                borderRadius: "12px",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                transition: "transform 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1.05)";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1)";
+              }}
+            >
+              🌊 ENDLESS WAVE
+            </button>
+
+            <button
+              onClick={() => {
+                setGameState((prev) => ({
+                  ...prev,
+                  gamePhase: "settings",
+                  previousGamePhase: "menu",
+                }));
+              }}
+              style={{
+                padding: "20px",
+                fontSize: "20px",
+                fontWeight: "bold",
+                background: "#FF9800",
+                color: "white",
+                border: "none",
+                borderRadius: "12px",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                transition: "transform 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1.05)";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLButtonElement).style.transform = "scale(1)";
+              }}
+            >
+              ⚙️ SETTINGS
             </button>
 
             <button
@@ -5062,38 +5186,6 @@ function HUD({
               }}
             >
               🎒 INVENTORY
-            </button>
-
-            <button
-              onClick={() => {
-                setGameState((prev) => ({
-                  ...prev,
-                  gamePhase: "settings",
-                  previousGamePhase: "menu",
-                }));
-              }}
-              style={{
-                padding: "20px",
-                fontSize: "20px",
-                fontWeight: "bold",
-                background: "#FF9800",
-                color: "white",
-                border: "none",
-                borderRadius: "12px",
-                cursor: "pointer",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-                fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-                gridColumn: "1 / -1",
-                transition: "transform 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                (e.target as HTMLButtonElement).style.transform = "scale(1.05)";
-              }}
-              onMouseLeave={(e) => {
-                (e.target as HTMLButtonElement).style.transform = "scale(1)";
-              }}
-            >
-              ⚙️ SETTINGS
             </button>
           </div>
         </div>
@@ -6066,6 +6158,12 @@ function HUD({
             GAME OVER
           </h2>
           <div style={{ marginBottom: "30px", fontSize: "20px" }}>
+            {gameState.gameMode === "endless" && (
+              <div style={{ marginBottom: "10px" }}>
+                Total Kills:{" "}
+                <span style={{ color: "#E91E63" }}>{gameState.story.totalKills}</span>
+              </div>
+            )}
             <div style={{ marginBottom: "10px" }}>
               Total Coins:{" "}
               <span style={{ color: "#ffeb3b" }}>{gameState.coins}</span>
@@ -6076,7 +6174,9 @@ function HUD({
             </div>
             {!gameState.user.isGuest && (
               <div style={{ fontSize: "16px", opacity: 0.8 }}>
-                Currency added to your account!
+                {gameState.gameMode === "endless" 
+                  ? "Kills saved to leaderboard!" 
+                  : "Currency added to your account!"}
               </div>
             )}
           </div>
@@ -6107,10 +6207,11 @@ function HUD({
 
                 setGameState((prev) => ({
                   ...prev,
-                  health: 100,
+                  health: prev.maxHealth,
                   ammo: 12,
                   coins: 0,
                   gamePhase: "playing",
+                  gameStartTime: Date.now(),
                   enemies: [],
                   bullets: [],
                   lastDamageTime: 0,
@@ -6121,7 +6222,7 @@ function HUD({
                     totalKills: 0,
                   },
                   level: {
-                    currentLevel: 0,
+                    currentLevel: prev.gameMode === "endless" ? 1 : 0,
                     killsThisLevel: 0,
                     giantsSpawnedThisLevel: 0,
                   },
@@ -6665,6 +6766,7 @@ function Game() {
     loadout: { 1: 1, 2: 2, 3: 3, 4: 4 }, // Tier -> weapon ID: T1=Ketchup, T2=Mustard(default), T3=Topping, T4=Muffin
     isAdmin: false,
     gameStartTime: null,
+    gameMode: "story",
   });
 
   if (gameState.gamePhase !== "playing" && gameState.gamePhase !== "paused") {
