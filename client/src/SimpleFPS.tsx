@@ -2622,9 +2622,7 @@ function InventoryPage({
 function LeaderboardPage({ onBack }: { onBack: () => void }) {
   const [entries, setEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [category, setCategory] = useState<"time_played" | "kills" | "gold">(
-    "time_played",
-  );
+  const [category, setCategory] = useState<"fastest_time" | "kills">("kills");
 
   useEffect(() => {
     fetchLeaderboard();
@@ -2645,11 +2643,9 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const formatTime = (seconds: number): string => {
-    if (!seconds) return "0h 0m";
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours}h ${minutes}m`;
+  const formatRunTime = (timeStr: string | null): string => {
+    if (!timeStr) return "--:--:--";
+    return timeStr;
   };
 
   const formatNumber = (num: number): string => {
@@ -2661,12 +2657,10 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
 
   const getValue = (entry: any): string => {
     switch (category) {
-      case "time_played":
-        return formatTime(entry.time_played);
+      case "fastest_time":
+        return formatRunTime(entry.fastest_run_time);
       case "kills":
         return formatNumber(entry.total_kills);
-      case "gold":
-        return formatNumber(entry.gold_collected);
     }
   };
 
@@ -2742,9 +2736,8 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
         }}
       >
         {[
-          { key: "time_played" as const, label: "⏱️ Most Time Played" },
-          { key: "kills" as const, label: "💀 Most Kills" },
-          { key: "gold" as const, label: "💰 Most Gold" },
+          { key: "kills" as const, label: "💀 Total Kills" },
+          { key: "fastest_time" as const, label: "⏱️ Fastest Time" },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -2800,11 +2793,7 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
             <span>Rank</span>
             <span>Player</span>
             <span style={{ textAlign: "right" }}>
-              {category === "time_played"
-                ? "Time"
-                : category === "kills"
-                  ? "Kills"
-                  : "Gold"}
+              {category === "fastest_time" ? "Time" : "Kills"}
             </span>
           </div>
 
@@ -4248,36 +4237,23 @@ function HUD({
     }
   }, [gameState.gamePhase]);
 
-  // Save leaderboard data after each level/wave completion
-  const lastSavedGameStart = React.useRef<number | null>(null);
-  const savedLevelsThisRun = React.useRef<Set<string>>(new Set());
+  // Save leaderboard data only when completing the entire game (victory)
+  const victorySavedRef = React.useRef<number | null>(null);
   
   useEffect(() => {
-    // Reset tracking when a new game run starts
-    if (gameState.gameStartTime && gameState.gameStartTime !== lastSavedGameStart.current) {
-      lastSavedGameStart.current = gameState.gameStartTime;
-      savedLevelsThisRun.current = new Set();
-    }
+    // Only save on victory (completing entire campaign)
+    if (gameState.gamePhase !== "victory") return;
     
     // Only save for logged-in users (not guests)
     if (gameState.user.isGuest) return;
     
-    // Build unique key for this level completion
-    const saveKey = `${gameState.gamePhase}_level${gameState.level.currentLevel}_run${gameState.gameStartTime}`;
+    // Prevent duplicate saves for the same victory (using gameStartTime as unique identifier)
+    if (victorySavedRef.current === gameState.gameStartTime) return;
+    victorySavedRef.current = gameState.gameStartTime;
     
-    // Save when completing a level (levelTransition) or winning (victory)
-    const shouldSave = 
-      (gameState.gamePhase === "levelTransition" || gameState.gamePhase === "victory") &&
-      !savedLevelsThisRun.current.has(saveKey);
-    
-    if (!shouldSave) return;
-    
-    // Mark as saved to prevent duplicate saves
-    savedLevelsThisRun.current.add(saveKey);
-    
-    // Calculate run time if available (only for victory)
+    // Calculate run time
     let fastestRunTime: string | null = null;
-    if (gameState.gamePhase === "victory" && gameState.gameStartTime) {
+    if (gameState.gameStartTime) {
       const runTimeMs = Date.now() - gameState.gameStartTime;
       const totalSeconds = Math.floor(runTimeMs / 1000);
       const hours = Math.floor(totalSeconds / 3600);
@@ -4286,8 +4262,10 @@ function HUD({
       fastestRunTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
     
-    // Get kills from this level
-    const killsThisLevel = gameState.level.killsThisLevel;
+    // Get total kills from the entire run
+    const totalKills = gameState.story.totalKills;
+    
+    console.log(`Saving leaderboard: totalKills=${totalKills}, fastestRunTime=${fastestRunTime}`);
     
     // Save to leaderboard
     fetch("/api/leaderboard", {
@@ -4296,18 +4274,18 @@ function HUD({
       credentials: "include",
       body: JSON.stringify({
         fastestRunTime: fastestRunTime,
-        totalKills: killsThisLevel,
+        totalKills: totalKills,
       }),
     })
       .then((res) => {
         if (res.ok) {
-          console.log(`Leaderboard saved: phase=${gameState.gamePhase}, kills=${killsThisLevel}, time=${fastestRunTime}`);
+          console.log(`Leaderboard saved successfully: kills=${totalKills}, time=${fastestRunTime}`);
         } else {
-          console.error("Failed to save leaderboard entry");
+          res.text().then(text => console.error("Failed to save leaderboard entry:", text));
         }
       })
       .catch((err) => console.error("Error saving leaderboard:", err));
-  }, [gameState.gamePhase, gameState.level.currentLevel, gameState.level.killsThisLevel, gameState.gameStartTime, gameState.user.isGuest]);
+  }, [gameState.gamePhase, gameState.gameStartTime, gameState.story.totalKills, gameState.user.isGuest]);
 
   // Currency bundle options (mock purchases - no real payment yet)
   const currencyBundles = [

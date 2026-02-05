@@ -712,17 +712,16 @@ class MySQLStorage implements IStorage {
       );
       const columnNames = (columns as any[]).map(c => c.Field);
       
-      const hasTimePlayed = columnNames.includes('time_played');
+      const hasFastestRunTime = columnNames.includes('fastest_run_time');
       const hasTotalKills = columnNames.includes('total_kills');
-      const hasGoldCollected = columnNames.includes('gold_collected');
       
-      // Build dynamic query based on available columns
+      // Build dynamic query - include fastest_run_time and total_kills
       let selectFields = `lb.leaderboard_id, lb.user_id, a.username, lb.rank, lb.date_recorded`;
       
-      if (hasTimePlayed) {
-        selectFields += `, COALESCE(lb.time_played, 0) as time_played`;
+      if (hasFastestRunTime) {
+        selectFields += `, lb.fastest_run_time`;
       } else {
-        selectFields += `, 0 as time_played`;
+        selectFields += `, NULL as fastest_run_time`;
       }
       
       if (hasTotalKills) {
@@ -731,24 +730,22 @@ class MySQLStorage implements IStorage {
         selectFields += `, 0 as total_kills`;
       }
       
-      if (hasGoldCollected) {
-        selectFields += `, COALESCE(lb.gold_collected, 0) as gold_collected`;
-      } else {
-        selectFields += `, 0 as gold_collected`;
-      }
-      
-      // Determine order by clause based on category and available columns
+      // Determine order by clause based on category
       let orderBy: string;
+      let whereClause = "";
       switch (category) {
         case "kills":
           orderBy = hasTotalKills ? "total_kills DESC" : "lb.leaderboard_id DESC";
           break;
-        case "gold":
-          orderBy = hasGoldCollected ? "gold_collected DESC" : "lb.leaderboard_id DESC";
+        case "fastest_time":
+          // For fastest time, order ASC (lower is better) and only show entries with a time
+          orderBy = hasFastestRunTime ? "lb.fastest_run_time ASC" : "lb.leaderboard_id DESC";
+          if (hasFastestRunTime) {
+            whereClause = "WHERE lb.fastest_run_time IS NOT NULL";
+          }
           break;
-        case "time_played":
         default:
-          orderBy = hasTimePlayed ? "time_played DESC" : "lb.leaderboard_id DESC";
+          orderBy = hasTotalKills ? "total_kills DESC" : "lb.leaderboard_id DESC";
           break;
       }
       
@@ -756,6 +753,7 @@ class MySQLStorage implements IStorage {
         `SELECT ${selectFields}
         FROM leaderboard_2 lb
         LEFT JOIN accounts a ON lb.user_id = a.user_id
+        ${whereClause}
         ORDER BY ${orderBy}
         LIMIT ?`,
         [limit]
@@ -792,12 +790,11 @@ class MySQLStorage implements IStorage {
           console.log(`Updated fastest time for user ${userId}: ${fastestRunTime}`);
         }
         
-        // Update total_kills - accumulate kills over time
-        if (totalKills !== null && totalKills > 0) {
-          const newTotalKills = currentKills + totalKills;
+        // Update total_kills - use max value (best run, not accumulated)
+        if (totalKills !== null && totalKills > currentKills) {
           updates.push('total_kills = ?');
-          params.push(newTotalKills);
-          console.log(`Updated total kills for user ${userId}: ${currentKills} + ${totalKills} = ${newTotalKills}`);
+          params.push(totalKills);
+          console.log(`Updated total kills for user ${userId}: ${currentKills} -> ${totalKills}`);
         }
         
         if (updates.length > 0) {

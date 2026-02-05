@@ -640,7 +640,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Leaderboard - public route
   app.get("/api/leaderboard", async (req, res) => {
     try {
-      const category = (req.query.category as string) || "time_played";
+      const category = (req.query.category as string) || "kills";
       const limit = parseInt(req.query.limit as string) || 50;
       const entries = await storage.getLeaderboard(category, limit);
       res.json(entries);
