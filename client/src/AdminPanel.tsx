@@ -385,6 +385,7 @@ export default function AdminPanel() {
               </table>
             </div>
           </div>
+          </div>
         )}
 
         {activeTab === "items" && (
