@@ -37,6 +37,19 @@ export default function AdminPanel() {
   const [newItem, setNewItem] = useState({ name: "", type: "weapon_skin", price: 100, isCosmetic: true });
   const [editingItem, setEditingItem] = useState<Item | null>(null);
 
+  const [userSearch, setUserSearch] = useState("");
+
+  const filteredUsers = users.filter((user) => {
+    const q = userSearch.trim().toLowerCase();
+    if (!q) return true;
+    if (String(user.user_id).includes(q)) return true;
+    if (user.username.toLowerCase().includes(q)) return true;
+    if (String(user.warning_count ?? 0) === q) return true;
+    if (q === "banned" && user.is_banned) return true;
+    if (q === "active" && !user.is_banned) return true;
+    return false;
+  });
+
   const [banModal, setBanModal] = useState<{ userId: number; username: string } | null>(null);
   const [banReason, setBanReason] = useState("");
   const [warnModal, setWarnModal] = useState<{ userId: number; username: string } | null>(null);
@@ -260,6 +273,25 @@ export default function AdminPanel() {
         </div>
 
         {activeTab === "users" && (
+          <div>
+          <input
+            type="text"
+            placeholder="Search by name, ID, warnings (e.g. 2), or status (banned / active)..."
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "10px 14px",
+              marginBottom: "14px",
+              borderRadius: "7px",
+              border: "1px solid #333",
+              background: "#0f3460",
+              color: "white",
+              fontSize: "14px",
+              boxSizing: "border-box",
+              outline: "none",
+            }}
+          />
           <div style={{ background: "#16213e", borderRadius: "10px", overflow: "hidden" }}>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px" }}>
@@ -275,7 +307,7 @@ export default function AdminPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user) => (
+                  {filteredUsers.map((user) => (
                     <tr key={user.user_id} style={{ borderBottom: "1px solid #333" }}>
                       <td style={{ padding: "12px" }}>{user.user_id}</td>
                       <td style={{ padding: "12px" }}>{user.username}</td>
