@@ -163,22 +163,22 @@ interface EnemyArchetype {
 const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
   melee: {
     health: 100,
-    moveSpeed: 5,
-    damage: 10,
+    moveSpeed: 6,
+    damage: 15,
     attackInterval: 1000,
     color: "#ff0000",
   },
   ranged: {
     health: 100,
-    moveSpeed: 4,
+    moveSpeed: 5,
     damage: 10,
-    attackInterval: 2000, // Medium fire rate
+    attackInterval: 750, // Medium fire rate
     color: "#ff6600",
   },
   giant: {
     health: 400,
     moveSpeed: 3,
-    damage: 25,
+    damage: 50,
     attackInterval: 1500,
     color: "#990000",
     size: 2, // 2x larger than normal enemies
