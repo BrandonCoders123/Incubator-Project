@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useFPS } from '../../lib/stores/useFPS';
 import { useAudio } from '../../lib/stores/useAudio';
-import { sendGameEnd } from '../../api/backend';
+import { sendGameEnd, updateShots } from '../../api/backend';
 
 import Player from './Player';
 import Environment from './Environment';
@@ -10,12 +10,12 @@ import Enemy from './Enemy';
 import Bullet from './Bullet';
 
 export default function Game() {
-  const { 
-    gameState, 
-    enemies, 
-    bullets, 
-    updateBullets, 
-    spawnEnemy, 
+  const {
+    gameState,
+    enemies,
+    bullets,
+    updateBullets,
+    spawnEnemy,
     setPointerLocked,
     pauseGame,
     resumeGame,
