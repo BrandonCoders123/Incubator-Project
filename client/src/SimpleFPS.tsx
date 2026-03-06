@@ -4395,54 +4395,73 @@ function HUD({
     { id: 4, price: "$50", gold: 6000, popular: false },
   ];
 
-  // Handle mock currency purchase
-  const handleBuyCurrency = async (bundle: (typeof currencyBundles)[0]) => {
+  // Open payment modal for currency purchase
+  const handleBuyCurrency = (bundle: (typeof currencyBundles)[0]) => {
     if (gameState.user.isGuest) {
       alert("Please log in to purchase gold!");
       return;
     }
-
-    // Special case: if user has unlimited gold (67), don't allow purchases
     if (gameState.user.currency === 67) {
       alert("You already have unlimited gold!");
       return;
     }
+    const amountUSD = parseFloat(bundle.price.replace("$", ""));
+    setPaymentModal({ id: bundle.id, price: bundle.price, gold: bundle.gold, amountUSD });
+    setPayCardNumber("");
+    setPayExpiry("");
+    setPayCVC("");
+    setPaymentError("");
+  };
 
-    // Mock purchase - just add gold (no real payment)
-    const confirmPurchase = window.confirm(
-      `Purchase ${bundle.gold} gold for ${bundle.price}?\n\n(This is a test purchase - no real money will be charged)`,
-    );
+  // Format card number with spaces every 4 digits
+  const formatCardNumber = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 16);
+    return digits.replace(/(.{4})/g, "$1 ").trim();
+  };
 
-    if (!confirmPurchase) return;
+  // Format expiry as MM/YY
+  const formatExpiry = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 4);
+    if (digits.length >= 3) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return digits;
+  };
 
+  // Submit payment
+  const handleSubmitPayment = async () => {
+    if (!paymentModal) return;
+    setPaymentError("");
+
+    const rawCard = payCardNumber.replace(/\s/g, "");
+    if (rawCard.length !== 16) { setPaymentError("Card number must be 16 digits."); return; }
+    if (!/^\d{2}\/\d{2}$/.test(payExpiry)) { setPaymentError("Expiry must be MM/YY."); return; }
+    if (!/^\d{3,4}$/.test(payCVC)) { setPaymentError("CVC must be 3 or 4 digits."); return; }
+
+    setPaymentLoading(true);
     try {
-      const newCurrency = gameState.user.currency + bundle.gold;
-
-      // Update currency in database
-      const response = await fetch("/api/update-currency", {
+      const res = await fetch("/api/buy-currency", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: gameState.user.username,
-          currency: newCurrency,
+          cardNumber: rawCard,
+          cardExpiry: payExpiry,
+          cardCVC: payCVC,
+          amountUSD: paymentModal.amountUSD,
+          goldAmount: paymentModal.gold,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to update currency");
+      const data = await res.json();
+      if (!res.ok) {
+        setPaymentError(data.error || "Payment failed. Please try again.");
+        return;
       }
-
-      // Update local state
-      setGameState((prev) => ({
-        ...prev,
-        user: { ...prev.user, currency: newCurrency },
-      }));
-
-      alert(`Successfully purchased ${bundle.gold} gold!`);
+      setGameState((prev) => ({ ...prev, user: { ...prev.user, currency: data.newGold } }));
+      setPaymentModal(null);
+      alert(`✅ ${paymentModal.gold.toLocaleString()} gold added to your account!`);
     } catch (err) {
-      console.error("Currency purchase error:", err);
-      alert("Purchase failed. Please try again.");
+      setPaymentError("Network error. Please try again.");
+    } finally {
+      setPaymentLoading(false);
     }
   };
 
@@ -6820,6 +6839,119 @@ function Game() {
       </Canvas>
 
       <HUD gameState={gameState} setGameState={setGameState} />
+
+      {/* Payment Modal */}
+      {paymentModal && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.85)", display: "flex", justifyContent: "center",
+          alignItems: "center", zIndex: 9999,
+        }}>
+          <div style={{
+            background: "#1a1a2e", border: "1px solid #333", borderRadius: "14px",
+            padding: "32px", width: "100%", maxWidth: "420px", color: "white",
+            fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+            boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
+          }}>
+            <h2 style={{ margin: "0 0 6px 0", fontSize: "22px" }}>💳 Purchase Gold</h2>
+            <p style={{ margin: "0 0 20px 0", color: "#aaa", fontSize: "14px" }}>
+              {paymentModal.gold.toLocaleString()} 💰 for <strong style={{ color: "#f39c12" }}>{paymentModal.price}</strong>
+            </p>
+            <p style={{
+              margin: "0 0 20px 0", padding: "10px", borderRadius: "8px",
+              background: "rgba(255,193,7,0.15)", border: "1px solid rgba(255,193,7,0.3)",
+              color: "#ffc107", fontSize: "12px", textAlign: "center",
+            }}>
+              ⚠️ Test mode — no real charges will be made
+            </p>
+
+            <label style={{ display: "block", marginBottom: "14px" }}>
+              <span style={{ fontSize: "13px", color: "#aaa" }}>Card Number</span>
+              <input
+                type="text"
+                placeholder="1234 5678 9012 3456"
+                value={payCardNumber}
+                onChange={(e) => setPayCardNumber(formatCardNumber(e.target.value))}
+                maxLength={19}
+                style={{
+                  display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
+                  borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
+                  color: "white", fontSize: "16px", letterSpacing: "2px", boxSizing: "border-box",
+                }}
+              />
+            </label>
+
+            <div style={{ display: "flex", gap: "12px", marginBottom: "14px" }}>
+              <label style={{ flex: 1 }}>
+                <span style={{ fontSize: "13px", color: "#aaa" }}>Expiry (MM/YY)</span>
+                <input
+                  type="text"
+                  placeholder="MM/YY"
+                  value={payExpiry}
+                  onChange={(e) => setPayExpiry(formatExpiry(e.target.value))}
+                  maxLength={5}
+                  style={{
+                    display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
+                    borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
+                    color: "white", fontSize: "15px", boxSizing: "border-box",
+                  }}
+                />
+              </label>
+              <label style={{ flex: 1 }}>
+                <span style={{ fontSize: "13px", color: "#aaa" }}>CVC</span>
+                <input
+                  type="text"
+                  placeholder="123"
+                  value={payCVC}
+                  onChange={(e) => setPayCVC(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  maxLength={4}
+                  style={{
+                    display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
+                    borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
+                    color: "white", fontSize: "15px", boxSizing: "border-box",
+                  }}
+                />
+              </label>
+            </div>
+
+            {paymentError && (
+              <p style={{
+                margin: "0 0 14px 0", padding: "10px", borderRadius: "7px",
+                background: "rgba(231,76,60,0.15)", border: "1px solid rgba(231,76,60,0.4)",
+                color: "#e74c3c", fontSize: "13px",
+              }}>
+                {paymentError}
+              </p>
+            )}
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={handleSubmitPayment}
+                disabled={paymentLoading}
+                style={{
+                  flex: 1, padding: "12px", borderRadius: "8px", border: "none",
+                  background: paymentLoading ? "#555" : "linear-gradient(135deg, #4CAF50, #2e7d32)",
+                  color: "white", fontSize: "16px", fontWeight: "bold", cursor: paymentLoading ? "not-allowed" : "pointer",
+                  fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                }}
+              >
+                {paymentLoading ? "Processing..." : `Pay ${paymentModal.price}`}
+              </button>
+              <button
+                onClick={() => { setPaymentModal(null); setPaymentError(""); }}
+                disabled={paymentLoading}
+                style={{
+                  padding: "12px 20px", borderRadius: "8px", border: "1px solid #555",
+                  background: "transparent", color: "#aaa", fontSize: "15px", cursor: "pointer",
+                  fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
