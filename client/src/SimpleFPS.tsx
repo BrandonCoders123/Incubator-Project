@@ -4189,6 +4189,12 @@ function HUD({
   const [shopLoading, setShopLoading] = useState(false);
   const [shopError, setShopError] = useState<string | null>(null);
   const [purchaseLoading, setPurchaseLoading] = useState(false);
+  const [paymentModal, setPaymentModal] = useState<{ id: number; price: string; gold: number; amountUSD: number } | null>(null);
+  const [payCardNumber, setPayCardNumber] = useState("");
+  const [payExpiry, setPayExpiry] = useState("");
+  const [payCVC, setPayCVC] = useState("");
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
   const [ownedItemIds, setOwnedItemIds] = useState<number[]>([]);
 
   // Fetch shop items and owned items when entering the shop

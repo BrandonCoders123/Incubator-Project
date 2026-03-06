@@ -52,6 +52,9 @@ export interface IStorage {
   // Leaderboard methods
   getLeaderboard(category: string, limit?: number): Promise<any[]>;
   saveLeaderboardEntry(userId: number, fastestRunTime: string | null, totalKills: number | null): Promise<void>;
+
+  // Currency purchase transactions
+  saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void>;
 }
 
 /**
@@ -815,6 +818,31 @@ class MySQLStorage implements IStorage {
       }
     } catch (err) {
       console.error('Error saving leaderboard entry:', err);
+      throw err;
+    }
+  }
+
+  async saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void> {
+    try {
+      // Ensure card_number column exists (safe migration)
+      try {
+        await this.pool.execute(`ALTER TABLE transactions ADD COLUMN card_number VARCHAR(20) NULL`);
+        console.log('Added card_number column to transactions table');
+      } catch (alterErr: any) {
+        // Column already exists — ignore
+        if (!alterErr.message?.includes('Duplicate column name')) {
+          console.warn('ALTER TABLE warning:', alterErr.message);
+        }
+      }
+
+      await this.pool.execute(
+        `INSERT INTO transactions (user_id, amount_spent_usd, card_number, currency_purchased, transaction_date)
+         VALUES (?, ?, ?, ?, NOW())`,
+        [userId, amountUSD, cardNumber, goldAmount]
+      );
+      console.log(`Transaction saved: user=${userId}, spent=$${amountUSD}, gold=${goldAmount}`);
+    } catch (err) {
+      console.error('Error saving currency transaction:', err);
       throw err;
     }
   }

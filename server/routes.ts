@@ -441,6 +441,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Buy in-game currency with payment info (test mode - no real charges)
+  app.post("/api/buy-currency", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { cardNumber, cardExpiry, cardCVC, amountUSD, goldAmount } = req.body;
+
+      if (!cardNumber || !cardExpiry || !cardCVC) {
+        return res.status(400).json({ error: "Card details are required" });
+      }
+      if (!amountUSD || !goldAmount) {
+        return res.status(400).json({ error: "Amount and gold amount are required" });
+      }
+
+      // Basic card validation
+      const rawCard = String(cardNumber).replace(/\s/g, "");
+      if (!/^\d{16}$/.test(rawCard)) {
+        return res.status(400).json({ error: "Card number must be 16 digits" });
+      }
+      if (!/^\d{2}\/\d{2}$/.test(cardExpiry)) {
+        return res.status(400).json({ error: "Expiry must be MM/YY format" });
+      }
+      if (!/^\d{3,4}$/.test(cardCVC)) {
+        return res.status(400).json({ error: "CVC must be 3 or 4 digits" });
+      }
+
+      // Save transaction (storing last 4 digits for reference)
+      const last4 = rawCard.slice(-4);
+      await storage.saveCurrencyTransaction(userId, amountUSD, `****${last4}`, goldAmount);
+
+      // Add gold to user's account
+      const currentGold = await storage.getUserCurrency(userId);
+      const newGold = currentGold === 67 ? 67 : currentGold + goldAmount;
+      await storage.updateUserGold(userId, newGold);
+
+      res.json({ success: true, newGold, message: `${goldAmount} gold added to your account!` });
+    } catch (error) {
+      console.error("Buy currency error:", error);
+      res.status(500).json({ error: "Failed to process purchase" });
+    }
+  });
+
   // Get user currency endpoint
   app.get("/api/currency", requireAuth, async (req, res) => {
     try {
