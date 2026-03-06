@@ -4340,44 +4340,6 @@ function HUD({
     }
   }, [gameState.gamePhase, gameState.gameStartTime, gameState.story.totalKills]);
 
-  // Save run time to leaderboard on death in story/campaign mode
-  const storyDeathSavedRef = React.useRef<number | null>(null);
-
-  useEffect(() => {
-    if (gameState.gamePhase !== "gameover") return;
-    if (gameState.gameMode !== "story") return;
-    if (gameState.user.isGuest) return;
-    if (storyDeathSavedRef.current === gameState.gameStartTime) return;
-    storyDeathSavedRef.current = gameState.gameStartTime;
-
-    let fastestRunTime: string | null = null;
-    if (gameState.gameStartTime) {
-      const runTimeMs = Date.now() - gameState.gameStartTime;
-      const totalSeconds = Math.floor(runTimeMs / 1000);
-      const hours = Math.floor(totalSeconds / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
-      const seconds = totalSeconds % 60;
-      fastestRunTime = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-    }
-
-    console.log(`Saving campaign death leaderboard: fastestRunTime=${fastestRunTime}`);
-
-    fetch("/api/leaderboard", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fastestRunTime }),
-    })
-      .then((res) => {
-        if (res.ok) {
-          console.log(`Campaign death leaderboard saved: time=${fastestRunTime}`);
-        } else {
-          res.text().then((text) => console.error("Failed to save campaign death leaderboard:", text));
-        }
-      })
-      .catch((err) => console.error("Error saving campaign death leaderboard:", err));
-  }, [gameState.gamePhase, gameState.gameMode, gameState.gameStartTime, gameState.user.isGuest]);
-
   // Save total kills to leaderboard on death in endless mode
   const endlessDeathSavedRef = React.useRef<number | null>(null);
   
