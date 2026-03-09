@@ -293,20 +293,7 @@ export default function AdminPanel() {
                 fontSize: "14px", outline: "none",
               }}
             />
-            <select
-              value={filterById}
-              onChange={(e) => setFilterById(e.target.value)}
-              style={{
-                flex: "0 1 130px", padding: "10px 10px", borderRadius: "7px",
-                border: "1px solid #333", background: "#0f3460", color: "white",
-                fontSize: "14px", cursor: "pointer",
-              }}
-            >
-              <option value="all">All IDs</option>
-              {users.map((u) => (
-                <option key={u.user_id} value={String(u.user_id)}>#{u.user_id}</option>
-              ))}
-            </select>
+            
             <select
               value={filterWarnings}
               onChange={(e) => setFilterWarnings(e.target.value)}
