@@ -5239,7 +5239,7 @@ function HUD({
 
   // Shop Page
   if (gameState.gamePhase === "shop") {
-    return (
+    return (<>
       <div
         style={{
           position: "fixed",
@@ -5557,7 +5557,115 @@ function HUD({
           })}
         </div>
       </div>
-    );
+      {paymentModal && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.85)", display: "flex", justifyContent: "center",
+          alignItems: "center", zIndex: 9999, pointerEvents: "all",
+        }}>
+          <div style={{
+            background: "#1a1a2e", border: "1px solid #333", borderRadius: "14px",
+            padding: "32px", width: "100%", maxWidth: "420px", color: "white",
+            fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+            boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
+          }}>
+            <h2 style={{ margin: "0 0 6px 0", fontSize: "22px" }}>💳 Purchase Gold</h2>
+            <p style={{ margin: "0 0 20px 0", color: "#aaa", fontSize: "14px" }}>
+              {paymentModal.gold.toLocaleString()} 💰 for <strong style={{ color: "#f39c12" }}>{paymentModal.price}</strong>
+            </p>
+            <p style={{
+              margin: "0 0 20px 0", padding: "10px", borderRadius: "8px",
+              background: "rgba(255,193,7,0.15)", border: "1px solid rgba(255,193,7,0.3)",
+              color: "#ffc107", fontSize: "12px", textAlign: "center",
+            }}>
+              ⚠️ Test mode — no real charges will be made
+            </p>
+            <label style={{ display: "block", marginBottom: "14px" }}>
+              <span style={{ fontSize: "13px", color: "#aaa" }}>Card Number</span>
+              <input
+                type="text"
+                placeholder="1234 5678 9012 3456"
+                value={payCardNumber}
+                onChange={(e) => setPayCardNumber(formatCardNumber(e.target.value))}
+                maxLength={19}
+                style={{
+                  display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
+                  borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
+                  color: "white", fontSize: "16px", letterSpacing: "2px", boxSizing: "border-box",
+                }}
+              />
+            </label>
+            <div style={{ display: "flex", gap: "12px", marginBottom: "14px" }}>
+              <label style={{ flex: 1 }}>
+                <span style={{ fontSize: "13px", color: "#aaa" }}>Expiry (MM/YY)</span>
+                <input
+                  type="text"
+                  placeholder="MM/YY"
+                  value={payExpiry}
+                  onChange={(e) => setPayExpiry(formatExpiry(e.target.value))}
+                  maxLength={5}
+                  style={{
+                    display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
+                    borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
+                    color: "white", fontSize: "15px", boxSizing: "border-box",
+                  }}
+                />
+              </label>
+              <label style={{ flex: 1 }}>
+                <span style={{ fontSize: "13px", color: "#aaa" }}>CVC</span>
+                <input
+                  type="text"
+                  placeholder="123"
+                  value={payCVC}
+                  onChange={(e) => setPayCVC(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  maxLength={4}
+                  style={{
+                    display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
+                    borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
+                    color: "white", fontSize: "15px", boxSizing: "border-box",
+                  }}
+                />
+              </label>
+            </div>
+            {paymentError && (
+              <p style={{
+                margin: "0 0 14px 0", padding: "10px", borderRadius: "7px",
+                background: "rgba(231,76,60,0.15)", border: "1px solid rgba(231,76,60,0.4)",
+                color: "#e74c3c", fontSize: "13px",
+              }}>
+                {paymentError}
+              </p>
+            )}
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={handleSubmitPayment}
+                disabled={paymentLoading}
+                style={{
+                  flex: 1, padding: "12px", borderRadius: "8px", border: "none",
+                  background: paymentLoading ? "#555" : "linear-gradient(135deg, #4CAF50, #2e7d32)",
+                  color: "white", fontSize: "16px", fontWeight: "bold",
+                  cursor: paymentLoading ? "not-allowed" : "pointer",
+                  fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                }}
+              >
+                {paymentLoading ? "Processing..." : `Pay ${paymentModal.price}`}
+              </button>
+              <button
+                onClick={() => { setPaymentModal(null); setPaymentError(""); }}
+                disabled={paymentLoading}
+                style={{
+                  padding: "12px 20px", borderRadius: "8px", border: "1px solid #555",
+                  background: "transparent", color: "#aaa", fontSize: "15px", cursor: "pointer",
+                  fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>);
   }
 
   // Level Transition Cutscene with Shop
@@ -6639,118 +6747,6 @@ function HUD({
       </div>
     </div>
 
-    {/* Payment Modal */}
-    {paymentModal && (
-      <div style={{
-        position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-        background: "rgba(0,0,0,0.85)", display: "flex", justifyContent: "center",
-        alignItems: "center", zIndex: 9999, pointerEvents: "all",
-      }}>
-        <div style={{
-          background: "#1a1a2e", border: "1px solid #333", borderRadius: "14px",
-          padding: "32px", width: "100%", maxWidth: "420px", color: "white",
-          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-          boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
-        }}>
-          <h2 style={{ margin: "0 0 6px 0", fontSize: "22px" }}>💳 Purchase Gold</h2>
-          <p style={{ margin: "0 0 20px 0", color: "#aaa", fontSize: "14px" }}>
-            {paymentModal.gold.toLocaleString()} 💰 for <strong style={{ color: "#f39c12" }}>{paymentModal.price}</strong>
-          </p>
-          <p style={{
-            margin: "0 0 20px 0", padding: "10px", borderRadius: "8px",
-            background: "rgba(255,193,7,0.15)", border: "1px solid rgba(255,193,7,0.3)",
-            color: "#ffc107", fontSize: "12px", textAlign: "center",
-          }}>
-            ⚠️ Test mode — no real charges will be made
-          </p>
-
-          <label style={{ display: "block", marginBottom: "14px" }}>
-            <span style={{ fontSize: "13px", color: "#aaa" }}>Card Number</span>
-            <input
-              type="text"
-              placeholder="1234 5678 9012 3456"
-              value={payCardNumber}
-              onChange={(e) => setPayCardNumber(formatCardNumber(e.target.value))}
-              maxLength={19}
-              style={{
-                display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
-                borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
-                color: "white", fontSize: "16px", letterSpacing: "2px", boxSizing: "border-box",
-              }}
-            />
-          </label>
-
-          <div style={{ display: "flex", gap: "12px", marginBottom: "14px" }}>
-            <label style={{ flex: 1 }}>
-              <span style={{ fontSize: "13px", color: "#aaa" }}>Expiry (MM/YY)</span>
-              <input
-                type="text"
-                placeholder="MM/YY"
-                value={payExpiry}
-                onChange={(e) => setPayExpiry(formatExpiry(e.target.value))}
-                maxLength={5}
-                style={{
-                  display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
-                  borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
-                  color: "white", fontSize: "15px", boxSizing: "border-box",
-                }}
-              />
-            </label>
-            <label style={{ flex: 1 }}>
-              <span style={{ fontSize: "13px", color: "#aaa" }}>CVC</span>
-              <input
-                type="text"
-                placeholder="123"
-                value={payCVC}
-                onChange={(e) => setPayCVC(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                maxLength={4}
-                style={{
-                  display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
-                  borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
-                  color: "white", fontSize: "15px", boxSizing: "border-box",
-                }}
-              />
-            </label>
-          </div>
-
-          {paymentError && (
-            <p style={{
-              margin: "0 0 14px 0", padding: "10px", borderRadius: "7px",
-              background: "rgba(231,76,60,0.15)", border: "1px solid rgba(231,76,60,0.4)",
-              color: "#e74c3c", fontSize: "13px",
-            }}>
-              {paymentError}
-            </p>
-          )}
-
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button
-              onClick={handleSubmitPayment}
-              disabled={paymentLoading}
-              style={{
-                flex: 1, padding: "12px", borderRadius: "8px", border: "none",
-                background: paymentLoading ? "#555" : "linear-gradient(135deg, #4CAF50, #2e7d32)",
-                color: "white", fontSize: "16px", fontWeight: "bold", cursor: paymentLoading ? "not-allowed" : "pointer",
-                fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-              }}
-            >
-              {paymentLoading ? "Processing..." : `Pay ${paymentModal.price}`}
-            </button>
-            <button
-              onClick={() => { setPaymentModal(null); setPaymentError(""); }}
-              disabled={paymentLoading}
-              style={{
-                padding: "12px 20px", borderRadius: "8px", border: "1px solid #555",
-                background: "transparent", color: "#aaa", fontSize: "15px", cursor: "pointer",
-                fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
     </>
   );
 }
