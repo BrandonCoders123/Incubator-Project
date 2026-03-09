@@ -265,6 +265,8 @@ interface GameState {
   isAdmin: boolean; // Whether user has admin privileges
   gameStartTime: number | null; // Timestamp when game started (for leaderboard run time)
   gameMode: "story" | "endless"; // Game mode: story (with levels) or endless (wave survival)
+  sessionShotsFired: number; // Shots fired this session (saved to DB on death)
+  sessionShotsHit: number;   // Bullet hits on enemies this session
 }
 
 interface ShopItem {
@@ -637,6 +639,7 @@ function Player({
               ammo: prev.ammo - 1,
               bullets: [...prev.bullets, ...newBullets],
               lastShotTime: now,
+              sessionShotsFired: prev.sessionShotsFired + 1,
             }));
 
             console.log(`${currentWeapon.name} fired!`);
@@ -704,6 +707,7 @@ function Player({
             },
           ],
           lastShotTime: now,
+          sessionShotsFired: prev.sessionShotsFired + 1,
         }));
 
         console.log(`${currentWeapon.name} auto-firing!`);
@@ -1296,6 +1300,7 @@ function Enemy({
               giantsSpawnedThisLevel: prev.level.giantsSpawnedThisLevel,
             },
             gamePhase: nextPhase,
+            sessionShotsHit: prev.sessionShotsHit + 1,
           };
         });
       }
@@ -1654,6 +1659,8 @@ function IntroCutscene({
             gamePhase: "playing",
             unlockedWeapons: newUnlockedWeapons,
             gameStartTime: Date.now(),
+            sessionShotsFired: 0,
+            sessionShotsHit: 0,
           };
         });
         document.body.requestPointerLock();
@@ -1757,6 +1764,8 @@ function IntroCutscene({
                 gamePhase: "playing",
                 unlockedWeapons: newUnlockedWeapons,
                 gameStartTime: Date.now(),
+                sessionShotsFired: 0,
+                sessionShotsHit: 0,
               };
             });
             document.body.requestPointerLock();
@@ -4391,6 +4400,24 @@ function HUD({
     }
   }, [gameState.gamePhase, gameState.gameMode, gameState.gameStartTime, gameState.story.totalKills, gameState.user.isGuest]);
 
+  // Save shots/hits/deaths to DB on game over (logged-in users only)
+  const statsSavedRef = React.useRef<number | null>(null);
+  useEffect(() => {
+    if (gameState.gamePhase !== "gameover") return;
+    if (gameState.user.isGuest) return;
+    if (statsSavedRef.current === gameState.gameStartTime) return;
+    statsSavedRef.current = gameState.gameStartTime;
+
+    const shots = gameState.sessionShotsFired;
+    const hits = gameState.sessionShotsHit;
+    fetch("/api/stats/update", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shots, hits, deaths: 1 }),
+    }).catch((err) => console.error("Failed to save stats:", err));
+  }, [gameState.gamePhase, gameState.gameStartTime, gameState.user.isGuest, gameState.sessionShotsFired, gameState.sessionShotsHit]);
+
   // Currency bundle options (mock purchases - no real payment yet)
   const currencyBundles = [
     { id: 1, price: "$1", gold: 100, popular: false },
@@ -5070,6 +5097,8 @@ function HUD({
                     settlementsConquered: [],
                     totalKills: 0,
                   },
+                  sessionShotsFired: 0,
+                  sessionShotsHit: 0,
                   level: {
                     currentLevel: 1,
                     killsThisLevel: 0,
@@ -6761,6 +6790,22 @@ function GameLogic({
 }) {
   const lastSpawnTime = useRef(0);
 
+  // Heartbeat: send +1 minute to the server every 60 seconds while playing
+  useEffect(() => {
+    if (gameState.user.isGuest) return;
+
+    const interval = setInterval(() => {
+      fetch("/api/stats/heartbeat", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ minutes: 1 }),
+      }).catch((err) => console.error("Heartbeat failed:", err));
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [gameState.user.isGuest]);
+
   useFrame((state) => {
     if (gameState.gamePhase !== "playing") return;
 
@@ -6903,6 +6948,8 @@ function Game() {
     isAdmin: false,
     gameStartTime: null,
     gameMode: "story",
+    sessionShotsFired: 0,
+    sessionShotsHit: 0,
   });
 
   if (gameState.gamePhase !== "playing" && gameState.gamePhase !== "paused") {

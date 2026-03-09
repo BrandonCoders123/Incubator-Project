@@ -710,6 +710,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Player stats — get own stats
+  app.get("/api/stats", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const stats = await storage.getPlayerStats(userId);
+      res.json(stats);
+    } catch (error) {
+      console.error("Stats fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+
+  // Player stats — save shots/hits/deaths at end of game
+  app.post("/api/stats/update", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { shots = 0, hits = 0, deaths = 0 } = req.body;
+      await storage.incrementPlayerStats(userId, shots, hits, deaths);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Stats update error:", error);
+      res.status(500).json({ error: "Failed to update stats" });
+    }
+  });
+
+  // Player stats — heartbeat every 60 s of active gameplay
+  app.post("/api/stats/heartbeat", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { minutes = 1 } = req.body;
+      await storage.addMinutesPlayed(userId, minutes);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Stats heartbeat error:", error);
+      res.status(500).json({ error: "Failed to record time played" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
