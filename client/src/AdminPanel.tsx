@@ -304,7 +304,7 @@ export default function AdminPanel() {
             >
               <option value="all">All IDs</option>
               {users.map((u) => (
-                <option key={u.user_id} value={String(u.user_id)}>ID: {u.user_id}</option>
+                <option key={u.user_id} value={String(u.user_id)}>#{u.user_id}</option>
               ))}
             </select>
             <select
