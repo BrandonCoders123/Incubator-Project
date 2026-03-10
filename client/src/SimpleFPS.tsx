@@ -1681,14 +1681,13 @@ function IntroCutscene({
         left: 0,
         width: "100vw",
         height: "100vh",
-        background:
-          "linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #fdc830 100%)",
+        background: "#0d0a05",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         color: "white",
-        fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+        fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
         zIndex: 2000,
         padding: "40px",
       }}
@@ -1784,7 +1783,7 @@ function IntroCutscene({
             borderRadius: "8px",
             cursor: "pointer",
             transition: "all 0.3s ease",
-            fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+            fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
           }}
           onMouseEnter={(e) => {
             (e.target as HTMLButtonElement).style.background =
@@ -1980,11 +1979,11 @@ function InventoryPage({
         left: 0,
         width: "100vw",
         height: "100vh",
-        background: "linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)",
+        background: "#0d0a05",
         display: "flex",
         flexDirection: "column",
-        color: "white",
-        fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+        color: "rgba(220,210,195,0.9)",
+        fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
         zIndex: 1000,
         padding: "20px",
       }}
@@ -1996,12 +1995,15 @@ function InventoryPage({
           justifyContent: "space-between",
           alignItems: "center",
           marginBottom: "20px",
-          padding: "15px 20px",
-          background: "rgba(0,0,0,0.4)",
-          borderRadius: "10px",
+          padding: "16px 24px",
+          background: "rgba(18,12,5,0.95)",
+          borderBottom: "1px solid rgba(232,160,32,0.25)",
         }}
       >
-        <h1 style={{ fontSize: "36px", margin: 0 }}>INVENTORY</h1>
+        <div>
+          <div style={{ fontSize: "11px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase" }}>DOG: The Hotdog Wars</div>
+          <h1 style={{ fontSize: "26px", margin: "2px 0 0 0", fontWeight: "700", color: "#e8a020", letterSpacing: "3px", textTransform: "uppercase" }}>INVENTORY</h1>
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
           <span style={{ fontSize: "18px", color: "#fdc830" }}>
             {currency === 67 ? "∞" : currency} Gold
@@ -2010,13 +2012,14 @@ function InventoryPage({
             onClick={() => setShowLoadoutPopup(true)}
             style={{
               padding: "10px 20px",
-              fontSize: "16px",
-              fontWeight: "bold",
-              background: "#4CAF50",
-              color: "white",
+              fontSize: "14px",
+              fontWeight: "700",
+              background: "rgba(232,160,32,0.9)",
+              color: "#0d0a05",
               border: "none",
-              borderRadius: "8px",
               cursor: "pointer",
+              letterSpacing: "1px",
+              textTransform: "uppercase" as const,
             }}
           >
             LOADOUT
@@ -2061,12 +2064,11 @@ function InventoryPage({
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: "linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)",
-              borderRadius: "15px",
+              background: "rgba(18,12,5,0.97)",
               padding: "30px",
               maxWidth: "600px",
               width: "90%",
-              border: "3px solid #4CAF50",
+              border: "1px solid rgba(232,160,32,0.35)",
             }}
           >
             <h2
@@ -2697,12 +2699,11 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
         left: 0,
         width: "100vw",
         height: "100vh",
-        background:
-          "linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)",
+        background: "#0d0a05",
         display: "flex",
         flexDirection: "column",
-        color: "white",
-        fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+        color: "rgba(220,210,195,0.9)",
+        fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
         zIndex: 1000,
         overflow: "hidden",
       }}
@@ -2710,37 +2711,36 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
       {/* Header */}
       <div
         style={{
-          padding: "20px 30px",
+          padding: "16px 30px",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          borderBottom: "1px solid rgba(255,255,255,0.1)",
+          borderBottom: "1px solid rgba(232,160,32,0.2)",
+          background: "rgba(18,12,5,0.95)",
         }}
       >
-        <h1
-          style={{
-            margin: 0,
-            fontSize: "32px",
-            textShadow: "2px 2px 4px rgba(0,0,0,0.5)",
-          }}
-        >
-          🏆 LEADERBOARD
-        </h1>
+        <div>
+          <div style={{ fontSize: "11px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase" }}>DOG: The Hotdog Wars</div>
+          <h1 style={{ margin: "2px 0 0 0", fontSize: "26px", fontWeight: "700", color: "#e8a020", letterSpacing: "3px", textTransform: "uppercase" }}>
+            LEADERBOARD
+          </h1>
+        </div>
         <button
           onClick={onBack}
           style={{
-            padding: "10px 25px",
-            fontSize: "16px",
-            fontWeight: "bold",
-            background: "rgba(255,255,255,0.1)",
-            color: "#fff",
-            border: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: "10px",
+            padding: "10px 22px",
+            fontSize: "13px",
+            fontWeight: "700",
+            background: "transparent",
+            color: "rgba(200,168,75,0.85)",
+            border: "1px solid rgba(232,160,32,0.35)",
             cursor: "pointer",
-            fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+            letterSpacing: "1px",
+            textTransform: "uppercase",
+            fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
           }}
         >
-          ← Back to Menu
+          ← Menu
         </button>
       </div>
 
@@ -2749,34 +2749,29 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
         style={{
           display: "flex",
           justifyContent: "center",
-          gap: "15px",
-          padding: "25px",
+          gap: "4px",
+          padding: "20px 30px 0",
         }}
       >
         {[
-          { key: "kills" as const, label: "💀 Total Kills" },
-          { key: "fastest_time" as const, label: "⏱️ Fastest Time" },
+          { key: "kills" as const, label: "Total Kills" },
+          { key: "fastest_time" as const, label: "Fastest Time" },
         ].map((tab) => (
           <button
             key={tab.key}
             onClick={() => setCategory(tab.key)}
             style={{
-              padding: "12px 25px",
-              fontSize: "16px",
-              fontWeight: category === tab.key ? "bold" : "normal",
-              background:
-                category === tab.key
-                  ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-                  : "rgba(255,255,255,0.1)",
-              color: "#fff",
+              padding: "10px 24px",
+              fontSize: "14px",
+              fontWeight: "700",
+              background: category === tab.key ? "rgba(232,160,32,0.15)" : "transparent",
+              color: category === tab.key ? "#e8a020" : "rgba(160,145,120,0.75)",
               border: "none",
-              borderRadius: "10px",
+              borderBottom: category === tab.key ? "2px solid #e8a020" : "2px solid transparent",
               cursor: "pointer",
-              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
-              boxShadow:
-                category === tab.key
-                  ? "0 4px 15px rgba(102, 126, 234, 0.4)"
-                  : "none",
+              fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+              letterSpacing: "1px",
+              textTransform: "uppercase",
             }}
           >
             {tab.label}
@@ -3089,13 +3084,13 @@ function SettingsPage({
         left: 0,
         width: "100vw",
         height: "100vh",
-        background: "linear-gradient(135deg, #FF9800 0%, #F57C00 100%)",
+        background: "#0d0a05",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        color: "white",
-        fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+        color: "rgba(220,210,195,0.9)",
+        fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
         zIndex: 1000,
         padding: "20px",
         overflow: "auto",
@@ -3104,19 +3099,23 @@ function SettingsPage({
       <div
         style={{
           textAlign: "center",
-          padding: "40px",
-          background: "rgba(0,0,0,0.6)",
-          borderRadius: "20px",
-          boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+          padding: "44px 50px",
+          background: "rgba(18,12,5,0.96)",
+          border: "1px solid rgba(232,160,32,0.25)",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
           maxWidth: "600px",
           width: "100%",
         }}
       >
+        <div style={{ fontSize: "11px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase", marginBottom: "4px" }}>DOG: The Hotdog Wars</div>
         <h1
           style={{
-            fontSize: "42px",
-            marginBottom: "20px",
-            textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
+            fontSize: "32px",
+            fontWeight: "700",
+            marginBottom: "28px",
+            color: "#e8a020",
+            letterSpacing: "3px",
+            textTransform: "uppercase",
           }}
         >
           SETTINGS
@@ -3184,12 +3183,11 @@ function SettingsPage({
                     justifyContent: "space-between",
                     alignItems: "center",
                     padding: "12px 15px",
-                    background: "rgba(255,255,255,0.1)",
-                    borderRadius: "8px",
+                    background: "rgba(18,12,5,0.7)",
                     border:
                       listeningFor === key
-                        ? "2px solid #fdc830"
-                        : "1px solid rgba(255,255,255,0.3)",
+                        ? "1px solid rgba(232,160,32,0.8)"
+                        : "1px solid rgba(232,160,32,0.2)",
                   }}
                 >
                   <span style={{ fontSize: "16px" }}>{label}</span>
@@ -3197,14 +3195,15 @@ function SettingsPage({
                     onClick={() => setListeningFor(key)}
                     style={{
                       padding: "8px 20px",
-                      fontSize: "14px",
-                      fontWeight: "bold",
-                      background: listeningFor === key ? "#fdc830" : "#555",
-                      color: listeningFor === key ? "#333" : "white",
-                      border: "none",
-                      borderRadius: "6px",
+                      fontSize: "13px",
+                      fontWeight: "700",
+                      background: listeningFor === key ? "rgba(232,160,32,0.9)" : "rgba(18,12,5,0.9)",
+                      color: listeningFor === key ? "#0d0a05" : "#c8a84b",
+                      border: listeningFor === key ? "none" : "1px solid rgba(232,160,32,0.3)",
                       cursor: "pointer",
                       minWidth: "100px",
+                      letterSpacing: "1px",
+                      textTransform: "uppercase" as const,
                     }}
                   >
                     {listeningFor === key
@@ -3239,7 +3238,7 @@ function SettingsPage({
               Create your own crosshair. After saving, go to Loadout to equip it.
             </p>
 
-            <div style={{ background: "rgba(255,255,255,0.1)", padding: "20px", borderRadius: "10px", marginBottom: "20px" }}>
+            <div style={{ background: "rgba(18,12,5,0.8)", border: "1px solid rgba(232,160,32,0.2)", padding: "20px", marginBottom: "20px" }}>
               {/* Preview */}
               <div style={{ display: "flex", justifyContent: "center", marginBottom: "20px" }}>
                 <div style={{ width: "80px", height: "80px", background: "rgba(0,0,0,0.8)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
@@ -3270,10 +3269,9 @@ function SettingsPage({
                       onClick={() => setCustomCrosshair((prev: any) => ({ ...prev, type: t }))}
                       style={{
                         padding: "8px 16px",
-                        background: customCrosshair.type === t ? "#4CAF50" : "rgba(255,255,255,0.2)",
-                        border: "none",
-                        borderRadius: "6px",
-                        color: "white",
+                        background: customCrosshair.type === t ? "rgba(232,160,32,0.9)" : "rgba(18,12,5,0.85)",
+                        border: customCrosshair.type === t ? "none" : "1px solid rgba(232,160,32,0.25)",
+                        color: customCrosshair.type === t ? "#0d0a05" : "#c8a84b",
                         cursor: "pointer",
                         fontWeight: "bold",
                         textTransform: "capitalize",
@@ -3360,13 +3358,14 @@ function SettingsPage({
                 style={{
                   width: "100%",
                   padding: "12px",
-                  fontSize: "16px",
-                  fontWeight: "bold",
-                  background: "#4CAF50",
-                  color: "white",
+                  fontSize: "14px",
+                  fontWeight: "700",
+                  background: "rgba(232,160,32,0.9)",
+                  color: "#0d0a05",
                   border: "none",
-                  borderRadius: "8px",
                   cursor: "pointer",
+                  letterSpacing: "2px",
+                  textTransform: "uppercase" as const,
                 }}
               >
                 SAVE CUSTOM CROSSHAIR
@@ -3402,15 +3401,16 @@ function SettingsPage({
                 onClick={handleSave}
                 disabled={saving}
                 style={{
-                  padding: "15px 40px",
-                  fontSize: "18px",
-                  fontWeight: "bold",
-                  background: saving ? "#888" : "#4CAF50",
-                  color: "white",
+                  padding: "14px 36px",
+                  fontSize: "15px",
+                  fontWeight: "700",
+                  background: saving ? "rgba(130,110,70,0.5)" : "rgba(232,160,32,0.9)",
+                  color: saving ? "rgba(200,180,140,0.6)" : "#0d0a05",
                   border: "none",
-                  borderRadius: "12px",
                   cursor: saving ? "not-allowed" : "pointer",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                  letterSpacing: "2px",
+                  textTransform: "uppercase",
+                  fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
                 }}
               >
                 {saving ? "Saving..." : "SAVE"}
@@ -3421,19 +3421,20 @@ function SettingsPage({
                     ...prev,
                     gamePhase:
                       prev.previousGamePhase === "paused" ? "paused" : "menu",
-                    previousGamePhase: null, // Clear the previous phase after navigating back
+                    previousGamePhase: null,
                   }))
                 }
                 style={{
-                  padding: "15px 40px",
-                  fontSize: "18px",
-                  fontWeight: "bold",
-                  background: "#fdc830",
-                  color: "#333",
-                  border: "none",
-                  borderRadius: "12px",
+                  padding: "13px 32px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  background: "transparent",
+                  color: "rgba(200,168,75,0.85)",
+                  border: "1px solid rgba(232,160,32,0.35)",
                   cursor: "pointer",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                  letterSpacing: "1px",
+                  textTransform: "uppercase",
+                  fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
                 }}
               >
                 BACK
@@ -3669,12 +3670,15 @@ function ProfilePage({
           left: 0,
           width: "100vw",
           height: "100vh",
-          background: "linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)",
+          background: "#0d0a05",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          color: "white",
-          fontSize: "24px",
+          color: "#c8a84b",
+          fontSize: "18px",
+          letterSpacing: "3px",
+          textTransform: "uppercase",
+          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
           zIndex: 1000,
         }}
       >
@@ -3691,13 +3695,13 @@ function ProfilePage({
         left: 0,
         width: "100vw",
         height: "100vh",
-        background: "linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)",
+        background: "#0d0a05",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         paddingTop: "40px",
-        color: "white",
-        fontFamily: "Inter, sans-serif",
+        color: "rgba(220,210,195,0.9)",
+        fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
         zIndex: 1000,
         overflowY: "auto",
       }}
@@ -3706,20 +3710,25 @@ function ProfilePage({
         style={{
           maxWidth: "600px",
           width: "100%",
-          padding: "30px",
-          background: "rgba(0,0,0,0.3)",
-          borderRadius: "20px",
-          boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
+          padding: "36px",
+          background: "rgba(18,12,5,0.96)",
+          border: "1px solid rgba(232,160,32,0.22)",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
         }}
       >
+        <div style={{ fontSize: "11px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase", marginBottom: "4px", textAlign: "center" }}>DOG: The Hotdog Wars</div>
         <h1
           style={{
-            fontSize: "36px",
-            marginBottom: "30px",
+            fontSize: "28px",
+            fontWeight: "700",
+            marginBottom: "28px",
             textAlign: "center",
+            color: "#e8a020",
+            letterSpacing: "3px",
+            textTransform: "uppercase",
           }}
         >
-          Profile
+          PROFILE
         </h1>
 
         {error && (
@@ -3789,9 +3798,8 @@ function ProfilePage({
         {profile?.isAdmin && (
           <div
             style={{
-              background: "rgba(102,126,234,0.2)",
-              border: "1px solid #667eea",
-              borderRadius: "8px",
+              background: "rgba(18,12,5,0.7)",
+              border: "1px solid rgba(232,160,32,0.3)",
               padding: "15px",
               marginBottom: "20px",
             }}
@@ -3799,7 +3807,7 @@ function ProfilePage({
             <div
               style={{
                 fontWeight: "bold",
-                color: "#667eea",
+                color: "#c8a84b",
                 marginBottom: "10px",
                 display: "flex",
                 alignItems: "center",
@@ -3845,10 +3853,10 @@ function ProfilePage({
               margin: "0 auto 15px",
               background: profile?.profilePicture
                 ? `url(${profile.profilePicture})`
-                : "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                : "rgba(32,22,8,0.9)",
               backgroundSize: "cover",
               backgroundPosition: "center",
-              border: "4px solid white",
+              border: "3px solid rgba(232,160,32,0.6)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -3931,13 +3939,13 @@ function ProfilePage({
                   disabled={loadingUrlPicture}
                   style={{
                     flex: 1,
-                    background: "#4CAF50",
+                    background: "rgba(232,160,32,0.9)",
                     border: "none",
-                    borderRadius: "8px",
                     padding: "10px",
-                    color: "white",
+                    color: "#0d0a05",
                     cursor: loadingUrlPicture ? "wait" : "pointer",
-                    fontWeight: "bold",
+                    fontWeight: "700",
+                    letterSpacing: "1px",
                   }}
                 >
                   {loadingUrlPicture ? "Updating..." : "Update"}
@@ -4007,13 +4015,14 @@ function ProfilePage({
                   onClick={handleUpdateUsername}
                   style={{
                     flex: 1,
-                    background: "#4CAF50",
+                    background: "rgba(232,160,32,0.9)",
                     border: "none",
-                    borderRadius: "8px",
                     padding: "10px",
-                    color: "white",
+                    color: "#0d0a05",
                     cursor: "pointer",
-                    fontWeight: "bold",
+                    fontWeight: "700",
+                    letterSpacing: "1px",
+                    textTransform: "uppercase" as const,
                   }}
                 >
                   Save
@@ -4108,13 +4117,13 @@ function ProfilePage({
                   onClick={handleUpdatePassword}
                   style={{
                     flex: 1,
-                    background: "#4CAF50",
+                    background: "rgba(232,160,32,0.9)",
                     border: "none",
-                    borderRadius: "8px",
                     padding: "10px",
-                    color: "white",
+                    color: "#0d0a05",
                     cursor: "pointer",
-                    fontWeight: "bold",
+                    fontWeight: "700",
+                    letterSpacing: "1px",
                   }}
                 >
                   Update Password
@@ -4603,42 +4612,36 @@ function HUD({
           left: 0,
           width: "100vw",
           height: "100vh",
-          background: "linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)",
+          background: "#0d0a05",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          color: "white",
-          fontFamily: "Inter, sans-serif",
+          color: "rgba(220,210,195,0.9)",
+          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
           zIndex: 1000,
         }}
       >
         <div
           style={{
             textAlign: "center",
-            padding: "40px",
-            background: "rgba(0,0,0,0.3)",
-            borderRadius: "20px",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
+            padding: "44px 48px",
+            background: "rgba(18,12,5,0.96)",
+            border: "1px solid rgba(232,160,32,0.25)",
+            boxShadow: "0 24px 60px rgba(0,0,0,0.8)",
             maxWidth: "400px",
             width: "100%",
           }}
         >
-          <h1
-            style={{
-              fontSize: "48px",
-              fontWeight: "bold",
-              marginBottom: "30px",
-            }}
-          >
-            FPS ARENA
-          </h1>
-          <h2 style={{ fontSize: "24px", marginBottom: "20px" }}>Login</h2>
+          <div style={{ fontSize: "13px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase", marginBottom: "6px" }}>
+            DOG: THE HOTDOG WARS
+          </div>
+          <h2 style={{ fontSize: "28px", fontWeight: "700", marginBottom: "28px", color: "#e8a020", letterSpacing: "2px", textTransform: "uppercase", margin: "0 0 28px 0" }}>Sign In</h2>
           <div
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: "15px",
+              gap: "12px",
               marginBottom: "20px",
             }}
           >
@@ -4648,12 +4651,13 @@ function HUD({
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               style={{
-                padding: "12px",
-                fontSize: "16px",
-                borderRadius: "8px",
-                border: "none",
+                padding: "12px 14px",
+                fontSize: "15px",
+                background: "#1a1005",
+                border: "1px solid rgba(232,160,32,0.3)",
                 outline: "none",
-                color: "black",
+                color: "rgba(220,210,195,0.9)",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
               }}
             />
             <input
@@ -4662,12 +4666,13 @@ function HUD({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               style={{
-                padding: "12px",
-                fontSize: "16px",
-                borderRadius: "8px",
-                border: "none",
+                padding: "12px 14px",
+                fontSize: "15px",
+                background: "#1a1005",
+                border: "1px solid rgba(232,160,32,0.3)",
                 outline: "none",
-                color: "black",
+                color: "rgba(220,210,195,0.9)",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
               }}
             />
           </div>
@@ -4743,14 +4748,17 @@ function HUD({
                 }
               }}
               style={{
-                padding: "12px 20px",
-                fontSize: "18px",
-                fontWeight: "bold",
-                background: "#4CAF50",
-                color: "white",
+                padding: "13px 20px",
+                fontSize: "16px",
+                fontWeight: "700",
+                background: "rgba(232,160,32,0.9)",
+                color: "#0d0a05",
                 border: "none",
-                borderRadius: "8px",
                 cursor: "pointer",
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                width: "100%",
               }}
             >
               LOGIN
@@ -4761,12 +4769,15 @@ function HUD({
               }
               style={{
                 padding: "12px 20px",
-                fontSize: "16px",
+                fontSize: "14px",
                 background: "transparent",
-                color: "white",
-                border: "2px solid white",
-                borderRadius: "8px",
+                color: "rgba(200,168,75,0.85)",
+                border: "1px solid rgba(232,160,32,0.3)",
                 cursor: "pointer",
+                letterSpacing: "1px",
+                textTransform: "uppercase",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                width: "100%",
               }}
             >
               Create Account
@@ -4813,44 +4824,38 @@ function HUD({
           left: 0,
           width: "100vw",
           height: "100vh",
-          background: "linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)",
+          background: "#0d0a05",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          color: "white",
-          fontFamily: "Inter, sans-serif",
+          color: "rgba(220,210,195,0.9)",
+          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
           zIndex: 1000,
         }}
       >
         <div
           style={{
             textAlign: "center",
-            padding: "40px",
-            background: "rgba(0,0,0,0.3)",
-            borderRadius: "20px",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
+            padding: "44px 48px",
+            background: "rgba(18,12,5,0.96)",
+            border: "1px solid rgba(232,160,32,0.25)",
+            boxShadow: "0 24px 60px rgba(0,0,0,0.8)",
             maxWidth: "400px",
             width: "100%",
           }}
         >
-          <h1
-            style={{
-              fontSize: "48px",
-              fontWeight: "bold",
-              marginBottom: "30px",
-            }}
-          >
-            FPS ARENA
-          </h1>
-          <h2 style={{ fontSize: "24px", marginBottom: "20px" }}>
+          <div style={{ fontSize: "13px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase", marginBottom: "6px" }}>
+            DOG: THE HOTDOG WARS
+          </div>
+          <h2 style={{ fontSize: "28px", fontWeight: "700", color: "#e8a020", letterSpacing: "2px", textTransform: "uppercase", margin: "0 0 28px 0" }}>
             Create Account
           </h2>
           <div
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: "15px",
+              gap: "12px",
               marginBottom: "20px",
             }}
           >
@@ -4860,12 +4865,13 @@ function HUD({
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               style={{
-                padding: "12px",
-                fontSize: "16px",
-                borderRadius: "8px",
-                border: "none",
+                padding: "12px 14px",
+                fontSize: "15px",
+                background: "#1a1005",
+                border: "1px solid rgba(232,160,32,0.3)",
                 outline: "none",
-                color: "black",
+                color: "rgba(220,210,195,0.9)",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
               }}
             />
             <input
@@ -4874,12 +4880,13 @@ function HUD({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={{
-                padding: "12px",
-                fontSize: "16px",
-                borderRadius: "8px",
-                border: "none",
+                padding: "12px 14px",
+                fontSize: "15px",
+                background: "#1a1005",
+                border: "1px solid rgba(232,160,32,0.3)",
                 outline: "none",
-                color: "black",
+                color: "rgba(220,210,195,0.9)",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
               }}
             />
             <input
@@ -4888,12 +4895,13 @@ function HUD({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               style={{
-                padding: "12px",
-                fontSize: "16px",
-                borderRadius: "8px",
-                border: "none",
+                padding: "12px 14px",
+                fontSize: "15px",
+                background: "#1a1005",
+                border: "1px solid rgba(232,160,32,0.3)",
                 outline: "none",
-                color: "black",
+                color: "rgba(220,210,195,0.9)",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
               }}
             />
           </div>
@@ -4940,14 +4948,17 @@ function HUD({
                 }
               }}
               style={{
-                padding: "12px 20px",
-                fontSize: "18px",
-                fontWeight: "bold",
-                background: "#4CAF50",
-                color: "white",
+                padding: "13px 20px",
+                fontSize: "16px",
+                fontWeight: "700",
+                background: "rgba(232,160,32,0.9)",
+                color: "#0d0a05",
                 border: "none",
-                borderRadius: "8px",
                 cursor: "pointer",
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                width: "100%",
               }}
             >
               CREATE ACCOUNT
@@ -4958,12 +4969,15 @@ function HUD({
               }
               style={{
                 padding: "12px 20px",
-                fontSize: "16px",
+                fontSize: "14px",
                 background: "transparent",
-                color: "white",
-                border: "2px solid white",
-                borderRadius: "8px",
+                color: "rgba(200,168,75,0.85)",
+                border: "1px solid rgba(232,160,32,0.3)",
                 cursor: "pointer",
+                letterSpacing: "1px",
+                textTransform: "uppercase",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                width: "100%",
               }}
             >
               Back to Login
@@ -5146,11 +5160,11 @@ function HUD({
           left: 0,
           width: "100vw",
           height: "100vh",
-          background: "linear-gradient(135deg, #9C27B0 0%, #7B1FA2 100%)",
+          background: "#0d0a05",
           display: "flex",
           flexDirection: "column",
-          color: "white",
-          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+          color: "rgba(220,210,195,0.9)",
+          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
           zIndex: 1000,
           padding: "20px",
         }}
@@ -5162,33 +5176,37 @@ function HUD({
             justifyContent: "space-between",
             alignItems: "center",
             marginBottom: "20px",
-            padding: "15px 20px",
-            background: "rgba(0,0,0,0.4)",
-            borderRadius: "10px",
+            padding: "16px 24px",
+            background: "rgba(18,12,5,0.95)",
+            borderBottom: "1px solid rgba(232,160,32,0.25)",
           }}
         >
-          <h1 style={{ fontSize: "36px", margin: 0 }}>🛒 SHOP</h1>
-          <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-            <span style={{ fontSize: "20px", fontWeight: "bold" }}>
-              💰{" "}
-              {gameState.user.currency === 67 ? "∞" : gameState.user.currency}
+          <div>
+            <div style={{ fontSize: "11px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase" }}>DOG: The Hotdog Wars</div>
+            <h1 style={{ fontSize: "28px", margin: "2px 0 0 0", fontWeight: "700", color: "#e8a020", letterSpacing: "3px", textTransform: "uppercase" }}>ARMORY</h1>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
+            <span style={{ fontSize: "17px", color: "#c8a84b" }}>
+              🪙 {gameState.user.currency === 67 ? "∞" : gameState.user.currency}
             </span>
             <button
               onClick={() =>
                 setGameState((prev) => ({ ...prev, gamePhase: "menu" }))
               }
               style={{
-                padding: "10px 20px",
-                fontSize: "16px",
-                fontWeight: "bold",
-                background: "#fdc830",
-                color: "#333",
-                border: "none",
-                borderRadius: "8px",
+                padding: "10px 22px",
+                fontSize: "13px",
+                fontWeight: "700",
+                background: "transparent",
+                color: "rgba(200,168,75,0.85)",
+                border: "1px solid rgba(232,160,32,0.35)",
                 cursor: "pointer",
+                letterSpacing: "1px",
+                textTransform: "uppercase",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
               }}
             >
-              BACK
+              ← BACK
             </button>
           </div>
         </div>
@@ -5197,9 +5215,9 @@ function HUD({
         <div
           style={{
             marginBottom: "15px",
-            padding: "12px 15px",
-            background: "linear-gradient(135deg, #f39c12 0%, #e74c3c 100%)",
-            borderRadius: "8px",
+            padding: "12px 18px",
+            background: "rgba(18,12,5,0.95)",
+            border: "1px solid rgba(232,160,32,0.3)",
           }}
         >
           <div
@@ -5249,9 +5267,10 @@ function HUD({
                   <span
                     style={{
                       fontSize: "12px",
-                      background: "#4CAF50",
-                      padding: "2px 6px",
-                      borderRadius: "4px",
+                      background: "rgba(232,160,32,0.9)",
+                      color: "#0d0a05",
+                      padding: "2px 8px",
+                      fontWeight: "700",
                     }}
                   >
                     {bundle.price}
@@ -5439,13 +5458,14 @@ function HUD({
                     disabled={!canAfford}
                     style={{
                       padding: "10px",
-                      fontSize: "14px",
-                      background: canAfford ? "#4CAF50" : "#999",
-                      color: "white",
+                      fontSize: "13px",
+                      background: canAfford ? "rgba(232,160,32,0.9)" : "rgba(60,50,35,0.7)",
+                      color: canAfford ? "#0d0a05" : "rgba(160,140,110,0.6)",
                       border: "none",
-                      borderRadius: "6px",
                       cursor: canAfford ? "pointer" : "not-allowed",
-                      fontWeight: "bold",
+                      fontWeight: "700",
+                      letterSpacing: "1px",
+                      textTransform: "uppercase" as const,
                     }}
                   >
                     {canAfford ? `BUY ${item.price}` : "NOT ENOUGH"}
@@ -5465,7 +5485,7 @@ function HUD({
           <div style={{
             background: "#1a1a2e", border: "1px solid #333", borderRadius: "14px",
             padding: "32px", width: "100%", maxWidth: "420px", color: "white",
-            fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+            fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
             boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
           }}>
             <h2 style={{ margin: "0 0 6px 0", fontSize: "22px" }}>💳 Purchase Gold</h2>
@@ -5541,10 +5561,10 @@ function HUD({
                 disabled={paymentLoading}
                 style={{
                   flex: 1, padding: "12px", borderRadius: "8px", border: "none",
-                  background: paymentLoading ? "#555" : "linear-gradient(135deg, #4CAF50, #2e7d32)",
-                  color: "white", fontSize: "16px", fontWeight: "bold",
+                  background: paymentLoading ? "rgba(130,110,70,0.5)" : "rgba(232,160,32,0.9)",
+                  color: paymentLoading ? "rgba(200,180,140,0.6)" : "#0d0a05", fontSize: "15px", fontWeight: "700",
                   cursor: paymentLoading ? "not-allowed" : "pointer",
-                  fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                  fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
                 }}
               >
                 {paymentLoading ? "Processing..." : `Pay ${paymentModal.price}`}
@@ -5555,7 +5575,7 @@ function HUD({
                 style={{
                   padding: "12px 20px", borderRadius: "8px", border: "1px solid #555",
                   background: "transparent", color: "#aaa", fontSize: "15px", cursor: "pointer",
-                  fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                  fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
                 }}
               >
                 Cancel
@@ -5595,13 +5615,12 @@ function HUD({
           left: 0,
           width: "100vw",
           height: "100vh",
-          background:
-            "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
+          background: "#0d0a05",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          color: "white",
-          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+          color: "rgba(220,210,195,0.9)",
+          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
           zIndex: 1000,
           overflow: "auto",
         }}
@@ -5609,24 +5628,26 @@ function HUD({
         <div
           style={{
             textAlign: "center",
-            padding: "50px",
-            background: "rgba(0,0,0,0.7)",
-            borderRadius: "20px",
-            boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+            padding: "44px 50px",
+            background: "rgba(18,12,5,0.96)",
+            border: "1px solid rgba(232,160,32,0.3)",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
             maxWidth: "800px",
             margin: "20px",
           }}
         >
           <h2
             style={{
-              fontSize: "48px",
-              fontWeight: "bold",
+              fontSize: "40px",
+              fontWeight: "700",
               marginBottom: "20px",
-              color: "#4caf50",
-              textShadow: "3px 3px 6px rgba(0,0,0,0.8)",
+              color: "#e8a020",
+              letterSpacing: "4px",
+              textTransform: "uppercase",
+              textShadow: "0 0 20px rgba(232,160,32,0.4)",
             }}
           >
-            ✅ LEVEL COMPLETE!
+            LEVEL COMPLETE
           </h2>
           <div
             style={{
@@ -5778,7 +5799,7 @@ function HUD({
                     border: "none",
                     borderRadius: "8px",
                     cursor: canAffordToken ? "pointer" : "not-allowed",
-                    fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                    fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
                   }}
                 >
                   BUY - 2 💰
@@ -5857,19 +5878,19 @@ function HUD({
               document.body.requestPointerLock();
             }}
             style={{
-              padding: "20px 40px",
-              fontSize: "24px",
-              fontWeight: "bold",
-              background: "#fdc830",
-              color: "#333",
+              padding: "16px 40px",
+              fontSize: "17px",
+              fontWeight: "700",
+              background: "rgba(232,160,32,0.9)",
+              color: "#0d0a05",
               border: "none",
-              borderRadius: "12px",
               cursor: "pointer",
-              boxShadow: "0 8px 16px rgba(0,0,0,0.3)",
-              fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+              letterSpacing: "2px",
+              textTransform: "uppercase",
+              fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
             }}
           >
-            CONTINUE ADVENTURE →
+            CONTINUE →
           </button>
         </div>
       </div>
@@ -5887,13 +5908,12 @@ function HUD({
           left: 0,
           width: "100vw",
           height: "100vh",
-          background:
-            "linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #fdc830 100%)",
+          background: "#0d0a05",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          color: "white",
-          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+          color: "rgba(220,210,195,0.9)",
+          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
           zIndex: 1000,
         }}
       >
@@ -5901,22 +5921,24 @@ function HUD({
           style={{
             textAlign: "center",
             padding: "50px",
-            background: "rgba(0,0,0,0.6)",
-            borderRadius: "20px",
-            boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+            background: "rgba(18,12,5,0.96)",
+            border: "1px solid rgba(232,160,32,0.3)",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
             maxWidth: "700px",
           }}
         >
           <h2
             style={{
-              fontSize: "56px",
-              fontWeight: "bold",
+              fontSize: "48px",
+              fontWeight: "700",
               marginBottom: "20px",
-              color: "#fdc830",
-              textShadow: "3px 3px 6px rgba(0,0,0,0.8)",
+              color: "#e8a020",
+              textShadow: "0 0 20px rgba(232,160,32,0.4)",
+              letterSpacing: "4px",
+              textTransform: "uppercase",
             }}
           >
-            🌭 VICTORY! 🌭
+            VICTORY
           </h2>
           <div
             style={{
@@ -6047,15 +6069,17 @@ function HUD({
                 document.body.requestPointerLock();
               }}
               style={{
-                padding: "15px 30px",
-                fontSize: "20px",
-                fontWeight: "bold",
-                background: "#fdc830",
-                color: "#333",
+                padding: "14px 30px",
+                fontSize: "16px",
+                fontWeight: "700",
+                background: "rgba(232,160,32,0.9)",
+                color: "#0d0a05",
                 border: "none",
-                borderRadius: "8px",
                 cursor: "pointer",
-                boxShadow: "0 8px 16px rgba(0,0,0,0.3)",
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                width: "100%",
               }}
             >
               PLAY AGAIN
@@ -6132,14 +6156,17 @@ function HUD({
                 }));
               }}
               style={{
-                padding: "15px 30px",
-                fontSize: "18px",
-                fontWeight: "bold",
-                background: "rgba(255,255,255,0.2)",
-                color: "white",
-                border: "2px solid white",
-                borderRadius: "8px",
+                padding: "12px 30px",
+                fontSize: "15px",
+                fontWeight: "600",
+                background: "transparent",
+                color: "rgba(200,168,75,0.85)",
+                border: "1px solid rgba(232,160,32,0.35)",
                 cursor: "pointer",
+                letterSpacing: "1px",
+                textTransform: "uppercase",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                width: "100%",
               }}
             >
               RETURN TO MENU
@@ -6161,30 +6188,33 @@ function HUD({
           left: 0,
           width: "100vw",
           height: "100vh",
-          background: "rgba(0,0,0,0.9)",
+          background: "#0d0a05",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          color: "white",
-          fontFamily: "Inter, sans-serif",
+          color: "rgba(220,210,195,0.9)",
+          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
           zIndex: 1000,
         }}
       >
         <div
           style={{
             textAlign: "center",
-            padding: "40px",
-            background: "rgba(20,20,20,0.9)",
-            borderRadius: "20px",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+            padding: "44px 48px",
+            background: "rgba(18,12,5,0.96)",
+            border: "1px solid rgba(180,40,40,0.4)",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.9)",
           }}
         >
           <h2
             style={{
               fontSize: "48px",
-              fontWeight: "bold",
+              fontWeight: "700",
               marginBottom: "20px",
-              color: "#ff4444",
+              color: "#c0392b",
+              letterSpacing: "4px",
+              textTransform: "uppercase",
+              textShadow: "0 0 20px rgba(192,57,43,0.5)",
             }}
           >
             GAME OVER
@@ -6268,14 +6298,17 @@ function HUD({
                 document.body.requestPointerLock();
               }}
               style={{
-                padding: "15px 30px",
-                fontSize: "20px",
-                fontWeight: "bold",
-                background: "#4CAF50",
-                color: "white",
+                padding: "14px 30px",
+                fontSize: "16px",
+                fontWeight: "700",
+                background: "rgba(232,160,32,0.9)",
+                color: "#0d0a05",
                 border: "none",
-                borderRadius: "8px",
                 cursor: "pointer",
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                width: "100%",
               }}
             >
               PLAY AGAIN
@@ -6330,14 +6363,17 @@ function HUD({
                 }));
               }}
               style={{
-                padding: "15px 30px",
-                fontSize: "20px",
-                fontWeight: "bold",
-                background: "#2196F3",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
+                padding: "12px 30px",
+                fontSize: "15px",
+                fontWeight: "600",
+                background: "transparent",
+                color: "rgba(200,168,75,0.85)",
+                border: "1px solid rgba(232,160,32,0.35)",
                 cursor: "pointer",
+                letterSpacing: "1px",
+                textTransform: "uppercase",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                width: "100%",
               }}
             >
               RETURN HOME
@@ -6357,35 +6393,42 @@ function HUD({
           left: 0,
           width: "100vw",
           height: "100vh",
-          background: "rgba(0,0,0,0.8)",
+          background: "rgba(8,5,2,0.88)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          color: "white",
-          fontFamily: "Inter, sans-serif",
+          color: "rgba(220,210,195,0.9)",
+          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
           zIndex: 1000,
         }}
       >
         <div
           style={{
             textAlign: "center",
-            padding: "40px",
-            background: "rgba(20,20,20,0.9)",
-            borderRadius: "20px",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+            padding: "48px 56px",
+            background: "rgba(18,12,5,0.97)",
+            border: "1px solid rgba(232,160,32,0.28)",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.9)",
+            minWidth: "320px",
           }}
         >
+          <div style={{ fontSize: "12px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase", marginBottom: "6px" }}>
+            Paused
+          </div>
           <h2
             style={{
-              fontSize: "48px",
-              fontWeight: "bold",
-              marginBottom: "30px",
+              fontSize: "36px",
+              fontWeight: "700",
+              marginBottom: "32px",
+              color: "#e8a020",
+              letterSpacing: "4px",
+              textTransform: "uppercase",
             }}
           >
             GAME PAUSED
           </h2>
           <div
-            style={{ display: "flex", flexDirection: "column", gap: "20px" }}
+            style={{ display: "flex", flexDirection: "column", gap: "12px" }}
           >
             <button
               onClick={() => {
@@ -6393,17 +6436,44 @@ function HUD({
                 document.body.requestPointerLock();
               }}
               style={{
-                padding: "15px 30px",
-                fontSize: "20px",
-                fontWeight: "bold",
-                background: "#4CAF50",
-                color: "white",
+                padding: "14px 30px",
+                fontSize: "16px",
+                fontWeight: "700",
+                background: "rgba(232,160,32,0.9)",
+                color: "#0d0a05",
                 border: "none",
-                borderRadius: "8px",
                 cursor: "pointer",
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                width: "100%",
               }}
             >
               RESUME
+            </button>
+            <button
+              onClick={() => {
+                setGameState((prev) => ({
+                  ...prev,
+                  gamePhase: "settings",
+                  previousGamePhase: "paused",
+                }));
+              }}
+              style={{
+                padding: "12px 30px",
+                fontSize: "15px",
+                fontWeight: "600",
+                background: "transparent",
+                color: "rgba(200,168,75,0.85)",
+                border: "1px solid rgba(232,160,32,0.35)",
+                cursor: "pointer",
+                letterSpacing: "1px",
+                textTransform: "uppercase",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                width: "100%",
+              }}
+            >
+              SETTINGS
             </button>
             <button
               onClick={() => {
@@ -6423,7 +6493,6 @@ function HUD({
                     cosmetics: [],
                     equippedSkin: null,
                   },
-                  // Reset weapon skins when logging out
                   equippedWeaponSkins: {
                     1: "Default",
                     2: "Default",
@@ -6436,38 +6505,20 @@ function HUD({
                 }));
               }}
               style={{
-                padding: "15px 30px",
-                fontSize: "20px",
-                fontWeight: "bold",
-                background: "#f44336",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
+                padding: "11px 30px",
+                fontSize: "13px",
+                fontWeight: "500",
+                background: "transparent",
+                color: "rgba(160,100,80,0.75)",
+                border: "1px solid rgba(160,80,60,0.25)",
                 cursor: "pointer",
+                letterSpacing: "1px",
+                textTransform: "uppercase",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                width: "100%",
               }}
             >
               EXIT TO MAIN MENU
-            </button>
-            <button
-              onClick={() => {
-                setGameState((prev) => ({
-                  ...prev,
-                  gamePhase: "settings",
-                  previousGamePhase: "paused", // Remember we came from pause menu
-                }));
-              }}
-              style={{
-                padding: "15px 30px",
-                fontSize: "20px",
-                fontWeight: "bold",
-                background: "#808080",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                cursor: "pointer",
-              }}
-            >
-              SETTINGS
             </button>
           </div>
         </div>
@@ -6488,7 +6539,7 @@ function HUD({
         height: "100vh",
         pointerEvents: "none",
         zIndex: 100,
-        fontFamily: "Inter, sans-serif",
+        fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
       }}
     >
       <Crosshair />
@@ -6609,7 +6660,7 @@ function HUD({
           borderRadius: "8px",
           color: "white",
           border: "2px solid rgba(255,215,0,0.5)",
-          fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
         }}
       >
         <div
