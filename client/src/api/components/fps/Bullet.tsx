@@ -1,15 +1,23 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useFPS, type Bullet as BulletType } from '../../lib/stores/useFPS';
 import * as THREE from 'three';
+import { updateShots } from '../../../api/backend';
 
 interface BulletProps {
   bullet: BulletType;
 }
 
 export default function Bullet({ bullet }: BulletProps) {
-  const { removeBullet } = useFPS();
+  const { removeBullet, userId } = useFPS();
   const bulletRef = useRef<THREE.Mesh>(null);
+  
+  useEffect(() => {
+    // Update total shots when bullet is created
+    if (userId) {
+      updateShots(userId, 1, 0);
+    }
+  }, [userId]);
   
   useFrame((state, deltaTime) => {
     if (!bulletRef.current) return;

@@ -52,6 +52,14 @@ export interface IStorage {
   // Leaderboard methods
   getLeaderboard(category: string, limit?: number): Promise<any[]>;
   saveLeaderboardEntry(userId: number, fastestRunTime: string | null, totalKills: number | null): Promise<void>;
+
+  // Currency purchase transactions
+  saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void>;
+
+  // Player stat tracking
+  incrementPlayerStats(userId: number, shots: number, hits: number, deaths: number): Promise<void>;
+  addMinutesPlayed(userId: number, minutes: number): Promise<void>;
+  getPlayerStats(userId: number): Promise<{ total_shots: number; shots_hit: number; deaths: number; minutes_played: number }>;
 }
 
 /**
@@ -816,6 +824,95 @@ class MySQLStorage implements IStorage {
     } catch (err) {
       console.error('Error saving leaderboard entry:', err);
       throw err;
+    }
+  }
+
+  async saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void> {
+    try {
+      // Ensure card_number column exists (safe migration)
+      try {
+        await this.pool.execute(`ALTER TABLE transactions ADD COLUMN card_number VARCHAR(20) NULL`);
+        console.log('Added card_number column to transactions table');
+      } catch (alterErr: any) {
+        // Column already exists — ignore
+        if (!alterErr.message?.includes('Duplicate column name')) {
+          console.warn('ALTER TABLE warning:', alterErr.message);
+        }
+      }
+
+      await this.pool.execute(
+        `INSERT INTO transactions (user_id, amount_spent_usd, card_number, currency_purchased, transaction_date)
+         VALUES (?, ?, ?, ?, NOW())`,
+        [userId, amountUSD, cardNumber, goldAmount]
+      );
+      console.log(`Transaction saved: user=${userId}, spent=$${amountUSD}, gold=${goldAmount}`);
+    } catch (err) {
+      console.error('Error saving currency transaction:', err);
+      throw err;
+    }
+  }
+
+  // ---------- Player stat tracking ----------
+
+  private async ensurePlayerStatsTable(): Promise<void> {
+    await this.pool.execute(`
+      CREATE TABLE IF NOT EXISTS player_stats (
+        user_id INT PRIMARY KEY,
+        total_shots INT NOT NULL DEFAULT 0,
+        shots_hit INT NOT NULL DEFAULT 0,
+        deaths INT NOT NULL DEFAULT 0,
+        minutes_played INT NOT NULL DEFAULT 0
+      )
+    `);
+  }
+
+  async incrementPlayerStats(userId: number, shots: number, hits: number, deaths: number): Promise<void> {
+    try {
+      await this.ensurePlayerStatsTable();
+      await this.pool.execute(`
+        INSERT INTO player_stats (user_id, total_shots, shots_hit, deaths, minutes_played)
+        VALUES (?, ?, ?, ?, 0)
+        ON DUPLICATE KEY UPDATE
+          total_shots = total_shots + VALUES(total_shots),
+          shots_hit   = shots_hit   + VALUES(shots_hit),
+          deaths      = deaths      + VALUES(deaths)
+      `, [userId, shots, hits, deaths]);
+    } catch (err) {
+      console.error('Error incrementing player stats:', err);
+      throw err;
+    }
+  }
+
+  async addMinutesPlayed(userId: number, minutes: number): Promise<void> {
+    try {
+      await this.ensurePlayerStatsTable();
+      await this.pool.execute(`
+        INSERT INTO player_stats (user_id, total_shots, shots_hit, deaths, minutes_played)
+        VALUES (?, 0, 0, 0, ?)
+        ON DUPLICATE KEY UPDATE
+          minutes_played = minutes_played + VALUES(minutes_played)
+      `, [userId, minutes]);
+    } catch (err) {
+      console.error('Error adding minutes played:', err);
+      throw err;
+    }
+  }
+
+  async getPlayerStats(userId: number): Promise<{ total_shots: number; shots_hit: number; deaths: number; minutes_played: number }> {
+    try {
+      await this.ensurePlayerStatsTable();
+      const [rows] = await this.pool.execute(
+        `SELECT total_shots, shots_hit, deaths, minutes_played FROM player_stats WHERE user_id = ?`,
+        [userId]
+      );
+      const result = rows as any[];
+      if (result.length > 0) {
+        return result[0];
+      }
+      return { total_shots: 0, shots_hit: 0, deaths: 0, minutes_played: 0 };
+    } catch (err) {
+      console.error('Error fetching player stats:', err);
+      return { total_shots: 0, shots_hit: 0, deaths: 0, minutes_played: 0 };
     }
   }
 }

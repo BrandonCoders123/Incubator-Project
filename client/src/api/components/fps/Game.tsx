@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useFPS } from '../../lib/stores/useFPS';
 import { useAudio } from '../../lib/stores/useAudio';
-import { sendGameEnd } from '../../api/backend';
+import { sendGameEnd, updateShots } from '../../api/backend';
 
 import Player from './Player';
 import Environment from './Environment';
@@ -10,12 +10,12 @@ import Enemy from './Enemy';
 import Bullet from './Bullet';
 
 export default function Game() {
-  const { 
-    gameState, 
-    enemies, 
-    bullets, 
-    updateBullets, 
-    spawnEnemy, 
+  const {
+    gameState,
+    enemies,
+    bullets,
+    updateBullets,
+    spawnEnemy,
     setPointerLocked,
     pauseGame,
     resumeGame,
@@ -99,8 +99,21 @@ export default function Game() {
   useFrame((state, deltaTime) => {
     if (gameState !== 'playing') return;
 
-    // Update bullets
+    // Update bullets and check for hits
     updateBullets(deltaTime);
+
+    // Check for bullet hits on enemies
+    bullets.forEach(bullet => {
+      enemies.forEach(enemy => {
+        const bulletPos = new THREE.Vector3(...bullet.position);
+        const enemyPos = new THREE.Vector3(...enemy.position);
+        const distance = bulletPos.distanceTo(enemyPos);
+
+        if (distance < 1.5) {
+          updateShots(userId, 0, 1);
+        }
+      });
+    });
 
     // Spawn enemies periodically
     const currentTime = state.clock.elapsedTime;

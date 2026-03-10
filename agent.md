@@ -1,57 +1,39 @@
-Agent Role: FPS Technical Architect (Autonomous)
-Project Context
-Environment: Replit (Web-based FPS)
+Agent Role: Data Systems Engineer
+Project Goal: Persistent Stat Tracking
+The mission is to capture granular player metrics and sync them from the TSX frontend to the phpMyAdmin database via PHP endpoints.
 
-Frontend/Logic: TypeScript (TSX)
+Data Schema Requirements
+Track and store the following new metrics:
 
-Backend/Database: PHP with phpMyAdmin (MySQL)
+Total Shots: Cumulative count of all weapon fire events.
 
-Physics: Physics-based player controller (Velocity/Forces)
+Shots Hit: Count of successful raycast/collision hits on valid targets.
 
-Pattern: Event-Based Architecture (Pub/Sub or Event Listeners)
+Deaths: Increment total when player health reaches zero.
 
-Execution Rules (Strict)
-Autonomy: Analyze the file structure and implement solutions directly.
+Time Played: Total session duration converted to Hours:Minutes format.
 
-Conciseness: No long-winded explanations. Provide a 1-sentence summary of the change and the code.
+Execution Rules (Autonomous & Concise)
+Direct Implementation: Add necessary fetch() calls to TSX event listeners and create corresponding PHP handlers.
 
-Language Boundary: TSX handles gameplay and UI; PHP handles database transactions and session security.
+Minimalist Feedback: 1-sentence summary of the code change only.
 
-Data Persistence & Bug Fix: "Save on Event"
-The system must move away from "End-of-Game" only saves. Implement the following triggers:
+Database Integrity: Always use SET column = column + ? in SQL to ensure accurate incrementing.
 
-1. Kill Tracking (Incremental)
-Trigger: onPlayerKill or onEnemyDeath event.
+State & Saving Logic
+1. The "Heartbeat" (Time Played)
+Logic: Every 60 seconds of active gameplay, the TSX layer must ping the PHP API to increment minutes_played.
 
-Action: Send a POST request to the PHP backend to increment total_kills in phpMyAdmin immediately.
+Conversion: The PHP layer should handle the rollover logic (60 mins = 1 hour) or store raw minutes and let the Profile Page handle the formatting.
 
-Requirement: Ensure the database query uses UPDATE kills = kills + 1 to avoid overwriting.
+2. The "Trigger" (Shots/Deaths)
+Shots Fired: Call the save function inside the onFire weapon event.
 
-2. Level Completion (Progressive)
-Trigger: onLevelComplete event.
+Deaths: Call the save function inside the onDie player event.
 
-Action: Sync all current session stats (Kills/Items) to the database.
+Accuracy Calculation: (Shots Hit / Total Shots) * 100. The AI should calculate this on the fly or store it as a separate float.
 
-3. Player Death (Security Save)
-Trigger: onPlayerDeath event.
+3. Database Sync (PHP)
+Security: Use PDO prepared statements for every update.
 
-Action: Finalize and save current session kills before the player respawns or exits.
-
-4. Fastest Time (Conditional)
-Trigger: onGameComplete event only.
-
-Action: Compare current_session_time with fastest_time in the DB. Update only if current < record.
-
-Coding Standards
-TSX: Use functional components and hooks for UI. Use Classes for Physics/Game Logic.
-
-PHP: Use Prepared Statements (PDO) for all phpMyAdmin interactions to prevent SQL injection.
-
-Physics: All movement must be applied via velocity or applyForce within the physics loop, not by direct coordinate manipulation.
-
-File Organization
-/src/components: TSX UI and HUD.
-
-/src/game: Physics, Player Controller, and Event Emitters.
-
-/api: PHP scripts for database CRUD operations.
+Efficiency: Use UPDATE queries for existing users; do not create duplicate rows for the same UserID.

@@ -163,22 +163,22 @@ interface EnemyArchetype {
 const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
   melee: {
     health: 100,
-    moveSpeed: 5,
-    damage: 10,
+    moveSpeed: 6,
+    damage: 15,
     attackInterval: 1000,
     color: "#ff0000",
   },
   ranged: {
     health: 100,
-    moveSpeed: 4,
+    moveSpeed: 5,
     damage: 10,
-    attackInterval: 2000, // Medium fire rate
+    attackInterval: 750, // Medium fire rate
     color: "#ff6600",
   },
   giant: {
     health: 400,
     moveSpeed: 3,
-    damage: 25,
+    damage: 50,
     attackInterval: 1500,
     color: "#990000",
     size: 2, // 2x larger than normal enemies
@@ -265,6 +265,8 @@ interface GameState {
   isAdmin: boolean; // Whether user has admin privileges
   gameStartTime: number | null; // Timestamp when game started (for leaderboard run time)
   gameMode: "story" | "endless"; // Game mode: story (with levels) or endless (wave survival)
+  sessionShotsFired: number; // Shots fired this session (saved to DB on death)
+  sessionShotsHit: number;   // Bullet hits on enemies this session
 }
 
 interface ShopItem {
@@ -637,6 +639,7 @@ function Player({
               ammo: prev.ammo - 1,
               bullets: [...prev.bullets, ...newBullets],
               lastShotTime: now,
+              sessionShotsFired: prev.sessionShotsFired + 1,
             }));
 
             console.log(`${currentWeapon.name} fired!`);
@@ -704,6 +707,7 @@ function Player({
             },
           ],
           lastShotTime: now,
+          sessionShotsFired: prev.sessionShotsFired + 1,
         }));
 
         console.log(`${currentWeapon.name} auto-firing!`);
@@ -1255,13 +1259,17 @@ function Enemy({
           const nextLevel = prev.level.currentLevel + 1;
           const hasNextLevel = nextLevel < LEVELS.length;
 
-          // Check victory condition - completed final level
+          // Check victory condition - completed final level (story mode only)
           const completedFinalLevel = shouldLevelUp && !hasNextLevel;
+          const isEndless = prev.gameMode === "endless";
 
           // Determine next game phase
           let nextPhase = prev.gamePhase;
-          if (completedFinalLevel) {
+          if (completedFinalLevel && !isEndless) {
             nextPhase = "victory";
+          } else if (completedFinalLevel && isEndless) {
+            // In endless mode, loop kills at max difficulty — no victory
+            nextPhase = prev.gamePhase;
           } else if (shouldLevelUp && hasNextLevel) {
             nextPhase = "levelTransition";
           }
@@ -1288,10 +1296,11 @@ function Enemy({
             },
             level: {
               currentLevel: prev.level.currentLevel,
-              killsThisLevel: newLevelKills,
+              killsThisLevel: completedFinalLevel && isEndless ? 0 : newLevelKills,
               giantsSpawnedThisLevel: prev.level.giantsSpawnedThisLevel,
             },
             gamePhase: nextPhase,
+            sessionShotsHit: prev.sessionShotsHit + 1,
           };
         });
       }
@@ -1588,6 +1597,38 @@ function WeaponSprite({ gameState }: { gameState: GameState }) {
   );
 }
 
+const INTRO_SCENES = [
+  {
+    text: "In the peaceful town of Hot Dog Haven, a young hot dog named Hayden lived happily with his family...",
+    duration: 4000,
+  },
+  {
+    text: "But one fateful day, an army of robot hot dogs descended upon the town!",
+    duration: 4000,
+  },
+  {
+    text: "They captured Hayden's parents and took them to their stronghold at Mustard Mountain!",
+    duration: 4000,
+  },
+  {
+    text: "Now Hayden must be brave. He must conquer the robot settlements scattered across the land...",
+    duration: 4000,
+  },
+  {
+    text: "Along the way, he'll rescue captured hot dog allies and grow stronger.",
+    duration: 4000,
+  },
+  {
+    text: "Only by defeating all four robot settlements can Hayden reach Mustard Mountain and save his parents!",
+    duration: 4000,
+  },
+  {
+    text: "The legend of MUSTARD begins now...",
+    duration: 3000,
+    isLast: true,
+  },
+];
+
 // Intro Cutscene Component
 function IntroCutscene({
   setGameState,
@@ -1596,43 +1637,11 @@ function IntroCutscene({
 }) {
   const [currentScene, setCurrentScene] = useState(0);
 
-  const scenes = [
-    {
-      text: "In the peaceful town of Hot Dog Haven, a young hot dog named Hayden lived happily with his family...",
-      duration: 4000,
-    },
-    {
-      text: "But one fateful day, an army of robot hot dogs descended upon the town!",
-      duration: 4000,
-    },
-    {
-      text: "They captured Hayden's parents and took them to their stronghold at Mustard Mountain!",
-      duration: 4000,
-    },
-    {
-      text: "Now Hayden must be brave. He must conquer the robot settlements scattered across the land...",
-      duration: 4000,
-    },
-    {
-      text: "Along the way, he'll rescue captured hot dog allies and grow stronger.",
-      duration: 4000,
-    },
-    {
-      text: "Only by defeating all four robot settlements can Hayden reach Mustard Mountain and save his parents!",
-      duration: 4000,
-    },
-    {
-      text: "The legend of MUSTARD begins now...",
-      duration: 3000,
-      isLast: true,
-    },
-  ];
-
   useEffect(() => {
-    if (currentScene < scenes.length - 1) {
+    if (currentScene < INTRO_SCENES.length - 1) {
       const timer = setTimeout(() => {
         setCurrentScene(currentScene + 1);
-      }, scenes[currentScene].duration);
+      }, INTRO_SCENES[currentScene].duration);
 
       return () => clearTimeout(timer);
     } else {
@@ -1650,14 +1659,16 @@ function IntroCutscene({
             gamePhase: "playing",
             unlockedWeapons: newUnlockedWeapons,
             gameStartTime: Date.now(),
+            sessionShotsFired: 0,
+            sessionShotsHit: 0,
           };
         });
         document.body.requestPointerLock();
-      }, scenes[currentScene].duration);
+      }, INTRO_SCENES[currentScene].duration);
 
       return () => clearTimeout(timer);
     }
-  }, [currentScene, scenes, setGameState]);
+  }, [currentScene, setGameState]);
 
   return (
     <div
@@ -1701,7 +1712,7 @@ function IntroCutscene({
             justifyContent: "center",
           }}
         >
-          {scenes[currentScene].text}
+          {INTRO_SCENES[currentScene].text}
         </h2>
 
         <div
@@ -1719,7 +1730,7 @@ function IntroCutscene({
               gap: "10px",
             }}
           >
-            {scenes.map((_, index) => (
+            {INTRO_SCENES.map((_, index) => (
               <div
                 key={index}
                 style={{
@@ -1753,6 +1764,8 @@ function IntroCutscene({
                 gamePhase: "playing",
                 unlockedWeapons: newUnlockedWeapons,
                 gameStartTime: Date.now(),
+                sessionShotsFired: 0,
+                sessionShotsHit: 0,
               };
             });
             document.body.requestPointerLock();
@@ -4189,6 +4202,12 @@ function HUD({
   const [shopLoading, setShopLoading] = useState(false);
   const [shopError, setShopError] = useState<string | null>(null);
   const [purchaseLoading, setPurchaseLoading] = useState(false);
+  const [paymentModal, setPaymentModal] = useState<{ id: number; price: string; gold: number; amountUSD: number } | null>(null);
+  const [payCardNumber, setPayCardNumber] = useState("");
+  const [payExpiry, setPayExpiry] = useState("");
+  const [payCVC, setPayCVC] = useState("");
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
   const [ownedItemIds, setOwnedItemIds] = useState<number[]>([]);
 
   // Fetch shop items and owned items when entering the shop
@@ -4264,30 +4283,26 @@ function HUD({
       fastestRunTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
     
-    // Get total kills from the entire run
-    const totalKills = gameState.story.totalKills;
+    console.log(`Saving campaign victory leaderboard: fastestRunTime=${fastestRunTime}`);
     
-    console.log(`Saving leaderboard: totalKills=${totalKills}, fastestRunTime=${fastestRunTime}`);
-    
-    // Save to leaderboard
+    // Save to leaderboard — only run time for campaign
     fetch("/api/leaderboard", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({
         fastestRunTime: fastestRunTime,
-        totalKills: totalKills,
       }),
     })
       .then((res) => {
         if (res.ok) {
-          console.log(`Leaderboard saved successfully: kills=${totalKills}, time=${fastestRunTime}`);
+          console.log(`Campaign victory leaderboard saved: time=${fastestRunTime}`);
         } else {
           res.text().then(text => console.error("Failed to save leaderboard entry:", text));
         }
       })
       .catch((err) => console.error("Error saving leaderboard:", err));
-  }, [gameState.gamePhase, gameState.gameStartTime, gameState.story.totalKills, gameState.user.isGuest]);
+  }, [gameState.gamePhase, gameState.gameStartTime, gameState.user.isGuest]);
 
   // Save total kills to localStorage after every wave (level transition)
   const levelTransitionSavedRef = React.useRef<number>(-1);
@@ -4385,6 +4400,24 @@ function HUD({
     }
   }, [gameState.gamePhase, gameState.gameMode, gameState.gameStartTime, gameState.story.totalKills, gameState.user.isGuest]);
 
+  // Save shots/hits/deaths to DB on game over (logged-in users only)
+  const statsSavedRef = React.useRef<number | null>(null);
+  useEffect(() => {
+    if (gameState.gamePhase !== "gameover") return;
+    if (gameState.user.isGuest) return;
+    if (statsSavedRef.current === gameState.gameStartTime) return;
+    statsSavedRef.current = gameState.gameStartTime;
+
+    const shots = gameState.sessionShotsFired;
+    const hits = gameState.sessionShotsHit;
+    fetch("/api/stats/update", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ shots, hits, deaths: 1 }),
+    }).catch((err) => console.error("Failed to save stats:", err));
+  }, [gameState.gamePhase, gameState.gameStartTime, gameState.user.isGuest, gameState.sessionShotsFired, gameState.sessionShotsHit]);
+
   // Currency bundle options (mock purchases - no real payment yet)
   const currencyBundles = [
     { id: 1, price: "$1", gold: 100, popular: false },
@@ -4393,54 +4426,73 @@ function HUD({
     { id: 4, price: "$50", gold: 6000, popular: false },
   ];
 
-  // Handle mock currency purchase
-  const handleBuyCurrency = async (bundle: (typeof currencyBundles)[0]) => {
+  // Open payment modal for currency purchase
+  const handleBuyCurrency = (bundle: (typeof currencyBundles)[0]) => {
     if (gameState.user.isGuest) {
       alert("Please log in to purchase gold!");
       return;
     }
-
-    // Special case: if user has unlimited gold (67), don't allow purchases
     if (gameState.user.currency === 67) {
       alert("You already have unlimited gold!");
       return;
     }
+    const amountUSD = parseFloat(bundle.price.replace("$", ""));
+    setPaymentModal({ id: bundle.id, price: bundle.price, gold: bundle.gold, amountUSD });
+    setPayCardNumber("");
+    setPayExpiry("");
+    setPayCVC("");
+    setPaymentError("");
+  };
 
-    // Mock purchase - just add gold (no real payment)
-    const confirmPurchase = window.confirm(
-      `Purchase ${bundle.gold} gold for ${bundle.price}?\n\n(This is a test purchase - no real money will be charged)`,
-    );
+  // Format card number with spaces every 4 digits
+  const formatCardNumber = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 16);
+    return digits.replace(/(.{4})/g, "$1 ").trim();
+  };
 
-    if (!confirmPurchase) return;
+  // Format expiry as MM/YY
+  const formatExpiry = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 4);
+    if (digits.length >= 3) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return digits;
+  };
 
+  // Submit payment
+  const handleSubmitPayment = async () => {
+    if (!paymentModal) return;
+    setPaymentError("");
+
+    const rawCard = payCardNumber.replace(/\s/g, "");
+    if (rawCard.length !== 16) { setPaymentError("Card number must be 16 digits."); return; }
+    if (!/^\d{2}\/\d{2}$/.test(payExpiry)) { setPaymentError("Expiry must be MM/YY."); return; }
+    if (!/^\d{3,4}$/.test(payCVC)) { setPaymentError("CVC must be 3 or 4 digits."); return; }
+
+    setPaymentLoading(true);
     try {
-      const newCurrency = gameState.user.currency + bundle.gold;
-
-      // Update currency in database
-      const response = await fetch("/api/update-currency", {
+      const res = await fetch("/api/buy-currency", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: gameState.user.username,
-          currency: newCurrency,
+          cardNumber: rawCard,
+          cardExpiry: payExpiry,
+          cardCVC: payCVC,
+          amountUSD: paymentModal.amountUSD,
+          goldAmount: paymentModal.gold,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to update currency");
+      const data = await res.json();
+      if (!res.ok) {
+        setPaymentError(data.error || "Payment failed. Please try again.");
+        return;
       }
-
-      // Update local state
-      setGameState((prev) => ({
-        ...prev,
-        user: { ...prev.user, currency: newCurrency },
-      }));
-
-      alert(`Successfully purchased ${bundle.gold} gold!`);
+      setGameState((prev) => ({ ...prev, user: { ...prev.user, currency: data.newGold } }));
+      setPaymentModal(null);
+      alert(`✅ ${paymentModal.gold.toLocaleString()} gold added to your account!`);
     } catch (err) {
-      console.error("Currency purchase error:", err);
-      alert("Purchase failed. Please try again.");
+      setPaymentError("Network error. Please try again.");
+    } finally {
+      setPaymentLoading(false);
     }
   };
 
@@ -5045,6 +5097,8 @@ function HUD({
                     settlementsConquered: [],
                     totalKills: 0,
                   },
+                  sessionShotsFired: 0,
+                  sessionShotsHit: 0,
                   level: {
                     currentLevel: 1,
                     killsThisLevel: 0,
@@ -5214,7 +5268,7 @@ function HUD({
 
   // Shop Page
   if (gameState.gamePhase === "shop") {
-    return (
+    return (<>
       <div
         style={{
           position: "fixed",
@@ -5532,7 +5586,115 @@ function HUD({
           })}
         </div>
       </div>
-    );
+      {paymentModal && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.85)", display: "flex", justifyContent: "center",
+          alignItems: "center", zIndex: 9999, pointerEvents: "all",
+        }}>
+          <div style={{
+            background: "#1a1a2e", border: "1px solid #333", borderRadius: "14px",
+            padding: "32px", width: "100%", maxWidth: "420px", color: "white",
+            fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+            boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
+          }}>
+            <h2 style={{ margin: "0 0 6px 0", fontSize: "22px" }}>💳 Purchase Gold</h2>
+            <p style={{ margin: "0 0 20px 0", color: "#aaa", fontSize: "14px" }}>
+              {paymentModal.gold.toLocaleString()} 💰 for <strong style={{ color: "#f39c12" }}>{paymentModal.price}</strong>
+            </p>
+            <p style={{
+              margin: "0 0 20px 0", padding: "10px", borderRadius: "8px",
+              background: "rgba(255,193,7,0.15)", border: "1px solid rgba(255,193,7,0.3)",
+              color: "#ffc107", fontSize: "12px", textAlign: "center",
+            }}>
+              ⚠️ Test mode — no real charges will be made
+            </p>
+            <label style={{ display: "block", marginBottom: "14px" }}>
+              <span style={{ fontSize: "13px", color: "#aaa" }}>Card Number</span>
+              <input
+                type="text"
+                placeholder="1234 5678 9012 3456"
+                value={payCardNumber}
+                onChange={(e) => setPayCardNumber(formatCardNumber(e.target.value))}
+                maxLength={19}
+                style={{
+                  display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
+                  borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
+                  color: "white", fontSize: "16px", letterSpacing: "2px", boxSizing: "border-box",
+                }}
+              />
+            </label>
+            <div style={{ display: "flex", gap: "12px", marginBottom: "14px" }}>
+              <label style={{ flex: 1 }}>
+                <span style={{ fontSize: "13px", color: "#aaa" }}>Expiry (MM/YY)</span>
+                <input
+                  type="text"
+                  placeholder="MM/YY"
+                  value={payExpiry}
+                  onChange={(e) => setPayExpiry(formatExpiry(e.target.value))}
+                  maxLength={5}
+                  style={{
+                    display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
+                    borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
+                    color: "white", fontSize: "15px", boxSizing: "border-box",
+                  }}
+                />
+              </label>
+              <label style={{ flex: 1 }}>
+                <span style={{ fontSize: "13px", color: "#aaa" }}>CVC</span>
+                <input
+                  type="text"
+                  placeholder="123"
+                  value={payCVC}
+                  onChange={(e) => setPayCVC(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  maxLength={4}
+                  style={{
+                    display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
+                    borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
+                    color: "white", fontSize: "15px", boxSizing: "border-box",
+                  }}
+                />
+              </label>
+            </div>
+            {paymentError && (
+              <p style={{
+                margin: "0 0 14px 0", padding: "10px", borderRadius: "7px",
+                background: "rgba(231,76,60,0.15)", border: "1px solid rgba(231,76,60,0.4)",
+                color: "#e74c3c", fontSize: "13px",
+              }}>
+                {paymentError}
+              </p>
+            )}
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={handleSubmitPayment}
+                disabled={paymentLoading}
+                style={{
+                  flex: 1, padding: "12px", borderRadius: "8px", border: "none",
+                  background: paymentLoading ? "#555" : "linear-gradient(135deg, #4CAF50, #2e7d32)",
+                  color: "white", fontSize: "16px", fontWeight: "bold",
+                  cursor: paymentLoading ? "not-allowed" : "pointer",
+                  fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                }}
+              >
+                {paymentLoading ? "Processing..." : `Pay ${paymentModal.price}`}
+              </button>
+              <button
+                onClick={() => { setPaymentModal(null); setPaymentError(""); }}
+                disabled={paymentLoading}
+                style={{
+                  padding: "12px 20px", borderRadius: "8px", border: "1px solid #555",
+                  background: "transparent", color: "#aaa", fontSize: "15px", cursor: "pointer",
+                  fontFamily: '"Comic Sans MS", "Comic Sans", cursive',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>);
   }
 
   // Level Transition Cutscene with Shop
@@ -6446,6 +6608,7 @@ function HUD({
   if (gameState.gamePhase !== "playing") return null;
 
   return (
+    <>
     <div
       style={{
         position: "fixed",
@@ -6612,6 +6775,8 @@ function HUD({
         </div>
       </div>
     </div>
+
+    </>
   );
 }
 
@@ -6624,6 +6789,22 @@ function GameLogic({
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
 }) {
   const lastSpawnTime = useRef(0);
+
+  // Heartbeat: send +1 minute to the server every 60 seconds while playing
+  useEffect(() => {
+    if (gameState.user.isGuest) return;
+
+    const interval = setInterval(() => {
+      fetch("/api/stats/heartbeat", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ minutes: 1 }),
+      }).catch((err) => console.error("Heartbeat failed:", err));
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [gameState.user.isGuest]);
 
   useFrame((state) => {
     if (gameState.gamePhase !== "playing") return;
@@ -6767,6 +6948,8 @@ function Game() {
     isAdmin: false,
     gameStartTime: null,
     gameMode: "story",
+    sessionShotsFired: 0,
+    sessionShotsHit: 0,
   });
 
   if (gameState.gamePhase !== "playing" && gameState.gamePhase !== "paused") {

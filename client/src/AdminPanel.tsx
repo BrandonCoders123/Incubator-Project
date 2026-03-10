@@ -37,17 +37,24 @@ export default function AdminPanel() {
   const [newItem, setNewItem] = useState({ name: "", type: "weapon_skin", price: 100, isCosmetic: true });
   const [editingItem, setEditingItem] = useState<Item | null>(null);
 
-  const [userSearch, setUserSearch] = useState("");
+  const [filterName, setFilterName] = useState("");
+  const [filterById, setFilterById] = useState("all");
+  const [filterWarnings, setFilterWarnings] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
 
   const filteredUsers = users.filter((user) => {
-    const q = userSearch.trim().toLowerCase();
-    if (!q) return true;
-    if (String(user.user_id).includes(q)) return true;
-    if (user.username.toLowerCase().includes(q)) return true;
-    if (String(user.warning_count ?? 0) === q) return true;
-    if (q === "banned" && user.is_banned) return true;
-    if (q === "active" && !user.is_banned) return true;
-    return false;
+    if (filterName && !user.username.toLowerCase().includes(filterName.toLowerCase())) return false;
+    if (filterById !== "all" && String(user.user_id) !== filterById) return false;
+    if (filterWarnings !== "all") {
+      const w = user.warning_count ?? 0;
+      if (filterWarnings === "0" && w !== 0) return false;
+      if (filterWarnings === "1" && w !== 1) return false;
+      if (filterWarnings === "2" && w !== 2) return false;
+      if (filterWarnings === "3+" && w < 3) return false;
+    }
+    if (filterStatus === "banned" && !user.is_banned) return false;
+    if (filterStatus === "active" && user.is_banned) return false;
+    return true;
   });
 
   const [banModal, setBanModal] = useState<{ userId: number; username: string } | null>(null);
@@ -274,24 +281,48 @@ export default function AdminPanel() {
 
         {activeTab === "users" && (
           <div>
-          <input
-            type="text"
-            placeholder="Search by name, ID, warnings (e.g. 2), or status (banned / active)..."
-            value={userSearch}
-            onChange={(e) => setUserSearch(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "10px 14px",
-              marginBottom: "14px",
-              borderRadius: "7px",
-              border: "1px solid #333",
-              background: "#0f3460",
-              color: "white",
-              fontSize: "14px",
-              boxSizing: "border-box",
-              outline: "none",
-            }}
-          />
+          <div style={{ display: "flex", gap: "10px", marginBottom: "14px", flexWrap: "wrap" }}>
+            <input
+              type="text"
+              placeholder="Search by name..."
+              value={filterName}
+              onChange={(e) => setFilterName(e.target.value)}
+              style={{
+                flex: "1 1 160px", padding: "10px 14px", borderRadius: "7px",
+                border: "1px solid #333", background: "#0f3460", color: "white",
+                fontSize: "14px", outline: "none",
+              }}
+            />
+            
+            <select
+              value={filterWarnings}
+              onChange={(e) => setFilterWarnings(e.target.value)}
+              style={{
+                flex: "0 1 150px", padding: "10px 10px", borderRadius: "7px",
+                border: "1px solid #333", background: "#0f3460", color: "white",
+                fontSize: "14px", cursor: "pointer",
+              }}
+            >
+              <option value="all">All Warnings</option>
+              <option value="0">0 warnings</option>
+              <option value="1">1 warning</option>
+              <option value="2">2 warnings</option>
+              <option value="3+">3+ warnings</option>
+            </select>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              style={{
+                flex: "0 1 140px", padding: "10px 10px", borderRadius: "7px",
+                border: "1px solid #333", background: "#0f3460", color: "white",
+                fontSize: "14px", cursor: "pointer",
+              }}
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="banned">Banned</option>
+            </select>
+          </div>
           <div style={{ background: "#16213e", borderRadius: "10px", overflow: "hidden" }}>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px" }}>
