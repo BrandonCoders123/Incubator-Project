@@ -828,21 +828,46 @@ class MySQLStorage implements IStorage {
     }
   }
 
-  async saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void> {
+  private async ensureTransactionsTable(): Promise<void> {
+    // Create the table with the correct schema if it doesn't exist
+    await this.pool.execute(`
+      CREATE TABLE IF NOT EXISTS transactions_v2 (
+        transaction_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        amount_spent_usd DECIMAL(10,2) NOT NULL,
+        card_number VARCHAR(20) NULL,
+        currency_purchased INT NOT NULL,
+        transaction_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Migrate existing rows from the old table if it exists and has rows
     try {
-      // Ensure card_number column exists (safe migration)
-      try {
-        await this.pool.execute(`ALTER TABLE transactions ADD COLUMN card_number VARCHAR(20) NULL`);
-        console.log('Added card_number column to transactions table');
-      } catch (alterErr: any) {
-        // Column already exists — ignore
-        if (!alterErr.message?.includes('Duplicate column name')) {
-          console.warn('ALTER TABLE warning:', alterErr.message);
+      const [oldRows]: any = await this.pool.execute(
+        `SELECT user_id, amount_spent_usd, card_number, currency_purchased, transaction_date FROM transactions`
+      );
+      if (oldRows.length > 0) {
+        const [newRows]: any = await this.pool.execute(`SELECT COUNT(*) AS cnt FROM transactions_v2`);
+        if (newRows[0].cnt === 0) {
+          for (const row of oldRows) {
+            await this.pool.execute(
+              `INSERT INTO transactions_v2 (user_id, amount_spent_usd, card_number, currency_purchased, transaction_date) VALUES (?, ?, ?, ?, ?)`,
+              [row.user_id, row.amount_spent_usd, row.card_number, row.currency_purchased, row.transaction_date]
+            );
+          }
+          console.log(`Migrated ${oldRows.length} rows from old transactions table`);
         }
       }
+    } catch {
+      // Old table doesn't exist or migration already done — fine
+    }
+  }
 
+  async saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void> {
+    try {
+      await this.ensureTransactionsTable();
       await this.pool.execute(
-        `INSERT INTO transactions (user_id, amount_spent_usd, card_number, currency_purchased, transaction_date)
+        `INSERT INTO transactions_v2 (user_id, amount_spent_usd, card_number, currency_purchased, transaction_date)
          VALUES (?, ?, ?, ?, NOW())`,
         [userId, amountUSD, cardNumber, goldAmount]
       );
@@ -855,27 +880,27 @@ class MySQLStorage implements IStorage {
 
   async getAllTransactions(): Promise<{ transactions: any[]; summary: { totalRevenue: number; transactionCount: number; mostPurchasedTier: { goldAmount: number; count: number } | null } }> {
     try {
+      await this.ensureTransactionsTable();
+
       const [rows]: any = await this.pool.execute(
-        `SELECT t.transaction_id, t.user_id, u.username, t.amount_spent_usd, t.card_number, t.currency_purchased, t.transaction_date
-         FROM transactions t
-         LEFT JOIN users u ON t.user_id = u.user_id
+        `SELECT t.transaction_id, t.user_id, a.username, t.amount_spent_usd, t.card_number, t.currency_purchased, t.transaction_date
+         FROM transactions_v2 t
+         LEFT JOIN accounts a ON t.user_id = a.user_id
          ORDER BY t.transaction_date DESC`
       );
 
       const [aggRows]: any = await this.pool.execute(
         `SELECT
-           COUNT(*) AS transactionCount,
-           COALESCE(SUM(amount_spent_usd), 0) AS totalRevenue,
            currency_purchased AS mostPurchasedGold,
            COUNT(*) AS tierCount
-         FROM transactions
+         FROM transactions_v2
          GROUP BY currency_purchased
          ORDER BY tierCount DESC
          LIMIT 1`
       );
 
       const [totalRow]: any = await this.pool.execute(
-        `SELECT COUNT(*) AS transactionCount, COALESCE(SUM(amount_spent_usd), 0) AS totalRevenue FROM transactions`
+        `SELECT COUNT(*) AS transactionCount, COALESCE(SUM(amount_spent_usd), 0) AS totalRevenue FROM transactions_v2`
       );
 
       const total = totalRow[0] || { transactionCount: 0, totalRevenue: 0 };
