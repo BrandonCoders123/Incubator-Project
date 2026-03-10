@@ -748,6 +748,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin — get all transactions with summary
+  app.get("/api/admin/transactions", requireAdmin, async (req, res) => {
+    try {
+      const data = await storage.getAllTransactions();
+      res.json({ success: true, ...data });
+    } catch (error) {
+      console.error("Admin transactions fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch transactions" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

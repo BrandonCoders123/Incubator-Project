@@ -55,6 +55,7 @@ export interface IStorage {
 
   // Currency purchase transactions
   saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void>;
+  getAllTransactions(): Promise<{ transactions: any[]; summary: { totalRevenue: number; transactionCount: number; mostPurchasedTier: { goldAmount: number; count: number } | null } }>;
 
   // Player stat tracking
   incrementPlayerStats(userId: number, shots: number, hits: number, deaths: number): Promise<void>;
@@ -849,6 +850,48 @@ class MySQLStorage implements IStorage {
     } catch (err) {
       console.error('Error saving currency transaction:', err);
       throw err;
+    }
+  }
+
+  async getAllTransactions(): Promise<{ transactions: any[]; summary: { totalRevenue: number; transactionCount: number; mostPurchasedTier: { goldAmount: number; count: number } | null } }> {
+    try {
+      const [rows]: any = await this.pool.execute(
+        `SELECT t.transaction_id, t.user_id, u.username, t.amount_spent_usd, t.card_number, t.currency_purchased, t.transaction_date
+         FROM transactions t
+         LEFT JOIN users u ON t.user_id = u.user_id
+         ORDER BY t.transaction_date DESC`
+      );
+
+      const [aggRows]: any = await this.pool.execute(
+        `SELECT
+           COUNT(*) AS transactionCount,
+           COALESCE(SUM(amount_spent_usd), 0) AS totalRevenue,
+           currency_purchased AS mostPurchasedGold,
+           COUNT(*) AS tierCount
+         FROM transactions
+         GROUP BY currency_purchased
+         ORDER BY tierCount DESC
+         LIMIT 1`
+      );
+
+      const [totalRow]: any = await this.pool.execute(
+        `SELECT COUNT(*) AS transactionCount, COALESCE(SUM(amount_spent_usd), 0) AS totalRevenue FROM transactions`
+      );
+
+      const total = totalRow[0] || { transactionCount: 0, totalRevenue: 0 };
+      const topTier = aggRows[0] || null;
+
+      return {
+        transactions: rows,
+        summary: {
+          totalRevenue: parseFloat(total.totalRevenue) || 0,
+          transactionCount: parseInt(total.transactionCount) || 0,
+          mostPurchasedTier: topTier ? { goldAmount: topTier.mostPurchasedGold, count: parseInt(topTier.tierCount) } : null,
+        },
+      };
+    } catch (err) {
+      console.error('Error fetching all transactions:', err);
+      return { transactions: [], summary: { totalRevenue: 0, transactionCount: 0, mostPurchasedTier: null } };
     }
   }
 
