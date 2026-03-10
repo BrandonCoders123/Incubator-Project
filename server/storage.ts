@@ -55,7 +55,12 @@ export interface IStorage {
 
   // Currency purchase transactions
   saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void>;
-  getAllTransactions(): Promise<{ transactions: any[]; summary: { totalRevenue: number; transactionCount: number; mostPurchasedTier: { goldAmount: number; count: number } | null } }>;
+  getAllTransactions(): Promise<{
+    transactions: any[];
+    summary: { totalRevenue: number; transactionCount: number; mostPurchasedTier: { goldAmount: number; count: number } | null };
+    earningsByDay: { day: string; revenue: number; purchases: number }[];
+    tierBreakdown: { gold: number; purchases: number; revenue: number }[];
+  }>;
 
   // Player stat tracking
   incrementPlayerStats(userId: number, shots: number, hits: number, deaths: number): Promise<void>;
@@ -903,6 +908,27 @@ class MySQLStorage implements IStorage {
         `SELECT COUNT(*) AS transactionCount, COALESCE(SUM(amount_spent_usd), 0) AS totalRevenue FROM transactions_v2`
       );
 
+      const [dailyRows]: any = await this.pool.execute(
+        `SELECT
+           DATE(transaction_date) AS day,
+           COALESCE(SUM(amount_spent_usd), 0) AS revenue,
+           COUNT(*) AS purchases
+         FROM transactions_v2
+         WHERE transaction_date >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
+         GROUP BY DATE(transaction_date)
+         ORDER BY day ASC`
+      );
+
+      const [tierRows]: any = await this.pool.execute(
+        `SELECT
+           currency_purchased AS gold,
+           COUNT(*) AS purchases,
+           COALESCE(SUM(amount_spent_usd), 0) AS revenue
+         FROM transactions_v2
+         GROUP BY currency_purchased
+         ORDER BY purchases DESC`
+      );
+
       const total = totalRow[0] || { transactionCount: 0, totalRevenue: 0 };
       const topTier = aggRows[0] || null;
 
@@ -913,10 +939,20 @@ class MySQLStorage implements IStorage {
           transactionCount: parseInt(total.transactionCount) || 0,
           mostPurchasedTier: topTier ? { goldAmount: topTier.mostPurchasedGold, count: parseInt(topTier.tierCount) } : null,
         },
+        earningsByDay: dailyRows.map((r: any) => ({
+          day: String(r.day).slice(0, 10),
+          revenue: parseFloat(r.revenue) || 0,
+          purchases: parseInt(r.purchases) || 0,
+        })),
+        tierBreakdown: tierRows.map((r: any) => ({
+          gold: parseInt(r.gold) || 0,
+          purchases: parseInt(r.purchases) || 0,
+          revenue: parseFloat(r.revenue) || 0,
+        })),
       };
     } catch (err) {
       console.error('Error fetching all transactions:', err);
-      return { transactions: [], summary: { totalRevenue: 0, transactionCount: 0, mostPurchasedTier: null } };
+      return { transactions: [], summary: { totalRevenue: 0, transactionCount: 0, mostPurchasedTier: null }, earningsByDay: [], tierBreakdown: [] };
     }
   }
 

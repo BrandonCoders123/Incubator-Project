@@ -1,4 +1,8 @@
 import React, { useState, useEffect } from "react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+} from "recharts";
 
 interface User {
   user_id: number;
@@ -47,6 +51,8 @@ export default function AdminPanel() {
   const [items, setItems] = useState<Item[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [transactionSummary, setTransactionSummary] = useState<TransactionSummary>({ totalRevenue: 0, transactionCount: 0, mostPurchasedTier: null });
+  const [earningsByDay, setEarningsByDay] = useState<{ day: string; revenue: number; purchases: number }[]>([]);
+  const [tierBreakdown, setTierBreakdown] = useState<{ gold: number; purchases: number; revenue: number }[]>([]);
   
   const [editingGold, setEditingGold] = useState<number | null>(null);
   const [goldValue, setGoldValue] = useState("");
@@ -118,6 +124,8 @@ export default function AdminPanel() {
           transactionCount: txData.summary.transactionCount,
           mostPurchasedTier: txData.summary.mostPurchasedTier,
         });
+        setEarningsByDay(txData.earningsByDay || []);
+        setTierBreakdown(txData.tierBreakdown || []);
       }
     } catch (err) {
       console.error("Fetch data error:", err);
@@ -611,6 +619,87 @@ export default function AdminPanel() {
                   </div>
                 ) : (
                   <div style={{ fontSize: "18px", color: "#666" }}>No data yet</div>
+                )}
+              </div>
+            </div>
+
+            {/* Charts */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "24px" }}>
+              {/* Earnings Over Time */}
+              <div style={{ background: "#1a2744", borderRadius: "10px", padding: "20px" }}>
+                <div style={{ fontWeight: "bold", fontSize: "14px", marginBottom: "16px", color: "#ccc" }}>
+                  Daily Earnings — Last 30 Days
+                </div>
+                {earningsByDay.length === 0 ? (
+                  <div style={{ height: "200px", display: "flex", alignItems: "center", justifyContent: "center", color: "#555" }}>No data yet</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={earningsByDay} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
+                      <XAxis
+                        dataKey="day"
+                        tick={{ fill: "#888", fontSize: 11 }}
+                        angle={-45}
+                        textAnchor="end"
+                        interval={Math.max(0, Math.floor(earningsByDay.length / 6) - 1)}
+                        tickFormatter={(v) => {
+                          const d = new Date(v + "T00:00:00");
+                          return `${d.toLocaleString("default", { month: "short" })} ${d.getDate()}`;
+                        }}
+                      />
+                      <YAxis tick={{ fill: "#888", fontSize: 11 }} tickFormatter={(v) => `$${v}`} width={45} />
+                      <Tooltip
+                        contentStyle={{ background: "#0f1928", border: "1px solid #2a3a5e", borderRadius: "6px" }}
+                        labelStyle={{ color: "#ccc" }}
+                        formatter={(value: any) => [`$${Number(value).toFixed(2)}`, "Revenue"]}
+                      />
+                      <Bar dataKey="revenue" fill="#4CAF50" radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              {/* Currency Tier Breakdown */}
+              <div style={{ background: "#1a2744", borderRadius: "10px", padding: "20px" }}>
+                <div style={{ fontWeight: "bold", fontSize: "14px", marginBottom: "16px", color: "#ccc" }}>
+                  Purchases by Currency Tier
+                </div>
+                {tierBreakdown.length === 0 ? (
+                  <div style={{ height: "200px", display: "flex", alignItems: "center", justifyContent: "center", color: "#555" }}>No data yet</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      <Pie
+                        data={tierBreakdown}
+                        dataKey="purchases"
+                        nameKey="gold"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={85}
+                        paddingAngle={3}
+                        label={({ gold, purchases }) => `${Number(gold).toLocaleString()}🪙 (${purchases})`}
+                        labelLine={{ stroke: "#555" }}
+                      >
+                        {tierBreakdown.map((_entry, index) => (
+                          <Cell key={index} fill={["#f0c040", "#4CAF50", "#5b9bd5", "#e67e22", "#9b59b6"][index % 5]} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ background: "#0f1928", border: "1px solid #2a3a5e", borderRadius: "6px" }}
+                        formatter={(value: any, _name: any, props: any) => [
+                          `${value} purchase${value !== 1 ? "s" : ""} ($${Number(props.payload.revenue).toFixed(2)})`,
+                          `${Number(props.payload.gold).toLocaleString()} Gold`,
+                        ]}
+                      />
+                      <Legend
+                        formatter={(value, entry: any) => (
+                          <span style={{ color: "#ccc", fontSize: "12px" }}>
+                            {Number(entry.payload.gold).toLocaleString()} Gold — ${Number(entry.payload.revenue).toFixed(2)}
+                          </span>
+                        )}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
                 )}
               </div>
             </div>
