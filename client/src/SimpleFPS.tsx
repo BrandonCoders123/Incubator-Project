@@ -5110,10 +5110,10 @@ function HUD({
           </div>
           {/* Player info */}
           <div style={{ marginBottom: "32px" }}>
-            <div style={{ fontSize: "13px", color: "#c8a84b", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "4px" }}>
+            <div style={{ fontSize: "25px", color: "#c8a84b", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "4px" }}>
               {gameState.user.isGuest ? "Playing as Guest" : `Welcome back`}
             </div>
-            <div style={{ fontSize: "22px", fontWeight: "bold", color: "#fff", textShadow: "0 2px 8px rgba(0,0,0,0.8)" }}>
+            <div style={{ fontSize: "29px", fontWeight: "bold", color: "#fff", textShadow: "0 2px 8px rgba(0,0,0,0.8)" }}>
               {gameState.user.username}
             </div>
             {!gameState.user.isGuest && (
@@ -6876,7 +6876,18 @@ function Game() {
     sessionShotsHit: 0,
   });
 
-  if (gameState.gamePhase !== "playing" && gameState.gamePhase !== "paused") {
+  // Release pointer lock when entering non-game phases so UI is clickable
+  useEffect(() => {
+    if (gameState.gamePhase === "levelTransition" || gameState.gamePhase === "paused") {
+      document.exitPointerLock();
+    }
+  }, [gameState.gamePhase]);
+
+  if (
+    gameState.gamePhase !== "playing" &&
+    gameState.gamePhase !== "paused" &&
+    gameState.gamePhase !== "levelTransition"
+  ) {
     return <HUD gameState={gameState} setGameState={setGameState} />;
   }
 
@@ -6886,6 +6897,11 @@ function Game() {
         camera={{ position: [0, 2.4, 0], fov: 75, near: 0.1, far: 1000 }}
         gl={{ antialias: true, powerPreference: "high-performance" }}
         style={{ width: "100vw", height: "100vh" }}
+        onClick={() => {
+          if (gameState.gamePhase === "playing" && !document.pointerLockElement) {
+            document.body.requestPointerLock();
+          }
+        }}
       >
         <color attach="background" args={["#87CEEB"]} />
 
