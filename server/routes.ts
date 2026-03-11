@@ -213,6 +213,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Session check endpoint - returns current user if logged in
+  app.get("/api/session", async (req, res) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    try {
+      const userData = await storage.getUserData(req.session.username);
+      const isAdmin = await storage.isUserAdmin(req.session.userId);
+      return res.json({
+        user: { username: req.session.username, id: req.session.userId },
+        currency: userData?.currency || 500,
+        cosmetics: userData?.cosmetics || [],
+        isAdmin,
+      });
+    } catch (err) {
+      console.error("Session check error:", err);
+      return res.status(500).json({ error: "Session check failed" });
+    }
+  });
+
   // Update user currency endpoint
   app.post("/api/update-currency", async (req, res) => {
     try {

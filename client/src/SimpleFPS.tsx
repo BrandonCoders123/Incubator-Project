@@ -64,16 +64,16 @@ const weapons: Record<number, Weapon> = {
     maxAmmo: 36,
     damage: 25,
     reloadTime: 2000,
-    fireRate: 18, // 18 shots per second
+    fireRate: 1820, // 18 shots per second
     bulletsPerKill: 2,
     tier: 3,
   },
   4: {
     name: "Lacerating Muffin Generator",
     maxAmmo: 200,
-    damage: 30,
-    reloadTime: 3000,
-    fireRate: 20, // 12 shots per second
+    damage: 20,
+    reloadTime: 5000,
+    fireRate: 15, // 12 shots per second
     bulletsPerKill: 2,
     tier: 4,
   },
@@ -143,7 +143,7 @@ const LEVELS = [
 ];
 
 // Enemy types and archetypes
-type EnemyType = "melee" | "ranged" | "giant";
+type EnemyType = "melee" | "ranged" | "giant" | "rat";
 
 interface Enemy {
   id: string;
@@ -175,7 +175,7 @@ const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     health: 100,
     moveSpeed: 5,
     damage: 10,
-    attackInterval: 750, // Medium fire rate
+    attackInterval: 1500, // Medium fire rate
     color: "#ff6600",
   },
   giant: {
@@ -185,6 +185,14 @@ const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     attackInterval: 1500,
     color: "#990000",
     size: 2, // 2x larger than normal enemies
+  },
+  rat: {
+    health: 50,
+    moveSpeed: 10,
+    damage: 5,
+    attackInterval: 750,
+    color: "#363636",
+    size: .5, //2x smaller than normal enemies
   },
 };
 
@@ -1100,8 +1108,8 @@ function Enemy({
       const originalPos = enemyPos.clone();
       let newPos = enemyPos.clone();
 
-      if (enemy.type === "melee" || enemy.type === "giant") {
-        // Melee and Giant: Always move towards player
+      if (enemy.type === "melee" || enemy.type === "giant" || enemy.type === "rat") {
+        // Melee, Giant, and Rat: Always move towards player
         newPos = newPos.add(
           direction.clone().multiplyScalar(archetype.moveSpeed * deltaTime),
         );
@@ -1163,8 +1171,8 @@ function Enemy({
       // Attack logic
       setIsAttacking(distanceToPlayer < 2.5);
 
-      if (enemy.type === "melee" || enemy.type === "giant") {
-        // Melee and Giant: Contact damage
+      if (enemy.type === "melee" || enemy.type === "giant" || enemy.type === "rat") {
+        // Melee, Giant, and Rat: Contact damage
         if (distanceToPlayer < 1.5 && gameState.gamePhase === "playing") {
           const currentTime = Date.now();
           setGameState((prev) => {
@@ -6749,44 +6757,62 @@ function GameLogic({
       const z = Math.cos(angle) * distance;
 
       // Choose enemy type based on level
-      // Level 0 (Bun Valley): melee only
-      // Level 1 (Robot Factory): 60% melee, 40% ranged
-      // Level 2 (Palace): 40% melee, 30% ranged, 30% giant (max 3 giants)
-      // Level 3 (Crimson Battlefield): 30% melee, 30% ranged, 40% giant (max 8 giants)
-      // Level 4 (Mustard Mountain): 30% melee, 30% ranged, 40% giant (max 10 giants)
+      // Level 0 (Bun Valley):       melee only
+      // Level 1 (Robot Factory):    40% melee, 30% ranged, 30% rat
+      // Level 2 (Palace):           25% melee, 25% ranged, 20% giant (max 3), 30% rat
+      // Level 3 (Crimson Battlefield): 20% melee, 15% ranged, 30% giant (max 8), 35% rat
+      // Level 4 (Mustard Mountain): 20% melee, 10% ranged, 30% giant (max 10), 40% rat
       let enemyType: EnemyType = "melee";
       const currentLevel = gameState.level.currentLevel;
 
       if (currentLevel === 0) {
+        // Level 1 (Bun Valley): melee only
         enemyType = "melee";
       } else if (currentLevel === 1) {
-        enemyType = Math.random() < 0.6 ? "melee" : "ranged";
-      } else if (currentLevel === 2) {
+        // Level 2 (Robot Factory): 40% melee, 30% ranged, 30% rat
         const roll = Math.random();
-        if (roll < 0.3 && gameState.level.giantsSpawnedThisLevel < 3) {
-          enemyType = "giant";
-        } else if (roll < 0.7) {
+        if (roll < 0.4) {
           enemyType = "melee";
-        } else {
+        } else if (roll < 0.7) {
           enemyType = "ranged";
+        } else {
+          enemyType = "rat";
+        }
+      } else if (currentLevel === 2) {
+        // Level 3 (Palace): 25% melee, 25% ranged, 20% giant (max 3), 30% rat
+        const roll = Math.random();
+        if (roll < 0.2 && gameState.level.giantsSpawnedThisLevel < 3) {
+          enemyType = "giant";
+        } else if (roll < 0.45) {
+          enemyType = "melee";
+        } else if (roll < 0.7) {
+          enemyType = "ranged";
+        } else {
+          enemyType = "rat";
         }
       } else if (currentLevel === 3) {
+        // Level 4 (Crimson Battlefield): 20% melee, 15% ranged, 30% giant (max 8), 35% rat
         const roll = Math.random();
-        if (roll < 0.4 && gameState.level.giantsSpawnedThisLevel < 8) {
+        if (roll < 0.3 && gameState.level.giantsSpawnedThisLevel < 8) {
           enemyType = "giant";
-        } else if (roll < 0.7) {
+        } else if (roll < 0.5) {
           enemyType = "melee";
-        } else {
+        } else if (roll < 0.65) {
           enemyType = "ranged";
+        } else {
+          enemyType = "rat";
         }
       } else if (currentLevel === 4) {
+        // Level 5 (Mustard Mountain): 20% melee, 10% ranged, 30% giant (max 10), 40% rat
         const roll = Math.random();
-        if (roll < 0.4 && gameState.level.giantsSpawnedThisLevel < 10) {
+        if (roll < 0.3 && gameState.level.giantsSpawnedThisLevel < 10) {
           enemyType = "giant";
-        } else if (roll < 0.7) {
+        } else if (roll < 0.5) {
           enemyType = "melee";
-        } else {
+        } else if (roll < 0.6) {
           enemyType = "ranged";
+        } else {
+          enemyType = "rat";
         }
       }
 
