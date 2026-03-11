@@ -6902,12 +6902,71 @@ function Game() {
     sessionShotsHit: 0,
   });
 
+  // On mount, check if the user already has an active session
+  const [sessionChecking, setSessionChecking] = useState(true);
+  useEffect(() => {
+    const { setKeybinding, setNormalSensitivity } = useSettings.getState();
+    fetch("/api/session", { credentials: "include" })
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          setGameState((prev) => ({
+            ...prev,
+            gamePhase: "menu",
+            user: {
+              username: data.user.username,
+              isGuest: false,
+              currency: data.currency,
+              cosmetics: data.cosmetics || [],
+              equippedSkin: null,
+            },
+            isAdmin: data.isAdmin || false,
+          }));
+          // Restore saved settings
+          try {
+            const settingsRes = await fetch("/api/settings", { credentials: "include" });
+            const settingsData = await settingsRes.json();
+            if (settingsData.success && settingsData.settings) {
+              const s = settingsData.settings;
+              setKeybinding("forward", s.move_forward_key);
+              setKeybinding("backward", s.move_backward_key);
+              setKeybinding("leftward", s.move_left_key);
+              setKeybinding("rightward", s.move_right_key);
+              setKeybinding("jump", s.jump_key);
+              const sens = parseFloat(s.mouse_sensitivity);
+              setNormalSensitivity(isNaN(sens) ? 1 : sens);
+            }
+          } catch (_) {}
+        }
+      })
+      .catch(() => {})
+      .finally(() => setSessionChecking(false));
+  }, []);
+
   // Release pointer lock when entering non-game phases so UI is clickable
   useEffect(() => {
     if (gameState.gamePhase === "levelTransition" || gameState.gamePhase === "paused") {
       document.exitPointerLock();
     }
   }, [gameState.gamePhase]);
+
+  // Show a brief loading screen while checking session to avoid login flash
+  if (sessionChecking) {
+    return (
+      <div style={{
+        position: "fixed", inset: 0,
+        background: "#0d0a05",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+        color: "rgba(232,160,32,0.9)",
+        fontSize: "22px",
+        letterSpacing: "3px",
+        textTransform: "uppercase",
+      }}>
+        Loading...
+      </div>
+    );
+  }
 
   if (
     gameState.gamePhase !== "playing" &&
