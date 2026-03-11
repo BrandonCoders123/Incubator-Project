@@ -188,7 +188,7 @@ const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
   },
   rat: {
     health: 50,
-    moveSpeed: 10,
+    moveSpeed: 8,
     damage: 5,
     attackInterval: 750,
     color: "#363636",
@@ -6490,29 +6490,26 @@ function HUD({
               onClick={() => {
                 setGameState((prev) => ({
                   ...prev,
-                  gamePhase: "login",
+                  gamePhase: "menu",
                   health: 100,
                   ammo: 12,
                   coins: 0,
                   enemies: [],
                   bullets: [],
                   enemyProjectiles: [],
-                  user: {
-                    username: null,
-                    isGuest: false,
-                    currency: 0,
-                    cosmetics: [],
-                    equippedSkin: null,
+                  lastDamageTime: 0,
+                  gameStartTime: null,
+                  story: {
+                    currentSettlement: 0,
+                    alliesRescued: 0,
+                    settlementsConquered: [],
+                    totalKills: 0,
                   },
-                  equippedWeaponSkins: {
-                    1: "Default",
-                    2: "Default",
-                    3: "Default",
-                    4: "Default",
-                    5: "Default",
+                  level: {
+                    currentLevel: 0,
+                    killsThisLevel: 0,
+                    giantsSpawnedThisLevel: 0,
                   },
-                  loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
-                  isAdmin: false,
                 }));
               }}
               style={{
