@@ -5105,6 +5105,9 @@ function HUD({
             maxWidth: "420px",
           }}
         >
+          <div style={{ fontSize: "35px", color: "#c8a84b", letterSpacing: "10px", textTransform: "uppercase", marginBottom: "6px" }}>
+            DOG: THE HOTDOG WARS
+          </div>
           {/* Player info */}
           <div style={{ marginBottom: "32px" }}>
             <div style={{ fontSize: "13px", color: "#c8a84b", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "4px" }}>
