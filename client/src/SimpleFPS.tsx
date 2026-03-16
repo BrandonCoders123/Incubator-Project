@@ -64,16 +64,16 @@ const weapons: Record<number, Weapon> = {
     maxAmmo: 36,
     damage: 25,
     reloadTime: 2000,
-    fireRate: 1820, // 18 shots per second
+    fireRate: 17, // 18 shots per second
     bulletsPerKill: 2,
     tier: 3,
   },
   4: {
     name: "Lacerating Muffin Generator",
     maxAmmo: 200,
-    damage: 20,
+    damage: 12.5,
     reloadTime: 5000,
-    fireRate: 15, // 12 shots per second
+    fireRate: 12, // 12 shots per second
     bulletsPerKill: 2,
     tier: 4,
   },
@@ -726,7 +726,7 @@ function Player({
     }
 
     // Movement
-    const moveSpeed = 8;
+    const moveSpeed = 10;
     const jumpSpeed = 12;
 
     // Update player rotation and billboarding
