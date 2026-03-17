@@ -3493,10 +3493,33 @@ function ProfilePage({
   const [loadingUrlPicture, setLoadingUrlPicture] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<"profile" | "stats">("profile");
+
+  // Stats state
+  const [stats, setStats] = useState<{
+    total_shots: number;
+    shots_hit: number;
+    deaths: number;
+    minutes_played: number;
+  } | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+
   // Load profile on mount
   useEffect(() => {
     loadProfile();
   }, []);
+
+  // Load stats when switching to stats tab
+  useEffect(() => {
+    if (activeTab !== "stats" || stats !== null) return;
+    setStatsLoading(true);
+    fetch("/api/stats", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => setStats(data))
+      .catch(() => setStats({ total_shots: 0, shots_hit: 0, deaths: 0, minutes_played: 0 }))
+      .finally(() => setStatsLoading(false));
+  }, [activeTab]);
 
   // Auto-clear success/error messages after 5 seconds
   useEffect(() => {
@@ -3729,15 +3752,42 @@ function ProfilePage({
           style={{
             fontSize: "28px",
             fontWeight: "700",
-            marginBottom: "28px",
+            marginBottom: "20px",
             textAlign: "center",
             color: "#e8a020",
             letterSpacing: "3px",
             textTransform: "uppercase",
           }}
         >
-          PROFILE
+          {activeTab === "stats" ? "STATS" : "PROFILE"}
         </h1>
+
+        {/* Tab navigation */}
+        <div style={{ display: "flex", marginBottom: "28px", borderBottom: "1px solid rgba(232,160,32,0.25)" }}>
+          {(["profile", "stats"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                flex: 1,
+                padding: "10px",
+                background: activeTab === tab ? "rgba(232,160,32,0.15)" : "transparent",
+                border: "none",
+                borderBottom: activeTab === tab ? "2px solid #e8a020" : "2px solid transparent",
+                color: activeTab === tab ? "#e8a020" : "rgba(200,168,75,0.6)",
+                fontSize: "13px",
+                fontWeight: "700",
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
 
         {error && (
           <div
@@ -3768,6 +3818,9 @@ function ProfilePage({
             {success}
           </div>
         )}
+
+        {/* ── PROFILE TAB ───────────────────────────────────── */}
+        {activeTab === "profile" && (<>
 
         {/* Warning Count Display */}
         {profile && profile.warning_count > 0 && (
@@ -4181,6 +4234,65 @@ function ProfilePage({
           </button>
         )}
 
+        </>)}
+        {/* ── STATS TAB ─────────────────────────────────────── */}
+        {activeTab === "stats" && (
+          <div>
+            {statsLoading && (
+              <div style={{ textAlign: "center", color: "#c8a84b", padding: "40px 0", letterSpacing: "2px", textTransform: "uppercase", fontSize: "14px" }}>
+                Loading stats...
+              </div>
+            )}
+            {!statsLoading && !stats && (
+              <div style={{ textAlign: "center", color: "rgba(200,168,75,0.5)", padding: "40px 0" }}>
+                No stats available yet. Play a game to start tracking!
+              </div>
+            )}
+            {!statsLoading && stats && (
+              <div>
+                <div style={{ fontSize: "11px", color: "rgba(200,168,75,0.6)", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "20px", textAlign: "center" }}>
+                  Career Overview
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "24px" }}>
+                  {[
+                    { label: "Shots Fired", value: stats.total_shots.toLocaleString(), icon: "🔫" },
+                    { label: "Shots Hit",   value: stats.shots_hit.toLocaleString(),   icon: "🎯" },
+                    { label: "Accuracy",    value: `${stats.total_shots > 0 ? ((stats.shots_hit / stats.total_shots) * 100).toFixed(1) : "0.0"}%`, icon: "📊" },
+                    { label: "Deaths",      value: stats.deaths.toLocaleString(),       icon: "💀" },
+                    { label: "Time Played", value: Math.floor(stats.minutes_played / 60) > 0 ? `${Math.floor(stats.minutes_played / 60)}h ${stats.minutes_played % 60}m` : `${stats.minutes_played}m`, icon: "⏱" },
+                  ].map((card) => (
+                    <div key={card.label} style={{ background: "rgba(12,8,2,0.8)", border: "1px solid rgba(232,160,32,0.2)", padding: "18px 14px", textAlign: "center" }}>
+                      <div style={{ fontSize: "22px", marginBottom: "6px" }}>{card.icon}</div>
+                      <div style={{ fontSize: "26px", fontWeight: "700", color: "#e8a020", letterSpacing: "1px", marginBottom: "4px" }}>
+                        {card.value}
+                      </div>
+                      <div style={{ fontSize: "10px", color: "rgba(200,168,75,0.6)", letterSpacing: "2px", textTransform: "uppercase" }}>
+                        {card.label}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ background: "rgba(12,8,2,0.8)", border: "1px solid rgba(232,160,32,0.2)", padding: "16px", marginBottom: "12px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "11px", letterSpacing: "2px", textTransform: "uppercase", color: "rgba(200,168,75,0.7)" }}>Accuracy</span>
+                    <span style={{ fontSize: "13px", fontWeight: "700", color: "#e8a020" }}>
+                      {stats.total_shots > 0 ? ((stats.shots_hit / stats.total_shots) * 100).toFixed(1) : "0.0"}%
+                    </span>
+                  </div>
+                  <div style={{ height: "6px", background: "rgba(255,255,255,0.08)" }}>
+                    <div style={{
+                      height: "100%",
+                      width: `${stats.total_shots > 0 ? Math.min((stats.shots_hit / stats.total_shots) * 100, 100) : 0}%`,
+                      background: "linear-gradient(90deg, #c8a84b, #e8a020)",
+                      transition: "width 0.6s ease",
+                    }} />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Back to Menu */}
         <button
           onClick={() =>
@@ -4188,6 +4300,7 @@ function ProfilePage({
           }
           style={{
             width: "100%",
+            marginTop: "8px",
             background: "rgba(255,255,255,0.2)",
             border: "2px solid white",
             borderRadius: "12px",
