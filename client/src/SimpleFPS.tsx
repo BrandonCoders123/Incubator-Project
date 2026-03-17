@@ -1071,6 +1071,21 @@ function RobotModel({ isAttacking }: { isAttacking: boolean }) {
 }
 
 // Enemy Component
+function RobotMeleeSprite({ size }: { size: number }) {
+  const robotTexture = useTexture("/textures/robot_melee.jpg");
+  return (
+    <mesh>
+      <planeGeometry args={[1.1 * size, 1.9 * size]} />
+      <meshBasicMaterial
+        map={robotTexture}
+        side={THREE.DoubleSide}
+        transparent
+        alphaTest={0.05}
+      />
+    </mesh>
+  );
+}
+
 function Enemy({
   enemy,
   gameState,
@@ -1323,13 +1338,24 @@ function Enemy({
 
   return (
     <group ref={enemyRef} position={enemy.position}>
-      {/* Simple colored cube for enemy - color based on type, size based on archetype */}
-      <mesh>
-        <boxGeometry
-          args={[0.8 * enemySize, 1.5 * enemySize, 0.8 * enemySize]}
-        />
-        <meshStandardMaterial color={archetype.color} />
-      </mesh>
+      {/* Melee enemies use robot sprite; others keep the colored cube */}
+      {enemy.type === "melee" ? (
+        <Suspense fallback={
+          <mesh>
+            <boxGeometry args={[0.8 * enemySize, 1.5 * enemySize, 0.8 * enemySize]} />
+            <meshStandardMaterial color={archetype.color} />
+          </mesh>
+        }>
+          <RobotMeleeSprite size={enemySize} />
+        </Suspense>
+      ) : (
+        <mesh>
+          <boxGeometry
+            args={[0.8 * enemySize, 1.5 * enemySize, 0.8 * enemySize]}
+          />
+          <meshStandardMaterial color={archetype.color} />
+        </mesh>
+      )}
       {/* Health bar above enemy */}
       <mesh position={[0, healthBarYPosition, 0]}>
         <planeGeometry args={[1 * enemySize, 0.1]} />
