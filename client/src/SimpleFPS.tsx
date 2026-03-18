@@ -52,8 +52,8 @@ const weapons: Record<number, Weapon> = {
   },
   2: {
     name: "Mustard Launcher",
-    maxAmmo: 8,
-    damage: 75,
+    maxAmmo: 6,
+    damage: 150,
     reloadTime: 3000,
     fireRate: 0, // semi-auto
     bulletsPerKill: 1,
@@ -64,7 +64,7 @@ const weapons: Record<number, Weapon> = {
     maxAmmo: 36,
     damage: 25,
     reloadTime: 2000,
-    fireRate: 17, // 18 shots per second
+    fireRate: 15, // 18 shots per second
     bulletsPerKill: 2,
     tier: 3,
   },
@@ -73,7 +73,7 @@ const weapons: Record<number, Weapon> = {
     maxAmmo: 200,
     damage: 12.5,
     reloadTime: 5000,
-    fireRate: 12, // 12 shots per second
+    fireRate: 14, // 12 shots per second
     bulletsPerKill: 2,
     tier: 4,
   },
@@ -5932,7 +5932,7 @@ function HUD({
                     if (canAffordToken) {
                       setGameState((prev) => ({
                         ...prev,
-                        coins: prev.coins - 2,
+                        coins: prev.coins - (2 + prev.tokensPurchased),
                         maxHealth: prev.maxHealth + 10,
                         health: Math.min(prev.health + 10, prev.maxHealth + 10),
                         tokensPurchased: prev.tokensPurchased + 1,
@@ -5952,7 +5952,7 @@ function HUD({
                     fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
                   }}
                 >
-                  BUY - 2 💰
+                  BUY - {2 + gameState.tokensPurchased} 💰
                 </button>
               </div>
             </div>
