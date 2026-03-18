@@ -213,6 +213,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Session check endpoint - returns current user if logged in
+  app.get("/api/session", async (req, res) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    try {
+      const userData = await storage.getUserData(req.session.username);
+      const isAdmin = await storage.isUserAdmin(req.session.userId);
+      return res.json({
+        user: { username: req.session.username, id: req.session.userId },
+        currency: userData?.currency || 500,
+        cosmetics: userData?.cosmetics || [],
+        isAdmin,
+      });
+    } catch (err) {
+      console.error("Session check error:", err);
+      return res.status(500).json({ error: "Session check failed" });
+    }
+  });
+
   // Update user currency endpoint
   app.post("/api/update-currency", async (req, res) => {
     try {
@@ -745,6 +765,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Stats heartbeat error:", error);
       res.status(500).json({ error: "Failed to record time played" });
+    }
+  });
+
+  // Admin — get all transactions with summary
+  app.get("/api/admin/transactions", requireAdmin, async (req, res) => {
+    try {
+      const data = await storage.getAllTransactions();
+      res.json({ success: true, ...data });
+    } catch (error) {
+      console.error("Admin transactions fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch transactions" });
     }
   });
 

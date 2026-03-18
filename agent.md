@@ -1,39 +1,102 @@
-Agent Role: Data Systems Engineer
-Project Goal: Persistent Stat Tracking
-The mission is to capture granular player metrics and sync them from the TSX frontend to the phpMyAdmin database via PHP endpoints.
+# Doom-Style Game Project Overview
 
-Data Schema Requirements
-Track and store the following new metrics:
+## Project Description
+A first-person shooter game inspired by the classic Doom aesthetic. The game features a home screen, gameplay mechanics, stat tracking, and a leaderboard.
 
-Total Shots: Cumulative count of all weapon fire events.
+---
 
-Shots Hit: Count of successful raycast/collision hits on valid targets.
+## Current Features
+- **Gameplay Mechanics**: Player movement, shooting, enemy AI, and level progression.
+- **Stat Tracking**: Tracks shots fired, shots hit, deaths, and playtime.
+- **Backend Integration**: PHP endpoints for updating player stats.
+- **Frontend**: Built with React, Three.js, and TypeScript.
 
-Deaths: Increment total when player health reaches zero.
+---
 
-Time Played: Total session duration converted to Hours:Minutes format.
+## Tasks Completed
+1. **Stat Tracking**:
+   - Implemented tracking for shots fired, shots hit, deaths, and playtime.
+   - Backend PHP endpoints for updating stats.
+   - Frontend logic to call these endpoints.
 
-Execution Rules (Autonomous & Concise)
-Direct Implementation: Add necessary fetch() calls to TSX event listeners and create corresponding PHP handlers.
+2. **Home Screen**:
+   - Added a Doom-style home screen UI with buttons for "Start Game," "Settings," "Leaderboard," and "Quit."
+   - Conditionally renders the home screen when the game is in the `menu` phase.
 
-Minimalist Feedback: 1-sentence summary of the code change only.
+---
 
-Database Integrity: Always use SET column = column + ? in SQL to ensure accurate incrementing.
+## Next Steps and Requirements
 
-State & Saving Logic
-1. The "Heartbeat" (Time Played)
-Logic: Every 60 seconds of active gameplay, the TSX layer must ping the PHP API to increment minutes_played.
+### 1. Home Screen Enhancements
+- **Objective**: Improve the home screen UI to match the Doom aesthetic more closely.
+- **Tasks**:
+  - Use `HomeScreen.png` as the background.
+  - Use `HomeScreenReference.webp` as a reference for button placement and styling.
+  - Ensure buttons are functional and navigate to the correct game phases.
 
-Conversion: The PHP layer should handle the rollover logic (60 mins = 1 hour) or store raw minutes and let the Profile Page handle the formatting.
+### 2. Gameplay Improvements
+- **Objective**: Ensure all gameplay mechanics are smooth and bug-free.
+- **Tasks**:
+  - Test and debug shooting, enemy AI, and player movement.
+  - Ensure stat tracking works correctly and updates the database.
 
-2. The "Trigger" (Shots/Deaths)
-Shots Fired: Call the save function inside the onFire weapon event.
+### 3. UI/UX Improvements
+- **Objective**: Enhance the overall user experience.
+- **Tasks**:
+  - Improve button hover and click effects.
+  - Add sound effects for UI interactions.
+  - Ensure the UI is responsive and visually appealing.
 
-Deaths: Call the save function inside the onDie player event.
+### 4. Backend and Database
+- **Objective**: Ensure the backend is robust and secure.
+- **Tasks**:
+  - Test all PHP endpoints for functionality and security.
+  - Ensure the database schema is correctly set up and updated.
 
-Accuracy Calculation: (Shots Hit / Total Shots) * 100. The AI should calculate this on the fly or store it as a separate float.
+### 5. Testing and Debugging
+- **Objective**: Ensure the game is stable and ready for release.
+- **Tasks**:
+  - Test all features thoroughly.
+  - Debug any issues with stat tracking, UI, or gameplay.
+  - Optimize performance where necessary.
 
-3. Database Sync (PHP)
-Security: Use PDO prepared statements for every update.
+---
 
-Efficiency: Use UPDATE queries for existing users; do not create duplicate rows for the same UserID.
+## File Structure
+- **Frontend**: Located in `client/src/`.
+  - `SimpleFPS.tsx`: Main game component, includes home screen UI.
+  - `api/backend.ts`: Functions for calling backend endpoints.
+  - `api/components/fps/`: Game components like `Bullet.tsx`, `Game.tsx`, etc.
+
+- **Backend**: PHP files for handling stat updates.
+  - `updateShots.php`, `updateDeaths.php`, `updateTimePlayed.php`: Endpoints for updating player stats.
+
+- **Assets**: Images and textures.
+  - `HomeScreen.png`, `HomeScreenReference.webp`: Home screen background and reference.
+
+---
+
+## How to Contribute
+1. **Frontend Development**:
+   - Work on UI components in `client/src/`.
+   - Use React, Three.js, and TypeScript.
+
+2. **Backend Development**:
+   - Update or add PHP endpoints as needed.
+   - Ensure database queries are efficient and secure.
+
+3. **Testing**:
+   - Test all features and report any bugs.
+   - Use Postman to test backend endpoints.
+
+---
+
+## Notes
+- Ensure all changes are tested before merging.
+- Follow the existing code style and structure.
+- Document any new features or changes in this file.
+
+---
+
+## Contact
+For any questions or further instructions, please reach out to Brandon Benrud.

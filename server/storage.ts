@@ -55,6 +55,12 @@ export interface IStorage {
 
   // Currency purchase transactions
   saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void>;
+  getAllTransactions(): Promise<{
+    transactions: any[];
+    summary: { totalRevenue: number; transactionCount: number; mostPurchasedTier: { goldAmount: number; count: number } | null };
+    earningsByDay: { day: string; revenue: number; purchases: number }[];
+    tierBreakdown: { gold: number; purchases: number; revenue: number }[];
+  }>;
 
   // Player stat tracking
   incrementPlayerStats(userId: number, shots: number, hits: number, deaths: number): Promise<void>;
@@ -827,21 +833,46 @@ class MySQLStorage implements IStorage {
     }
   }
 
-  async saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void> {
+  private async ensureTransactionsTable(): Promise<void> {
+    // Create the table with the correct schema if it doesn't exist
+    await this.pool.execute(`
+      CREATE TABLE IF NOT EXISTS transactions_v2 (
+        transaction_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        amount_spent_usd DECIMAL(10,2) NOT NULL,
+        card_number VARCHAR(20) NULL,
+        currency_purchased INT NOT NULL,
+        transaction_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Migrate existing rows from the old table if it exists and has rows
     try {
-      // Ensure card_number column exists (safe migration)
-      try {
-        await this.pool.execute(`ALTER TABLE transactions ADD COLUMN card_number VARCHAR(20) NULL`);
-        console.log('Added card_number column to transactions table');
-      } catch (alterErr: any) {
-        // Column already exists — ignore
-        if (!alterErr.message?.includes('Duplicate column name')) {
-          console.warn('ALTER TABLE warning:', alterErr.message);
+      const [oldRows]: any = await this.pool.execute(
+        `SELECT user_id, amount_spent_usd, card_number, currency_purchased, transaction_date FROM transactions`
+      );
+      if (oldRows.length > 0) {
+        const [newRows]: any = await this.pool.execute(`SELECT COUNT(*) AS cnt FROM transactions_v2`);
+        if (newRows[0].cnt === 0) {
+          for (const row of oldRows) {
+            await this.pool.execute(
+              `INSERT INTO transactions_v2 (user_id, amount_spent_usd, card_number, currency_purchased, transaction_date) VALUES (?, ?, ?, ?, ?)`,
+              [row.user_id, row.amount_spent_usd, row.card_number, row.currency_purchased, row.transaction_date]
+            );
+          }
+          console.log(`Migrated ${oldRows.length} rows from old transactions table`);
         }
       }
+    } catch {
+      // Old table doesn't exist or migration already done — fine
+    }
+  }
 
+  async saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void> {
+    try {
+      await this.ensureTransactionsTable();
       await this.pool.execute(
-        `INSERT INTO transactions (user_id, amount_spent_usd, card_number, currency_purchased, transaction_date)
+        `INSERT INTO transactions_v2 (user_id, amount_spent_usd, card_number, currency_purchased, transaction_date)
          VALUES (?, ?, ?, ?, NOW())`,
         [userId, amountUSD, cardNumber, goldAmount]
       );
@@ -849,6 +880,79 @@ class MySQLStorage implements IStorage {
     } catch (err) {
       console.error('Error saving currency transaction:', err);
       throw err;
+    }
+  }
+
+  async getAllTransactions(): Promise<{ transactions: any[]; summary: { totalRevenue: number; transactionCount: number; mostPurchasedTier: { goldAmount: number; count: number } | null } }> {
+    try {
+      await this.ensureTransactionsTable();
+
+      const [rows]: any = await this.pool.execute(
+        `SELECT t.transaction_id, t.user_id, a.username, t.amount_spent_usd, t.card_number, t.currency_purchased, t.transaction_date
+         FROM transactions_v2 t
+         LEFT JOIN accounts a ON t.user_id = a.user_id
+         ORDER BY t.transaction_date DESC`
+      );
+
+      const [aggRows]: any = await this.pool.execute(
+        `SELECT
+           currency_purchased AS mostPurchasedGold,
+           COUNT(*) AS tierCount
+         FROM transactions_v2
+         GROUP BY currency_purchased
+         ORDER BY tierCount DESC
+         LIMIT 1`
+      );
+
+      const [totalRow]: any = await this.pool.execute(
+        `SELECT COUNT(*) AS transactionCount, COALESCE(SUM(amount_spent_usd), 0) AS totalRevenue FROM transactions_v2`
+      );
+
+      const [dailyRows]: any = await this.pool.execute(
+        `SELECT
+           DATE(transaction_date) AS day,
+           COALESCE(SUM(amount_spent_usd), 0) AS revenue,
+           COUNT(*) AS purchases
+         FROM transactions_v2
+         WHERE transaction_date >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
+         GROUP BY DATE(transaction_date)
+         ORDER BY day ASC`
+      );
+
+      const [tierRows]: any = await this.pool.execute(
+        `SELECT
+           currency_purchased AS gold,
+           COUNT(*) AS purchases,
+           COALESCE(SUM(amount_spent_usd), 0) AS revenue
+         FROM transactions_v2
+         GROUP BY currency_purchased
+         ORDER BY purchases DESC`
+      );
+
+      const total = totalRow[0] || { transactionCount: 0, totalRevenue: 0 };
+      const topTier = aggRows[0] || null;
+
+      return {
+        transactions: rows,
+        summary: {
+          totalRevenue: parseFloat(total.totalRevenue) || 0,
+          transactionCount: parseInt(total.transactionCount) || 0,
+          mostPurchasedTier: topTier ? { goldAmount: topTier.mostPurchasedGold, count: parseInt(topTier.tierCount) } : null,
+        },
+        earningsByDay: dailyRows.map((r: any) => ({
+          day: String(r.day).slice(0, 10),
+          revenue: parseFloat(r.revenue) || 0,
+          purchases: parseInt(r.purchases) || 0,
+        })),
+        tierBreakdown: tierRows.map((r: any) => ({
+          gold: parseInt(r.gold) || 0,
+          purchases: parseInt(r.purchases) || 0,
+          revenue: parseFloat(r.revenue) || 0,
+        })),
+      };
+    } catch (err) {
+      console.error('Error fetching all transactions:', err);
+      return { transactions: [], summary: { totalRevenue: 0, transactionCount: 0, mostPurchasedTier: null }, earningsByDay: [], tierBreakdown: [] };
     }
   }
 

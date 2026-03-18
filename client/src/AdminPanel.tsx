@@ -1,4 +1,8 @@
 import React, { useState, useEffect } from "react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+} from "recharts";
 
 interface User {
   user_id: number;
@@ -20,15 +24,35 @@ interface Item {
   is_cosmetic: boolean | number;
 }
 
+interface Transaction {
+  transaction_id: number;
+  user_id: number;
+  username: string | null;
+  amount_spent_usd: number;
+  card_number: string | null;
+  currency_purchased: number;
+  transaction_date: string;
+}
+
+interface TransactionSummary {
+  totalRevenue: number;
+  transactionCount: number;
+  mostPurchasedTier: { goldAmount: number; count: number } | null;
+}
+
 export default function AdminPanel() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [adminName, setAdminName] = useState("");
   const [adminId, setAdminId] = useState<number | null>(null);
   
-  const [activeTab, setActiveTab] = useState<"users" | "items">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "items" | "transactions">("users");
   const [users, setUsers] = useState<User[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactionSummary, setTransactionSummary] = useState<TransactionSummary>({ totalRevenue: 0, transactionCount: 0, mostPurchasedTier: null });
+  const [earningsByDay, setEarningsByDay] = useState<{ day: string; revenue: number; purchases: number }[]>([]);
+  const [tierBreakdown, setTierBreakdown] = useState<{ gold: number; purchases: number; revenue: number }[]>([]);
   
   const [editingGold, setEditingGold] = useState<number | null>(null);
   const [goldValue, setGoldValue] = useState("");
@@ -83,14 +107,26 @@ export default function AdminPanel() {
 
   const fetchData = async () => {
     try {
-      const [usersRes, itemsRes] = await Promise.all([
+      const [usersRes, itemsRes, txRes] = await Promise.all([
         fetch("/api/admin/users"),
-        fetch("/api/admin/items")
+        fetch("/api/admin/items"),
+        fetch("/api/admin/transactions"),
       ]);
       const usersData = await usersRes.json();
       const itemsData = await itemsRes.json();
+      const txData = await txRes.json();
       if (usersData.success) setUsers(usersData.users);
       if (itemsData.success) setItems(itemsData.items);
+      if (txData.success) {
+        setTransactions(txData.transactions);
+        setTransactionSummary({
+          totalRevenue: txData.summary.totalRevenue,
+          transactionCount: txData.summary.transactionCount,
+          mostPurchasedTier: txData.summary.mostPurchasedTier,
+        });
+        setEarningsByDay(txData.earningsByDay || []);
+        setTierBreakdown(txData.tierBreakdown || []);
+      }
     } catch (err) {
       console.error("Fetch data error:", err);
     }
@@ -276,6 +312,12 @@ export default function AdminPanel() {
             style={{ padding: "10px 20px", background: activeTab === "items" ? "#4CAF50" : "#333", border: "none", borderRadius: "5px", color: "white", cursor: "pointer" }}
           >
             Items ({items.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("transactions")}
+            style={{ padding: "10px 20px", background: activeTab === "transactions" ? "#4CAF50" : "#333", border: "none", borderRadius: "5px", color: "white", cursor: "pointer" }}
+          >
+            Transactions ({transactions.length})
           </button>
         </div>
 
@@ -543,6 +585,170 @@ export default function AdminPanel() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "transactions" && (
+          <div>
+            {/* Summary Cards */}
+            <div style={{ display: "flex", gap: "16px", marginBottom: "24px", flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: "180px", background: "#1a2744", borderRadius: "10px", padding: "20px", textAlign: "center" }}>
+                <div style={{ fontSize: "13px", color: "#888", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "1px" }}>Total Revenue</div>
+                <div style={{ fontSize: "32px", fontWeight: "bold", color: "#4CAF50" }}>
+                  ${transactionSummary.totalRevenue.toFixed(2)}
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: "180px", background: "#1a2744", borderRadius: "10px", padding: "20px", textAlign: "center" }}>
+                <div style={{ fontSize: "13px", color: "#888", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "1px" }}>Total Purchases</div>
+                <div style={{ fontSize: "32px", fontWeight: "bold", color: "#f0c040" }}>
+                  {transactionSummary.transactionCount}
+                </div>
+              </div>
+              <div style={{ flex: 2, minWidth: "220px", background: "#1a2744", borderRadius: "10px", padding: "20px", textAlign: "center" }}>
+                <div style={{ fontSize: "13px", color: "#888", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "1px" }}>Most Purchased Tier</div>
+                {transactionSummary.mostPurchasedTier ? (
+                  <div>
+                    <div style={{ fontSize: "24px", fontWeight: "bold", color: "#f0c040" }}>
+                      {transactionSummary.mostPurchasedTier.goldAmount.toLocaleString()} Gold
+                    </div>
+                    <div style={{ fontSize: "13px", color: "#aaa", marginTop: "4px" }}>
+                      Purchased {transactionSummary.mostPurchasedTier.count} time{transactionSummary.mostPurchasedTier.count !== 1 ? "s" : ""}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: "18px", color: "#666" }}>No data yet</div>
+                )}
+              </div>
+            </div>
+
+            {/* Charts */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "24px" }}>
+              {/* Earnings Over Time */}
+              <div style={{ background: "#1a2744", borderRadius: "10px", padding: "20px" }}>
+                <div style={{ fontWeight: "bold", fontSize: "14px", marginBottom: "16px", color: "#ccc" }}>
+                  Daily Earnings — Last 30 Days
+                </div>
+                {earningsByDay.length === 0 ? (
+                  <div style={{ height: "200px", display: "flex", alignItems: "center", justifyContent: "center", color: "#555" }}>No data yet</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={earningsByDay} margin={{ top: 4, right: 8, left: 0, bottom: 40 }}>
+                      <XAxis
+                        dataKey="day"
+                        tick={{ fill: "#888", fontSize: 11 }}
+                        angle={-45}
+                        textAnchor="end"
+                        interval={Math.max(0, Math.floor(earningsByDay.length / 6) - 1)}
+                        tickFormatter={(v) => {
+                          const d = new Date(v + "T00:00:00");
+                          return `${d.toLocaleString("default", { month: "short" })} ${d.getDate()}`;
+                        }}
+                      />
+                      <YAxis tick={{ fill: "#888", fontSize: 11 }} tickFormatter={(v) => `$${v}`} width={45} />
+                      <Tooltip
+                        contentStyle={{ background: "#0f1928", border: "1px solid #2a3a5e", borderRadius: "6px" }}
+                        labelStyle={{ color: "#ccc" }}
+                        formatter={(value: any) => [`$${Number(value).toFixed(2)}`, "Revenue"]}
+                      />
+                      <Bar dataKey="revenue" fill="#4CAF50" radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              {/* Currency Tier Breakdown */}
+              <div style={{ background: "#1a2744", borderRadius: "10px", padding: "20px" }}>
+                <div style={{ fontWeight: "bold", fontSize: "14px", marginBottom: "16px", color: "#ccc" }}>
+                  Purchases by Currency Tier
+                </div>
+                {tierBreakdown.length === 0 ? (
+                  <div style={{ height: "200px", display: "flex", alignItems: "center", justifyContent: "center", color: "#555" }}>No data yet</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      <Pie
+                        data={tierBreakdown}
+                        dataKey="purchases"
+                        nameKey="gold"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={85}
+                        paddingAngle={3}
+                        label={({ gold, purchases }) => `${Number(gold).toLocaleString()}🪙 (${purchases})`}
+                        labelLine={{ stroke: "#555" }}
+                      >
+                        {tierBreakdown.map((_entry, index) => (
+                          <Cell key={index} fill={["#f0c040", "#4CAF50", "#5b9bd5", "#e67e22", "#9b59b6"][index % 5]} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{ background: "#0f1928", border: "1px solid #2a3a5e", borderRadius: "6px" }}
+                        formatter={(value: any, _name: any, props: any) => [
+                          `${value} purchase${value !== 1 ? "s" : ""} ($${Number(props.payload.revenue).toFixed(2)})`,
+                          `${Number(props.payload.gold).toLocaleString()} Gold`,
+                        ]}
+                      />
+                      <Legend
+                        formatter={(value, entry: any) => (
+                          <span style={{ color: "#ccc", fontSize: "12px" }}>
+                            {Number(entry.payload.gold).toLocaleString()} Gold — ${Number(entry.payload.revenue).toFixed(2)}
+                          </span>
+                        )}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+
+            {/* Transactions Table */}
+            <div style={{ background: "#1a2744", borderRadius: "10px", overflow: "hidden" }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #2a3a5e", fontWeight: "bold", fontSize: "15px" }}>
+                All Transactions
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                {transactions.length === 0 ? (
+                  <div style={{ padding: "40px", textAlign: "center", color: "#666" }}>No transactions found.</div>
+                ) : (
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
+                    <thead>
+                      <tr style={{ background: "#0f1928", textAlign: "left" }}>
+                        <th style={{ padding: "12px 16px", color: "#888", fontWeight: 500, fontSize: "13px" }}>#</th>
+                        <th style={{ padding: "12px 16px", color: "#888", fontWeight: 500, fontSize: "13px" }}>User</th>
+                        <th style={{ padding: "12px 16px", color: "#888", fontWeight: 500, fontSize: "13px" }}>Gold Purchased</th>
+                        <th style={{ padding: "12px 16px", color: "#888", fontWeight: 500, fontSize: "13px" }}>Amount Paid</th>
+                        <th style={{ padding: "12px 16px", color: "#888", fontWeight: 500, fontSize: "13px" }}>Card</th>
+                        <th style={{ padding: "12px 16px", color: "#888", fontWeight: 500, fontSize: "13px" }}>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transactions.map((tx, idx) => (
+                        <tr key={tx.transaction_id} style={{ borderTop: "1px solid #2a3a5e", background: idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)" }}>
+                          <td style={{ padding: "12px 16px", color: "#666", fontSize: "13px" }}>{tx.transaction_id}</td>
+                          <td style={{ padding: "12px 16px" }}>
+                            <span style={{ color: "#e0e0e0" }}>{tx.username || "Unknown"}</span>
+                            <span style={{ color: "#555", fontSize: "12px", marginLeft: "6px" }}>#{tx.user_id}</span>
+                          </td>
+                          <td style={{ padding: "12px 16px", color: "#f0c040", fontWeight: "bold" }}>
+                            {Number(tx.currency_purchased).toLocaleString()} 🪙
+                          </td>
+                          <td style={{ padding: "12px 16px", color: "#4CAF50", fontWeight: "bold" }}>
+                            ${Number(tx.amount_spent_usd).toFixed(2)}
+                          </td>
+                          <td style={{ padding: "12px 16px", color: "#888", fontFamily: "monospace" }}>
+                            {tx.card_number || "—"}
+                          </td>
+                          <td style={{ padding: "12px 16px", color: "#888", fontSize: "13px" }}>
+                            {new Date(tx.transaction_date).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           </div>
