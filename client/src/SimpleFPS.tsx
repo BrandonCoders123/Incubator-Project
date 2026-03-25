@@ -269,6 +269,7 @@ interface GameState {
   currentWeapon: number;
   isReloading: boolean;
   reloadStartTime: number;
+  reloadDuration: number;
   lastShotTime: number;
   previousGamePhase: string | null; // Track where user came from (for settings back navigation)
   equippedWeaponSkins: Record<number, string>; // Track equipped skin per weapon (weapon id -> skin name)
@@ -858,6 +859,7 @@ function Player({
           currentWeapon: weaponId,
           ammo: newAmmo,
           isReloading: false,
+          reloadDuration: 0,
         }));
       }
     };
@@ -874,17 +876,24 @@ function Player({
       !gameState.isReloading &&
       gameState.ammo < weapon.maxAmmo
     ) {
+      const shotsMissing = weapon.maxAmmo - gameState.ammo;
+      const extraReloadTime =
+        gameState.currentWeapon === 5
+          ? Math.max(0, shotsMissing - 1) * 1000
+          : 0;
+
       setGameState((prev) => ({
         ...prev,
         isReloading: true,
         reloadStartTime: Date.now(),
+        reloadDuration: weapon.reloadTime + extraReloadTime,
       }));
     }
 
     // Check if reload is complete
     if (
       gameState.isReloading &&
-      Date.now() - gameState.reloadStartTime >= weapon.reloadTime
+      Date.now() - gameState.reloadStartTime >= gameState.reloadDuration
     ) {
       const newAmmo = weapon.maxAmmo;
       weaponAmmo.current[gameState.currentWeapon] = newAmmo; // Update ref
@@ -892,6 +901,7 @@ function Player({
         ...prev,
         isReloading: false,
         ammo: newAmmo,
+        reloadDuration: 0,
       }));
     }
 
@@ -7021,6 +7031,7 @@ function Game() {
     currentWeapon: 1, // Start with pistol
     isReloading: false,
     reloadStartTime: 0,
+    reloadDuration: 0,
     lastShotTime: 0,
     previousGamePhase: null,
     equippedWeaponSkins: {
