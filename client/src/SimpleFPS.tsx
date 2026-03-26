@@ -261,6 +261,10 @@ interface GameState {
   unlockedWeapons: number[]; // Array of weapon IDs that are unlocked
   inventory: string[]; // Items purchased (like "token")
   tokensPurchased: number; // Track number of health buff tokens purchased
+  augmentLevels: {
+    weaponDamage: number;
+    userMaxHealth: number;
+  };
   lastDamageTime: number;
   currentWeapon: number;
   isReloading: boolean;
@@ -629,7 +633,7 @@ function Player({
                   id: `bullet_${Date.now()}_${i}`,
                   position: [bulletPos.x, bulletPos.y, bulletPos.z],
                   direction: [spreadDir.x, spreadDir.y, spreadDir.z],
-                  damage: currentWeapon.damage,
+                  damage: currentWeapon.damage + gameStateRef.current.augmentLevels.weaponDamage * 5,
                 });
               }
             } else {
@@ -638,7 +642,7 @@ function Player({
                 id: `bullet_${Date.now()}`,
                 position: [bulletPos.x, bulletPos.y, bulletPos.z],
                 direction: [baseDirection.x, baseDirection.y, baseDirection.z],
-                damage: currentWeapon.damage,
+                damage: currentWeapon.damage + gameStateRef.current.augmentLevels.weaponDamage * 5,
               });
             }
 
@@ -711,7 +715,7 @@ function Player({
               id: `bullet_${Date.now()}`,
               position: [bulletPos.x, bulletPos.y, bulletPos.z],
               direction: [direction.x, direction.y, direction.z],
-              damage: currentWeapon.damage,
+              damage: currentWeapon.damage + gameState.augmentLevels.weaponDamage * 5,
             },
           ],
           lastShotTime: now,
@@ -7122,15 +7126,44 @@ function HUD({
                               textAlign: "left",
                             }}
                           >
-                            <div
+                            <button
+                              onClick={() => {
+                                const damageCost = 3 + gameState.augmentLevels.weaponDamage;
+
+                                if (gameState.coins < damageCost) return;
+
+                                setGameState((prev) => ({
+                                  ...prev,
+                                  coins: prev.coins - damageCost,
+                                  augmentLevels: {
+                                    ...prev.augmentLevels,
+                                    weaponDamage: prev.augmentLevels.weaponDamage + 1,
+                                  },
+                                }));
+                              }}
                               style={{
-                                fontSize: "17px",
-                                fontWeight: "bold",
-                                marginBottom: "6px",
+                                padding: "16px",
+                                background: "rgba(255,255,255,0.08)",
+                                border: "1px solid rgba(66,165,245,0.35)",
+                                borderRadius: "10px",
+                                textAlign: "left",
+                                cursor: "pointer",
                               }}
                             >
-                              Damage
-                            </div>
+                              <div style={{ fontSize: "17px", fontWeight: "bold", marginBottom: "6px" }}>
+                                Damage
+                              </div>
+                              <div style={{ fontSize: "13px", opacity: 0.75, marginBottom: "8px" }}>
+                                Increase weapon damage per shot.
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#90caf9" }}>
+                                Level: {gameState.augmentLevels.weaponDamage}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ffd54f", marginTop: "4px" }}>
+                                Cost: {3 + gameState.augmentLevels.weaponDamage} coins
+                              </div>
+                            </button>
+                            
                             <div style={{ fontSize: "13px", opacity: 0.75 }}>
                               Increase weapon damage per shot.
                             </div>
@@ -7216,15 +7249,46 @@ function HUD({
                               textAlign: "left",
                             }}
                           >
-                            <div
+                            <button
+                              onClick={() => {
+                                const healthCost = 3 + gameState.augmentLevels.userMaxHealth;
+
+                                if (gameState.coins < healthCost) return;
+
+                                setGameState((prev) => ({
+                                  ...prev,
+                                  coins: prev.coins - healthCost,
+                                  maxHealth: prev.maxHealth + 10,
+                                  health: Math.min(prev.health + 10, prev.maxHealth + 10),
+                                  augmentLevels: {
+                                    ...prev.augmentLevels,
+                                    userMaxHealth: prev.augmentLevels.userMaxHealth + 1,
+                                  },
+                                }));
+                              }}
                               style={{
-                                fontSize: "17px",
-                                fontWeight: "bold",
-                                marginBottom: "6px",
+                                padding: "16px",
+                                background: "rgba(255,255,255,0.08)",
+                                border: "1px solid rgba(186,104,200,0.35)",
+                                borderRadius: "10px",
+                                textAlign: "left",
+                                cursor: "pointer",
                               }}
                             >
-                              Max Health
-                            </div>
+                              <div style={{ fontSize: "17px", fontWeight: "bold", marginBottom: "6px" }}>
+                                Max Health
+                              </div>
+                              <div style={{ fontSize: "13px", opacity: 0.75, marginBottom: "8px" }}>
+                                Increase total health pool by +10.
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ce93d8" }}>
+                                Level: {gameState.augmentLevels.userMaxHealth}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ffd54f", marginTop: "4px" }}>
+                                Cost: {3 + gameState.augmentLevels.userMaxHealth} coins
+                              </div>
+                            </button>
+                            
                             <div style={{ fontSize: "13px", opacity: 0.75 }}>
                               Increase total health pool.
                             </div>
@@ -7609,6 +7673,10 @@ function HUD({
                   },
                   unlockedWeapons: [1],
                   inventory: [],
+                  augmentLevels: {
+                    weaponDamage: 0,
+                    userMaxHealth: 0,
+                  },
                   gameStartTime: Date.now(),
                   user: {
                     ...prev.user,
@@ -8429,6 +8497,10 @@ function Game() {
     unlockedWeapons: [1], // Start with pistol only
     inventory: [], // No items purchased yet
     tokensPurchased: 0, // No health buff tokens purchased yet
+    augmentLevels: {
+      weaponDamage: 0,
+      userMaxHealth: 0,
+    },
     lastDamageTime: 0,
     currentWeapon: 1, // Start with pistol
     isReloading: false,
