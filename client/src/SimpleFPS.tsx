@@ -19,6 +19,12 @@ import { useSettings } from "./lib/stores/useSettings"; // 👈 new
 import { getLocalStorage, setLocalStorage } from "./lib/utils";
 
 import Crosshair from "./api/components/fps/Crosshair";
+import {
+  ENEMY_BEHAVIOR_BY_TYPE,
+  getEnemyMovementIntent,
+  resolveMovementWithFallback,
+  type EnemyBehavior,
+} from "./lib/game/enemyMovement";
 
 import Menu from "./api/components/fps/Menu";
 import { useGame } from "./lib/stores/useGame";
