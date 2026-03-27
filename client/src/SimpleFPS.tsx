@@ -23,10 +23,6 @@ import Crosshair from "./api/components/fps/Crosshair";
 import Menu from "./api/components/fps/Menu";
 import { useGame } from "./lib/stores/useGame";
 
-
-
-
-
 // Weapon definitions
 interface Weapon {
   name: string;
@@ -192,7 +188,7 @@ const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     damage: 5,
     attackInterval: 750,
     color: "#363636",
-    size: .5, //2x smaller than normal enemies
+    size: 0.5, //2x smaller than normal enemies
   },
 };
 
@@ -265,6 +261,10 @@ interface GameState {
   unlockedWeapons: number[]; // Array of weapon IDs that are unlocked
   inventory: string[]; // Items purchased (like "token")
   tokensPurchased: number; // Track number of health buff tokens purchased
+  augmentLevels: {
+    weaponDamage: number;
+    userMaxHealth: number;
+  };
   lastDamageTime: number;
   currentWeapon: number;
   isReloading: boolean;
@@ -278,7 +278,7 @@ interface GameState {
   gameStartTime: number | null; // Timestamp when game started (for leaderboard run time)
   gameMode: "story" | "endless"; // Game mode: story (with levels) or endless (wave survival)
   sessionShotsFired: number; // Shots fired this session (saved to DB on death)
-  sessionShotsHit: number;   // Bullet hits on enemies this session
+  sessionShotsHit: number; // Bullet hits on enemies this session
 }
 
 interface ShopItem {
@@ -633,7 +633,7 @@ function Player({
                   id: `bullet_${Date.now()}_${i}`,
                   position: [bulletPos.x, bulletPos.y, bulletPos.z],
                   direction: [spreadDir.x, spreadDir.y, spreadDir.z],
-                  damage: currentWeapon.damage,
+                  damage: currentWeapon.damage + gameStateRef.current.augmentLevels.weaponDamage * 5,
                 });
               }
             } else {
@@ -642,7 +642,7 @@ function Player({
                 id: `bullet_${Date.now()}`,
                 position: [bulletPos.x, bulletPos.y, bulletPos.z],
                 direction: [baseDirection.x, baseDirection.y, baseDirection.z],
-                damage: currentWeapon.damage,
+                damage: currentWeapon.damage + gameStateRef.current.augmentLevels.weaponDamage * 5,
               });
             }
 
@@ -715,7 +715,7 @@ function Player({
               id: `bullet_${Date.now()}`,
               position: [bulletPos.x, bulletPos.y, bulletPos.z],
               direction: [direction.x, direction.y, direction.z],
-              damage: currentWeapon.damage,
+              damage: currentWeapon.damage + gameState.augmentLevels.weaponDamage * 5,
             },
           ],
           lastShotTime: now,
@@ -1133,7 +1133,11 @@ function Enemy({
       const originalPos = enemyPos.clone();
       let newPos = enemyPos.clone();
 
-      if (enemy.type === "melee" || enemy.type === "giant" || enemy.type === "rat") {
+      if (
+        enemy.type === "melee" ||
+        enemy.type === "giant" ||
+        enemy.type === "rat"
+      ) {
         // Melee, Giant, and Rat: Always move towards player
         newPos = newPos.add(
           direction.clone().multiplyScalar(archetype.moveSpeed * deltaTime),
@@ -1196,7 +1200,11 @@ function Enemy({
       // Attack logic
       setIsAttacking(distanceToPlayer < 2.5);
 
-      if (enemy.type === "melee" || enemy.type === "giant" || enemy.type === "rat") {
+      if (
+        enemy.type === "melee" ||
+        enemy.type === "giant" ||
+        enemy.type === "rat"
+      ) {
         // Melee, Giant, and Rat: Contact damage
         if (distanceToPlayer < 1.5 && gameState.gamePhase === "playing") {
           const currentTime = Date.now();
@@ -1254,7 +1262,7 @@ function Enemy({
           // Find current enemy health from state (not closure) to handle multiple pellet hits
           const currentEnemy = prev.enemies.find((e) => e.id === enemy.id);
           if (!currentEnemy) return prev; // Enemy already dead/removed
-          
+
           const enemyKilled =
             currentEnemy.health > 0 && currentEnemy.health - bullet.damage <= 0;
           const newCoins = enemyKilled ? prev.coins + 1 : prev.coins; // 1 coin per kill
@@ -1332,7 +1340,8 @@ function Enemy({
             },
             level: {
               currentLevel: prev.level.currentLevel,
-              killsThisLevel: completedFinalLevel && isEndless ? 0 : newLevelKills,
+              killsThisLevel:
+                completedFinalLevel && isEndless ? 0 : newLevelKills,
               giantsSpawnedThisLevel: prev.level.giantsSpawnedThisLevel,
             },
             gamePhase: nextPhase,
@@ -1350,12 +1359,16 @@ function Enemy({
     <group ref={enemyRef} position={enemy.position}>
       {/* Melee enemies use robot sprite; others keep the colored cube */}
       {enemy.type === "melee" ? (
-        <Suspense fallback={
-          <mesh>
-            <boxGeometry args={[0.8 * enemySize, 1.5 * enemySize, 0.8 * enemySize]} />
-            <meshStandardMaterial color={archetype.color} />
-          </mesh>
-        }>
+        <Suspense
+          fallback={
+            <mesh>
+              <boxGeometry
+                args={[0.8 * enemySize, 1.5 * enemySize, 0.8 * enemySize]}
+              />
+              <meshStandardMaterial color={archetype.color} />
+            </mesh>
+          }
+        >
           <RobotMeleeSprite size={enemySize} />
         </Suspense>
       ) : (
@@ -2045,8 +2058,28 @@ function InventoryPage({
         }}
       >
         <div>
-          <div style={{ fontSize: "11px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase" }}>DOG: The Hotdog Wars</div>
-          <h1 style={{ fontSize: "26px", margin: "2px 0 0 0", fontWeight: "700", color: "#e8a020", letterSpacing: "3px", textTransform: "uppercase" }}>INVENTORY</h1>
+          <div
+            style={{
+              fontSize: "11px",
+              color: "#c8a84b",
+              letterSpacing: "3px",
+              textTransform: "uppercase",
+            }}
+          >
+            DOG: The Hotdog Wars
+          </div>
+          <h1
+            style={{
+              fontSize: "26px",
+              margin: "2px 0 0 0",
+              fontWeight: "700",
+              color: "#e8a020",
+              letterSpacing: "3px",
+              textTransform: "uppercase",
+            }}
+          >
+            INVENTORY
+          </h1>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
           <span style={{ fontSize: "18px", color: "#fdc830" }}>
@@ -2294,25 +2327,123 @@ function InventoryPage({
             </div>
 
             {/* Crosshair Selection */}
-            <div style={{ marginTop: "25px", borderTop: "2px solid rgba(255,255,255,0.2)", paddingTop: "20px" }}>
-              <h3 style={{ margin: "0 0 15px 0", fontSize: "20px", textAlign: "center" }}>
+            <div
+              style={{
+                marginTop: "25px",
+                borderTop: "2px solid rgba(255,255,255,0.2)",
+                paddingTop: "20px",
+              }}
+            >
+              <h3
+                style={{
+                  margin: "0 0 15px 0",
+                  fontSize: "20px",
+                  textAlign: "center",
+                }}
+              >
                 CROSSHAIR
               </h3>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "8px" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(5, 1fr)",
+                  gap: "8px",
+                }}
+              >
                 {(() => {
                   const predefinedCrosshairs = [
-                    { id: "classic-dot", name: "Classic Dot", type: "dot", size: 4, color: "#ffffff", thickness: 2, gap: 4 },
-                    { id: "large-dot", name: "Large Dot", type: "dot", size: 8, color: "#ff5555", thickness: 2, gap: 4 },
-                    { id: "thin-cross", name: "Thin Cross", type: "cross", size: 10, thickness: 1, gap: 4, color: "#ffffff" },
-                    { id: "bold-cross", name: "Bold Cross", type: "cross", size: 14, thickness: 3, gap: 6, color: "#00ff99" },
-                    { id: "tight-cross", name: "Tight Cross", type: "cross", size: 8, thickness: 2, gap: 2, color: "#ffff00" },
-                    { id: "circle-small", name: "Small Circle", type: "circle", size: 6, thickness: 2, color: "#ffffff", gap: 4 },
-                    { id: "circle-large", name: "Large Circle", type: "circle", size: 12, thickness: 3, color: "#ff8800", gap: 4 },
-                    { id: "minimal-green", name: "Minimal Green", type: "dot", size: 3, color: "#00ff00", thickness: 2, gap: 4 },
-                    { id: "sniper-cross", name: "Sniper Cross", type: "cross", size: 18, thickness: 1, gap: 10, color: "#ff0000" },
-                    { id: "training-default", name: "Training Default", type: "cross", size: 12, thickness: 2, gap: 5, color: "#ffffff" },
+                    {
+                      id: "classic-dot",
+                      name: "Classic Dot",
+                      type: "dot",
+                      size: 4,
+                      color: "#ffffff",
+                      thickness: 2,
+                      gap: 4,
+                    },
+                    {
+                      id: "large-dot",
+                      name: "Large Dot",
+                      type: "dot",
+                      size: 8,
+                      color: "#ff5555",
+                      thickness: 2,
+                      gap: 4,
+                    },
+                    {
+                      id: "thin-cross",
+                      name: "Thin Cross",
+                      type: "cross",
+                      size: 10,
+                      thickness: 1,
+                      gap: 4,
+                      color: "#ffffff",
+                    },
+                    {
+                      id: "bold-cross",
+                      name: "Bold Cross",
+                      type: "cross",
+                      size: 14,
+                      thickness: 3,
+                      gap: 6,
+                      color: "#00ff99",
+                    },
+                    {
+                      id: "tight-cross",
+                      name: "Tight Cross",
+                      type: "cross",
+                      size: 8,
+                      thickness: 2,
+                      gap: 2,
+                      color: "#ffff00",
+                    },
+                    {
+                      id: "circle-small",
+                      name: "Small Circle",
+                      type: "circle",
+                      size: 6,
+                      thickness: 2,
+                      color: "#ffffff",
+                      gap: 4,
+                    },
+                    {
+                      id: "circle-large",
+                      name: "Large Circle",
+                      type: "circle",
+                      size: 12,
+                      thickness: 3,
+                      color: "#ff8800",
+                      gap: 4,
+                    },
+                    {
+                      id: "minimal-green",
+                      name: "Minimal Green",
+                      type: "dot",
+                      size: 3,
+                      color: "#00ff00",
+                      thickness: 2,
+                      gap: 4,
+                    },
+                    {
+                      id: "sniper-cross",
+                      name: "Sniper Cross",
+                      type: "cross",
+                      size: 18,
+                      thickness: 1,
+                      gap: 10,
+                      color: "#ff0000",
+                    },
+                    {
+                      id: "training-default",
+                      name: "Training Default",
+                      type: "cross",
+                      size: 12,
+                      thickness: 2,
+                      gap: 5,
+                      color: "#ffffff",
+                    },
                   ];
-                  
+
                   const customData = localStorage.getItem("customCrosshair");
                   let customCrosshairItem = null;
                   if (customData) {
@@ -2329,9 +2460,11 @@ function InventoryPage({
                       };
                     } catch (e) {}
                   }
-                  
-                  const allCrosshairs = customCrosshairItem ? [...predefinedCrosshairs, customCrosshairItem] : predefinedCrosshairs;
-                  
+
+                  const allCrosshairs = customCrosshairItem
+                    ? [...predefinedCrosshairs, customCrosshairItem]
+                    : predefinedCrosshairs;
+
                   return allCrosshairs.map((c) => {
                     const isSelected = selectedCrosshair === c.id;
                     return (
@@ -2344,8 +2477,16 @@ function InventoryPage({
                         }}
                         style={{
                           padding: "10px 5px",
-                          background: isSelected ? "rgba(76, 175, 80, 0.5)" : c.id === "custom" ? "rgba(255, 215, 0, 0.2)" : "rgba(255,255,255,0.1)",
-                          border: isSelected ? "2px solid #4CAF50" : c.id === "custom" ? "2px solid #FFD700" : "1px solid rgba(255,255,255,0.3)",
+                          background: isSelected
+                            ? "rgba(76, 175, 80, 0.5)"
+                            : c.id === "custom"
+                              ? "rgba(255, 215, 0, 0.2)"
+                              : "rgba(255,255,255,0.1)",
+                          border: isSelected
+                            ? "2px solid #4CAF50"
+                            : c.id === "custom"
+                              ? "2px solid #FFD700"
+                              : "1px solid rgba(255,255,255,0.3)",
                           borderRadius: "6px",
                           cursor: "pointer",
                           display: "flex",
@@ -2354,23 +2495,97 @@ function InventoryPage({
                           gap: "6px",
                         }}
                       >
-                        <div style={{ width: "30px", height: "30px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", borderRadius: "4px", position: "relative" }}>
+                        <div
+                          style={{
+                            width: "30px",
+                            height: "30px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            background: "rgba(0,0,0,0.5)",
+                            borderRadius: "4px",
+                            position: "relative",
+                          }}
+                        >
                           {c.type === "dot" && (
-                            <div style={{ width: `${c.size}px`, height: `${c.size}px`, backgroundColor: c.color, borderRadius: "50%" }} />
+                            <div
+                              style={{
+                                width: `${c.size}px`,
+                                height: `${c.size}px`,
+                                backgroundColor: c.color,
+                                borderRadius: "50%",
+                              }}
+                            />
                           )}
                           {c.type === "circle" && (
-                            <div style={{ width: `${Math.min(c.size * 2, 24)}px`, height: `${Math.min(c.size * 2, 24)}px`, border: `${c.thickness}px solid ${c.color}`, borderRadius: "50%" }} />
+                            <div
+                              style={{
+                                width: `${Math.min(c.size * 2, 24)}px`,
+                                height: `${Math.min(c.size * 2, 24)}px`,
+                                border: `${c.thickness}px solid ${c.color}`,
+                                borderRadius: "50%",
+                              }}
+                            />
                           )}
                           {c.type === "cross" && (
                             <>
-                              <div style={{ position: "absolute", top: `calc(50% - ${Math.min(c.gap || 3, 3) + Math.min(c.size, 8)}px)`, left: "50%", transform: "translateX(-50%)", width: `${c.thickness}px`, height: `${Math.min(c.size, 8)}px`, backgroundColor: c.color }} />
-                              <div style={{ position: "absolute", top: `calc(50% + ${Math.min(c.gap || 3, 3)}px)`, left: "50%", transform: "translateX(-50%)", width: `${c.thickness}px`, height: `${Math.min(c.size, 8)}px`, backgroundColor: c.color }} />
-                              <div style={{ position: "absolute", top: "50%", left: `calc(50% - ${Math.min(c.gap || 3, 3) + Math.min(c.size, 8)}px)`, transform: "translateY(-50%)", width: `${Math.min(c.size, 8)}px`, height: `${c.thickness}px`, backgroundColor: c.color }} />
-                              <div style={{ position: "absolute", top: "50%", left: `calc(50% + ${Math.min(c.gap || 3, 3)}px)`, transform: "translateY(-50%)", width: `${Math.min(c.size, 8)}px`, height: `${c.thickness}px`, backgroundColor: c.color }} />
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: `calc(50% - ${Math.min(c.gap || 3, 3) + Math.min(c.size, 8)}px)`,
+                                  left: "50%",
+                                  transform: "translateX(-50%)",
+                                  width: `${c.thickness}px`,
+                                  height: `${Math.min(c.size, 8)}px`,
+                                  backgroundColor: c.color,
+                                }}
+                              />
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: `calc(50% + ${Math.min(c.gap || 3, 3)}px)`,
+                                  left: "50%",
+                                  transform: "translateX(-50%)",
+                                  width: `${c.thickness}px`,
+                                  height: `${Math.min(c.size, 8)}px`,
+                                  backgroundColor: c.color,
+                                }}
+                              />
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: "50%",
+                                  left: `calc(50% - ${Math.min(c.gap || 3, 3) + Math.min(c.size, 8)}px)`,
+                                  transform: "translateY(-50%)",
+                                  width: `${Math.min(c.size, 8)}px`,
+                                  height: `${c.thickness}px`,
+                                  backgroundColor: c.color,
+                                }}
+                              />
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  top: "50%",
+                                  left: `calc(50% + ${Math.min(c.gap || 3, 3)}px)`,
+                                  transform: "translateY(-50%)",
+                                  width: `${Math.min(c.size, 8)}px`,
+                                  height: `${c.thickness}px`,
+                                  backgroundColor: c.color,
+                                }}
+                              />
                             </>
                           )}
                         </div>
-                        <span style={{ color: c.id === "custom" ? "#FFD700" : "white", fontSize: "9px", textAlign: "center", fontWeight: c.id === "custom" ? "bold" : "normal" }}>{c.name}</span>
+                        <span
+                          style={{
+                            color: c.id === "custom" ? "#FFD700" : "white",
+                            fontSize: "9px",
+                            textAlign: "center",
+                            fontWeight: c.id === "custom" ? "bold" : "normal",
+                          }}
+                        >
+                          {c.name}
+                        </span>
                       </div>
                     );
                   });
@@ -2764,8 +2979,26 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
         }}
       >
         <div>
-          <div style={{ fontSize: "11px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase" }}>DOG: The Hotdog Wars</div>
-          <h1 style={{ margin: "2px 0 0 0", fontSize: "26px", fontWeight: "700", color: "#e8a020", letterSpacing: "3px", textTransform: "uppercase" }}>
+          <div
+            style={{
+              fontSize: "11px",
+              color: "#c8a84b",
+              letterSpacing: "3px",
+              textTransform: "uppercase",
+            }}
+          >
+            DOG: The Hotdog Wars
+          </div>
+          <h1
+            style={{
+              margin: "2px 0 0 0",
+              fontSize: "26px",
+              fontWeight: "700",
+              color: "#e8a020",
+              letterSpacing: "3px",
+              textTransform: "uppercase",
+            }}
+          >
             LEADERBOARD
           </h1>
         </div>
@@ -2808,10 +3041,15 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
               padding: "10px 24px",
               fontSize: "14px",
               fontWeight: "700",
-              background: category === tab.key ? "rgba(232,160,32,0.15)" : "transparent",
-              color: category === tab.key ? "#e8a020" : "rgba(160,145,120,0.75)",
+              background:
+                category === tab.key ? "rgba(232,160,32,0.15)" : "transparent",
+              color:
+                category === tab.key ? "#e8a020" : "rgba(160,145,120,0.75)",
               border: "none",
-              borderBottom: category === tab.key ? "2px solid #e8a020" : "2px solid transparent",
+              borderBottom:
+                category === tab.key
+                  ? "2px solid #e8a020"
+                  : "2px solid transparent",
               cursor: "pointer",
               fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
               letterSpacing: "1px",
@@ -3005,7 +3243,13 @@ function SettingsPage({
       try {
         return JSON.parse(saved);
       } catch (e) {
-        return { type: "cross", size: 10, thickness: 2, gap: 4, color: "#ffffff" };
+        return {
+          type: "cross",
+          size: 10,
+          thickness: 2,
+          gap: 4,
+          color: "#ffffff",
+        };
       }
     }
     return { type: "cross", size: 10, thickness: 2, gap: 4, color: "#ffffff" };
@@ -3151,7 +3395,17 @@ function SettingsPage({
           width: "100%",
         }}
       >
-        <div style={{ fontSize: "11px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase", marginBottom: "4px" }}>DOG: The Hotdog Wars</div>
+        <div
+          style={{
+            fontSize: "11px",
+            color: "#c8a84b",
+            letterSpacing: "3px",
+            textTransform: "uppercase",
+            marginBottom: "4px",
+          }}
+        >
+          DOG: The Hotdog Wars
+        </div>
         <h1
           style={{
             fontSize: "32px",
@@ -3241,9 +3495,15 @@ function SettingsPage({
                       padding: "8px 20px",
                       fontSize: "13px",
                       fontWeight: "700",
-                      background: listeningFor === key ? "rgba(232,160,32,0.9)" : "rgba(18,12,5,0.9)",
+                      background:
+                        listeningFor === key
+                          ? "rgba(232,160,32,0.9)"
+                          : "rgba(18,12,5,0.9)",
                       color: listeningFor === key ? "#0d0a05" : "#c8a84b",
-                      border: listeningFor === key ? "none" : "1px solid rgba(232,160,32,0.3)",
+                      border:
+                        listeningFor === key
+                          ? "none"
+                          : "1px solid rgba(232,160,32,0.3)",
                       cursor: "pointer",
                       minWidth: "100px",
                       letterSpacing: "1px",
@@ -3279,25 +3539,104 @@ function SettingsPage({
                 textAlign: "left",
               }}
             >
-              Create your own crosshair. After saving, go to Loadout to equip it.
+              Create your own crosshair. After saving, go to Loadout to equip
+              it.
             </p>
 
-            <div style={{ background: "rgba(18,12,5,0.8)", border: "1px solid rgba(232,160,32,0.2)", padding: "20px", marginBottom: "20px" }}>
+            <div
+              style={{
+                background: "rgba(18,12,5,0.8)",
+                border: "1px solid rgba(232,160,32,0.2)",
+                padding: "20px",
+                marginBottom: "20px",
+              }}
+            >
               {/* Preview */}
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: "20px" }}>
-                <div style={{ width: "80px", height: "80px", background: "rgba(0,0,0,0.8)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  marginBottom: "20px",
+                }}
+              >
+                <div
+                  style={{
+                    width: "80px",
+                    height: "80px",
+                    background: "rgba(0,0,0,0.8)",
+                    borderRadius: "8px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    position: "relative",
+                  }}
+                >
                   {customCrosshair.type === "dot" && (
-                    <div style={{ width: `${customCrosshair.size}px`, height: `${customCrosshair.size}px`, backgroundColor: customCrosshair.color, borderRadius: "50%" }} />
+                    <div
+                      style={{
+                        width: `${customCrosshair.size}px`,
+                        height: `${customCrosshair.size}px`,
+                        backgroundColor: customCrosshair.color,
+                        borderRadius: "50%",
+                      }}
+                    />
                   )}
                   {customCrosshair.type === "circle" && (
-                    <div style={{ width: `${customCrosshair.size * 2}px`, height: `${customCrosshair.size * 2}px`, border: `${customCrosshair.thickness}px solid ${customCrosshair.color}`, borderRadius: "50%" }} />
+                    <div
+                      style={{
+                        width: `${customCrosshair.size * 2}px`,
+                        height: `${customCrosshair.size * 2}px`,
+                        border: `${customCrosshair.thickness}px solid ${customCrosshair.color}`,
+                        borderRadius: "50%",
+                      }}
+                    />
                   )}
                   {customCrosshair.type === "cross" && (
                     <>
-                      <div style={{ position: "absolute", top: `calc(50% - ${customCrosshair.gap + customCrosshair.size}px)`, left: "50%", transform: "translateX(-50%)", width: `${customCrosshair.thickness}px`, height: `${customCrosshair.size}px`, backgroundColor: customCrosshair.color }} />
-                      <div style={{ position: "absolute", top: `calc(50% + ${customCrosshair.gap}px)`, left: "50%", transform: "translateX(-50%)", width: `${customCrosshair.thickness}px`, height: `${customCrosshair.size}px`, backgroundColor: customCrosshair.color }} />
-                      <div style={{ position: "absolute", top: "50%", left: `calc(50% - ${customCrosshair.gap + customCrosshair.size}px)`, transform: "translateY(-50%)", width: `${customCrosshair.size}px`, height: `${customCrosshair.thickness}px`, backgroundColor: customCrosshair.color }} />
-                      <div style={{ position: "absolute", top: "50%", left: `calc(50% + ${customCrosshair.gap}px)`, transform: "translateY(-50%)", width: `${customCrosshair.size}px`, height: `${customCrosshair.thickness}px`, backgroundColor: customCrosshair.color }} />
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: `calc(50% - ${customCrosshair.gap + customCrosshair.size}px)`,
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          width: `${customCrosshair.thickness}px`,
+                          height: `${customCrosshair.size}px`,
+                          backgroundColor: customCrosshair.color,
+                        }}
+                      />
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: `calc(50% + ${customCrosshair.gap}px)`,
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          width: `${customCrosshair.thickness}px`,
+                          height: `${customCrosshair.size}px`,
+                          backgroundColor: customCrosshair.color,
+                        }}
+                      />
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "50%",
+                          left: `calc(50% - ${customCrosshair.gap + customCrosshair.size}px)`,
+                          transform: "translateY(-50%)",
+                          width: `${customCrosshair.size}px`,
+                          height: `${customCrosshair.thickness}px`,
+                          backgroundColor: customCrosshair.color,
+                        }}
+                      />
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "50%",
+                          left: `calc(50% + ${customCrosshair.gap}px)`,
+                          transform: "translateY(-50%)",
+                          width: `${customCrosshair.size}px`,
+                          height: `${customCrosshair.thickness}px`,
+                          backgroundColor: customCrosshair.color,
+                        }}
+                      />
                     </>
                   )}
                 </div>
@@ -3305,17 +3644,38 @@ function SettingsPage({
 
               {/* Type Selection */}
               <div style={{ marginBottom: "15px" }}>
-                <label style={{ fontSize: "14px", fontWeight: "bold", display: "block", marginBottom: "8px" }}>Type</label>
+                <label
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: "bold",
+                    display: "block",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Type
+                </label>
                 <div style={{ display: "flex", gap: "10px" }}>
                   {["dot", "cross", "circle"].map((t) => (
                     <button
                       key={t}
-                      onClick={() => setCustomCrosshair((prev: any) => ({ ...prev, type: t }))}
+                      onClick={() =>
+                        setCustomCrosshair((prev: any) => ({
+                          ...prev,
+                          type: t,
+                        }))
+                      }
                       style={{
                         padding: "8px 16px",
-                        background: customCrosshair.type === t ? "rgba(232,160,32,0.9)" : "rgba(18,12,5,0.85)",
-                        border: customCrosshair.type === t ? "none" : "1px solid rgba(232,160,32,0.25)",
-                        color: customCrosshair.type === t ? "#0d0a05" : "#c8a84b",
+                        background:
+                          customCrosshair.type === t
+                            ? "rgba(232,160,32,0.9)"
+                            : "rgba(18,12,5,0.85)",
+                        border:
+                          customCrosshair.type === t
+                            ? "none"
+                            : "1px solid rgba(232,160,32,0.25)",
+                        color:
+                          customCrosshair.type === t ? "#0d0a05" : "#c8a84b",
                         cursor: "pointer",
                         fontWeight: "bold",
                         textTransform: "capitalize",
@@ -3329,17 +3689,43 @@ function SettingsPage({
 
               {/* Color */}
               <div style={{ marginBottom: "15px" }}>
-                <label style={{ fontSize: "14px", fontWeight: "bold", display: "block", marginBottom: "8px" }}>Color</label>
+                <label
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: "bold",
+                    display: "block",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Color
+                </label>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {["#ffffff", "#00ff00", "#ff0000", "#ffff00", "#00ffff", "#ff00ff", "#ff8800", "#00ff99"].map((c) => (
+                  {[
+                    "#ffffff",
+                    "#00ff00",
+                    "#ff0000",
+                    "#ffff00",
+                    "#00ffff",
+                    "#ff00ff",
+                    "#ff8800",
+                    "#00ff99",
+                  ].map((c) => (
                     <button
                       key={c}
-                      onClick={() => setCustomCrosshair((prev: any) => ({ ...prev, color: c }))}
+                      onClick={() =>
+                        setCustomCrosshair((prev: any) => ({
+                          ...prev,
+                          color: c,
+                        }))
+                      }
                       style={{
                         width: "30px",
                         height: "30px",
                         background: c,
-                        border: customCrosshair.color === c ? "3px solid white" : "2px solid rgba(255,255,255,0.3)",
+                        border:
+                          customCrosshair.color === c
+                            ? "3px solid white"
+                            : "2px solid rgba(255,255,255,0.3)",
                         borderRadius: "4px",
                         cursor: "pointer",
                       }}
@@ -3348,35 +3734,74 @@ function SettingsPage({
                   <input
                     type="color"
                     value={customCrosshair.color}
-                    onChange={(e) => setCustomCrosshair((prev: any) => ({ ...prev, color: e.target.value }))}
-                    style={{ width: "30px", height: "30px", border: "none", cursor: "pointer" }}
+                    onChange={(e) =>
+                      setCustomCrosshair((prev: any) => ({
+                        ...prev,
+                        color: e.target.value,
+                      }))
+                    }
+                    style={{
+                      width: "30px",
+                      height: "30px",
+                      border: "none",
+                      cursor: "pointer",
+                    }}
                   />
                 </div>
               </div>
 
               {/* Size */}
               <div style={{ marginBottom: "15px" }}>
-                <label style={{ fontSize: "14px", fontWeight: "bold", display: "block", marginBottom: "8px" }}>Size: {customCrosshair.size}</label>
+                <label
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: "bold",
+                    display: "block",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Size: {customCrosshair.size}
+                </label>
                 <input
                   type="range"
                   min="2"
                   max="20"
                   value={customCrosshair.size}
-                  onChange={(e) => setCustomCrosshair((prev: any) => ({ ...prev, size: parseInt(e.target.value) }))}
+                  onChange={(e) =>
+                    setCustomCrosshair((prev: any) => ({
+                      ...prev,
+                      size: parseInt(e.target.value),
+                    }))
+                  }
                   style={{ width: "100%" }}
                 />
               </div>
 
               {/* Thickness (for cross and circle) */}
-              {(customCrosshair.type === "cross" || customCrosshair.type === "circle") && (
+              {(customCrosshair.type === "cross" ||
+                customCrosshair.type === "circle") && (
                 <div style={{ marginBottom: "15px" }}>
-                  <label style={{ fontSize: "14px", fontWeight: "bold", display: "block", marginBottom: "8px" }}>Thickness: {customCrosshair.thickness}</label>
+                  <label
+                    style={{
+                      fontSize: "14px",
+                      fontWeight: "bold",
+                      display: "block",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    Thickness: {customCrosshair.thickness}
+                  </label>
                   <input
                     type="range"
                     min="1"
                     max="6"
                     value={customCrosshair.thickness}
-                    onChange={(e) => setCustomCrosshair((prev: any) => ({ ...prev, thickness: parseInt(e.target.value) }))}
+                    onChange={(e) =>
+                      setCustomCrosshair((prev: any) => ({
+                        ...prev,
+                        thickness: parseInt(e.target.value),
+                      }))
+                    }
                     style={{ width: "100%" }}
                   />
                 </div>
@@ -3385,13 +3810,27 @@ function SettingsPage({
               {/* Gap (for cross only) */}
               {customCrosshair.type === "cross" && (
                 <div style={{ marginBottom: "15px" }}>
-                  <label style={{ fontSize: "14px", fontWeight: "bold", display: "block", marginBottom: "8px" }}>Gap: {customCrosshair.gap}</label>
+                  <label
+                    style={{
+                      fontSize: "14px",
+                      fontWeight: "bold",
+                      display: "block",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    Gap: {customCrosshair.gap}
+                  </label>
                   <input
                     type="range"
                     min="0"
                     max="15"
                     value={customCrosshair.gap}
-                    onChange={(e) => setCustomCrosshair((prev: any) => ({ ...prev, gap: parseInt(e.target.value) }))}
+                    onChange={(e) =>
+                      setCustomCrosshair((prev: any) => ({
+                        ...prev,
+                        gap: parseInt(e.target.value),
+                      }))
+                    }
                     style={{ width: "100%" }}
                   />
                 </div>
@@ -3422,9 +3861,10 @@ function SettingsPage({
                 style={{
                   marginTop: "20px",
                   padding: "10px",
-                  background: message.includes("success") || message.includes("saved")
-                    ? "rgba(76, 175, 80, 0.3)"
-                    : "rgba(244, 67, 54, 0.3)",
+                  background:
+                    message.includes("success") || message.includes("saved")
+                      ? "rgba(76, 175, 80, 0.3)"
+                      : "rgba(244, 67, 54, 0.3)",
                   borderRadius: "8px",
                 }}
               >
@@ -3448,13 +3888,16 @@ function SettingsPage({
                   padding: "14px 36px",
                   fontSize: "15px",
                   fontWeight: "700",
-                  background: saving ? "rgba(130,110,70,0.5)" : "rgba(232,160,32,0.9)",
+                  background: saving
+                    ? "rgba(130,110,70,0.5)"
+                    : "rgba(232,160,32,0.9)",
                   color: saving ? "rgba(200,180,140,0.6)" : "#0d0a05",
                   border: "none",
                   cursor: saving ? "not-allowed" : "pointer",
                   letterSpacing: "2px",
                   textTransform: "uppercase",
-                  fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                  fontFamily:
+                    '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
                 }}
               >
                 {saving ? "Saving..." : "SAVE"}
@@ -3478,7 +3921,8 @@ function SettingsPage({
                   cursor: "pointer",
                   letterSpacing: "1px",
                   textTransform: "uppercase",
-                  fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                  fontFamily:
+                    '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
                 }}
               >
                 BACK
@@ -3553,7 +3997,14 @@ function ProfilePage({
     fetch("/api/stats", { credentials: "include" })
       .then((r) => r.json())
       .then((data) => setStats(data))
-      .catch(() => setStats({ total_shots: 0, shots_hit: 0, deaths: 0, minutes_played: 0 }))
+      .catch(() =>
+        setStats({
+          total_shots: 0,
+          shots_hit: 0,
+          deaths: 0,
+          minutes_played: 0,
+        }),
+      )
       .finally(() => setStatsLoading(false));
   }, [activeTab]);
 
@@ -3783,7 +4234,18 @@ function ProfilePage({
           boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
         }}
       >
-        <div style={{ fontSize: "11px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase", marginBottom: "4px", textAlign: "center" }}>DOG: The Hotdog Wars</div>
+        <div
+          style={{
+            fontSize: "11px",
+            color: "#c8a84b",
+            letterSpacing: "3px",
+            textTransform: "uppercase",
+            marginBottom: "4px",
+            textAlign: "center",
+          }}
+        >
+          DOG: The Hotdog Wars
+        </div>
         <h1
           style={{
             fontSize: "28px",
@@ -3799,7 +4261,13 @@ function ProfilePage({
         </h1>
 
         {/* Tab navigation */}
-        <div style={{ display: "flex", marginBottom: "28px", borderBottom: "1px solid rgba(232,160,32,0.25)" }}>
+        <div
+          style={{
+            display: "flex",
+            marginBottom: "28px",
+            borderBottom: "1px solid rgba(232,160,32,0.25)",
+          }}
+        >
           {(["profile", "stats"] as const).map((tab) => (
             <button
               key={tab}
@@ -3807,9 +4275,13 @@ function ProfilePage({
               style={{
                 flex: 1,
                 padding: "10px",
-                background: activeTab === tab ? "rgba(232,160,32,0.15)" : "transparent",
+                background:
+                  activeTab === tab ? "rgba(232,160,32,0.15)" : "transparent",
                 border: "none",
-                borderBottom: activeTab === tab ? "2px solid #e8a020" : "2px solid transparent",
+                borderBottom:
+                  activeTab === tab
+                    ? "2px solid #e8a020"
+                    : "2px solid transparent",
                 color: activeTab === tab ? "#e8a020" : "rgba(200,168,75,0.6)",
                 fontSize: "13px",
                 fontWeight: "700",
@@ -3856,472 +4328,605 @@ function ProfilePage({
         )}
 
         {/* ── PROFILE TAB ───────────────────────────────────── */}
-        {activeTab === "profile" && (<>
-
-        {/* Warning Count Display */}
-        {profile && profile.warning_count > 0 && (
-          <div
-            style={{
-              background: "rgba(255,165,0,0.2)",
-              border: "1px solid #f39c12",
-              borderRadius: "8px",
-              padding: "15px",
-              marginBottom: "20px",
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-            }}
-          >
-            <span style={{ fontSize: "28px" }}>⚠️</span>
-            <div>
+        {activeTab === "profile" && (
+          <>
+            {/* Warning Count Display */}
+            {profile && profile.warning_count > 0 && (
               <div
                 style={{
+                  background: "rgba(255,165,0,0.2)",
+                  border: "1px solid #f39c12",
+                  borderRadius: "8px",
+                  padding: "15px",
+                  marginBottom: "20px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                }}
+              >
+                <span style={{ fontSize: "28px" }}>⚠️</span>
+                <div>
+                  <div
+                    style={{
+                      fontWeight: "bold",
+                      color: "#f39c12",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    Account Warnings: {profile.warning_count}
+                  </div>
+                  <div style={{ fontSize: "13px", color: "#e0e0e0" }}>
+                    Your account has received warnings from administrators.
+                    Please follow the rules to avoid further action.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Admin Full Loadout Checkbox */}
+            {profile?.isAdmin && (
+              <div
+                style={{
+                  background: "rgba(18,12,5,0.7)",
+                  border: "1px solid rgba(232,160,32,0.3)",
+                  padding: "15px",
+                  marginBottom: "20px",
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: "bold",
+                    color: "#c8a84b",
+                    marginBottom: "10px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
+                >
+                  <span style={{ fontSize: "18px" }}>👑</span> Admin Options
+                </div>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={fullLoadoutEnabled}
+                    onChange={(e) => {
+                      setFullLoadoutEnabled(e.target.checked);
+                      localStorage.setItem(
+                        "adminFullLoadout",
+                        e.target.checked ? "true" : "false",
+                      );
+                    }}
+                    style={{ width: "20px", height: "20px", cursor: "pointer" }}
+                  />
+                  <span style={{ fontSize: "14px" }}>
+                    Enable full loadout at game start (all weapons unlocked)
+                  </span>
+                </label>
+              </div>
+            )}
+
+            {/* Profile Picture Section */}
+            <div style={{ textAlign: "center", marginBottom: "30px" }}>
+              <div
+                style={{
+                  width: "150px",
+                  height: "150px",
+                  borderRadius: "50%",
+                  margin: "0 auto 15px",
+                  background: profile?.profilePicture
+                    ? `url(${profile.profilePicture})`
+                    : "rgba(32,22,8,0.9)",
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  border: "3px solid rgba(232,160,32,0.6)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "48px",
                   fontWeight: "bold",
-                  color: "#f39c12",
-                  marginBottom: "4px",
                 }}
               >
-                Account Warnings: {profile.warning_count}
+                {!profile?.profilePicture &&
+                  (profile?.username.charAt(0).toUpperCase() || "?")}
               </div>
-              <div style={{ fontSize: "13px", color: "#e0e0e0" }}>
-                Your account has received warnings from administrators. Please
-                follow the rules to avoid further action.
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Admin Full Loadout Checkbox */}
-        {profile?.isAdmin && (
-          <div
-            style={{
-              background: "rgba(18,12,5,0.7)",
-              border: "1px solid rgba(232,160,32,0.3)",
-              padding: "15px",
-              marginBottom: "20px",
-            }}
-          >
-            <div
-              style={{
-                fontWeight: "bold",
-                color: "#c8a84b",
-                marginBottom: "10px",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <span style={{ fontSize: "18px" }}>👑</span> Admin Options
-            </div>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={fullLoadoutEnabled}
-                onChange={(e) => {
-                  setFullLoadoutEnabled(e.target.checked);
-                  localStorage.setItem(
-                    "adminFullLoadout",
-                    e.target.checked ? "true" : "false",
-                  );
-                }}
-                style={{ width: "20px", height: "20px", cursor: "pointer" }}
-              />
-              <span style={{ fontSize: "14px" }}>
-                Enable full loadout at game start (all weapons unlocked)
-              </span>
-            </label>
-          </div>
-        )}
-
-        {/* Profile Picture Section */}
-        <div style={{ textAlign: "center", marginBottom: "30px" }}>
-          <div
-            style={{
-              width: "150px",
-              height: "150px",
-              borderRadius: "50%",
-              margin: "0 auto 15px",
-              background: profile?.profilePicture
-                ? `url(${profile.profilePicture})`
-                : "rgba(32,22,8,0.9)",
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              border: "3px solid rgba(232,160,32,0.6)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "48px",
-              fontWeight: "bold",
-            }}
-          >
-            {!profile?.profilePicture &&
-              (profile?.username.charAt(0).toUpperCase() || "?")}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              justifyContent: "center",
-              marginBottom: "15px",
-            }}
-          >
-            <label
-              style={{
-                background: "rgba(255,255,255,0.2)",
-                padding: "8px 16px",
-                borderRadius: "8px",
-                cursor: uploadingPicture ? "wait" : "pointer",
-                border: "1px solid white",
-                display: "inline-block",
-              }}
-            >
-              {uploadingPicture ? "Uploading..." : "Change Picture"}
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleUploadPicture}
-                disabled={uploadingPicture}
-                style={{ display: "none" }}
-              />
-            </label>
-            <button
-              onClick={() => setShowUrlInput(!showUrlInput)}
-              style={{
-                background: "rgba(255,255,255,0.2)",
-                padding: "8px 16px",
-                borderRadius: "8px",
-                border: "1px solid white",
-                color: "white",
-                cursor: "pointer",
-                display: "inline-block",
-              }}
-            >
-              Use URL
-            </button>
-          </div>
-          {showUrlInput && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "10px",
-                marginBottom: "15px",
-              }}
-            >
-              <input
-                type="text"
-                value={pictureUrl}
-                onChange={(e) => setPictureUrl(e.target.value)}
-                placeholder="Enter image URL (e.g., https://example.com/image.jpg)"
+              <div
                 style={{
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "none",
-                  fontSize: "14px",
-                  width: "100%",
-                  boxSizing: "border-box",
-                  color: "black",
+                  display: "flex",
+                  gap: "10px",
+                  justifyContent: "center",
+                  marginBottom: "15px",
                 }}
-              />
-              <div style={{ display: "flex", gap: "10px" }}>
-                <button
-                  onClick={handleUpdatePictureFromUrl}
-                  disabled={loadingUrlPicture}
+              >
+                <label
                   style={{
-                    flex: 1,
-                    background: "rgba(232,160,32,0.9)",
-                    border: "none",
-                    padding: "10px",
-                    color: "#0d0a05",
-                    cursor: loadingUrlPicture ? "wait" : "pointer",
-                    fontWeight: "700",
-                    letterSpacing: "1px",
+                    background: "rgba(255,255,255,0.2)",
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    cursor: uploadingPicture ? "wait" : "pointer",
+                    border: "1px solid white",
+                    display: "inline-block",
                   }}
                 >
-                  {loadingUrlPicture ? "Updating..." : "Update"}
-                </button>
+                  {uploadingPicture ? "Uploading..." : "Change Picture"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleUploadPicture}
+                    disabled={uploadingPicture}
+                    style={{ display: "none" }}
+                  />
+                </label>
                 <button
-                  onClick={() => {
-                    setShowUrlInput(false);
-                    setPictureUrl("");
-                  }}
+                  onClick={() => setShowUrlInput(!showUrlInput)}
                   style={{
-                    flex: 1,
+                    background: "rgba(255,255,255,0.2)",
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    border: "1px solid white",
+                    color: "white",
+                    cursor: "pointer",
+                    display: "inline-block",
+                  }}
+                >
+                  Use URL
+                </button>
+              </div>
+              {showUrlInput && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
+                    marginBottom: "15px",
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={pictureUrl}
+                    onChange={(e) => setPictureUrl(e.target.value)}
+                    placeholder="Enter image URL (e.g., https://example.com/image.jpg)"
+                    style={{
+                      padding: "12px",
+                      borderRadius: "8px",
+                      border: "none",
+                      fontSize: "14px",
+                      width: "100%",
+                      boxSizing: "border-box",
+                      color: "black",
+                    }}
+                  />
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button
+                      onClick={handleUpdatePictureFromUrl}
+                      disabled={loadingUrlPicture}
+                      style={{
+                        flex: 1,
+                        background: "rgba(232,160,32,0.9)",
+                        border: "none",
+                        padding: "10px",
+                        color: "#0d0a05",
+                        cursor: loadingUrlPicture ? "wait" : "pointer",
+                        fontWeight: "700",
+                        letterSpacing: "1px",
+                      }}
+                    >
+                      {loadingUrlPicture ? "Updating..." : "Update"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowUrlInput(false);
+                        setPictureUrl("");
+                      }}
+                      style={{
+                        flex: 1,
+                        background: "rgba(255,255,255,0.2)",
+                        border: "1px solid white",
+                        borderRadius: "8px",
+                        padding: "10px",
+                        color: "white",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Username Section */}
+            <div style={{ marginBottom: "25px" }}>
+              <h3 style={{ fontSize: "18px", marginBottom: "10px" }}>
+                Username
+              </h3>
+              {!editingUsername ? (
+                <div
+                  style={{ display: "flex", gap: "10px", alignItems: "center" }}
+                >
+                  <span style={{ fontSize: "16px", flex: 1 }}>
+                    {profile?.username}
+                  </span>
+                  <button
+                    onClick={() => setEditingUsername(true)}
+                    style={{
+                      background: "rgba(255,255,255,0.2)",
+                      border: "1px solid white",
+                      borderRadius: "8px",
+                      padding: "8px 16px",
+                      color: "white",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Edit
+                  </button>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={newUsername}
+                    onChange={(e) => setNewUsername(e.target.value)}
+                    placeholder="New username"
+                    style={{
+                      padding: "12px",
+                      borderRadius: "8px",
+                      border: "none",
+                      fontSize: "16px",
+                    }}
+                  />
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button
+                      onClick={handleUpdateUsername}
+                      style={{
+                        flex: 1,
+                        background: "rgba(232,160,32,0.9)",
+                        border: "none",
+                        padding: "10px",
+                        color: "#0d0a05",
+                        cursor: "pointer",
+                        fontWeight: "700",
+                        letterSpacing: "1px",
+                        textTransform: "uppercase" as const,
+                      }}
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingUsername(false);
+                        setNewUsername(profile?.username || "");
+                      }}
+                      style={{
+                        flex: 1,
+                        background: "rgba(255,255,255,0.2)",
+                        border: "1px solid white",
+                        borderRadius: "8px",
+                        padding: "10px",
+                        color: "white",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Email Section */}
+            <div style={{ marginBottom: "25px" }}>
+              <h3 style={{ fontSize: "18px", marginBottom: "10px" }}>Email</h3>
+              <span style={{ fontSize: "16px" }}>{profile?.email}</span>
+            </div>
+
+            {/* Password Section */}
+            <div style={{ marginBottom: "30px" }}>
+              <h3 style={{ fontSize: "18px", marginBottom: "10px" }}>
+                Password
+              </h3>
+              {!editingPassword ? (
+                <button
+                  onClick={() => setEditingPassword(true)}
+                  style={{
                     background: "rgba(255,255,255,0.2)",
                     border: "1px solid white",
                     borderRadius: "8px",
-                    padding: "10px",
+                    padding: "10px 20px",
                     color: "white",
                     cursor: "pointer",
                   }}
                 >
-                  Cancel
+                  Change Password
                 </button>
-              </div>
+              ) : (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
+                  }}
+                >
+                  <input
+                    type="password"
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    placeholder="Current password"
+                    style={{
+                      padding: "12px",
+                      borderRadius: "8px",
+                      border: "none",
+                      fontSize: "16px",
+                    }}
+                  />
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="New password"
+                    style={{
+                      padding: "12px",
+                      borderRadius: "8px",
+                      border: "none",
+                      fontSize: "16px",
+                    }}
+                  />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    style={{
+                      padding: "12px",
+                      borderRadius: "8px",
+                      border: "none",
+                      fontSize: "16px",
+                    }}
+                  />
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button
+                      onClick={handleUpdatePassword}
+                      style={{
+                        flex: 1,
+                        background: "rgba(232,160,32,0.9)",
+                        border: "none",
+                        padding: "10px",
+                        color: "#0d0a05",
+                        cursor: "pointer",
+                        fontWeight: "700",
+                        letterSpacing: "1px",
+                      }}
+                    >
+                      Update Password
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingPassword(false);
+                        setOldPassword("");
+                        setNewPassword("");
+                        setConfirmPassword("");
+                      }}
+                      style={{
+                        flex: 1,
+                        background: "rgba(255,255,255,0.2)",
+                        border: "1px solid white",
+                        borderRadius: "8px",
+                        padding: "10px",
+                        color: "white",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Username Section */}
-        <div style={{ marginBottom: "25px" }}>
-          <h3 style={{ fontSize: "18px", marginBottom: "10px" }}>Username</h3>
-          {!editingUsername ? (
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <span style={{ fontSize: "16px", flex: 1 }}>
-                {profile?.username}
-              </span>
+            {/* Admin Button - only shown if user is admin */}
+            {gameState.isAdmin && (
               <button
-                onClick={() => setEditingUsername(true)}
+                onClick={() => (window.location.href = "/admin")}
                 style={{
-                  background: "rgba(255,255,255,0.2)",
-                  border: "1px solid white",
-                  borderRadius: "8px",
-                  padding: "8px 16px",
+                  width: "100%",
+                  background: "#27ae60",
+                  border: "2px solid #2ecc71",
+                  borderRadius: "12px",
+                  padding: "12px",
                   color: "white",
+                  fontSize: "18px",
                   cursor: "pointer",
+                  fontWeight: "bold",
+                  marginBottom: "10px",
                 }}
               >
-                Edit
+                ADMIN
               </button>
-            </div>
-          ) : (
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "10px" }}
-            >
-              <input
-                type="text"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-                placeholder="New username"
-                style={{
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "none",
-                  fontSize: "16px",
-                }}
-              />
-              <div style={{ display: "flex", gap: "10px" }}>
-                <button
-                  onClick={handleUpdateUsername}
-                  style={{
-                    flex: 1,
-                    background: "rgba(232,160,32,0.9)",
-                    border: "none",
-                    padding: "10px",
-                    color: "#0d0a05",
-                    cursor: "pointer",
-                    fontWeight: "700",
-                    letterSpacing: "1px",
-                    textTransform: "uppercase" as const,
-                  }}
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingUsername(false);
-                    setNewUsername(profile?.username || "");
-                  }}
-                  style={{
-                    flex: 1,
-                    background: "rgba(255,255,255,0.2)",
-                    border: "1px solid white",
-                    borderRadius: "8px",
-                    padding: "10px",
-                    color: "white",
-                    cursor: "pointer",
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Email Section */}
-        <div style={{ marginBottom: "25px" }}>
-          <h3 style={{ fontSize: "18px", marginBottom: "10px" }}>Email</h3>
-          <span style={{ fontSize: "16px" }}>{profile?.email}</span>
-        </div>
-
-        {/* Password Section */}
-        <div style={{ marginBottom: "30px" }}>
-          <h3 style={{ fontSize: "18px", marginBottom: "10px" }}>Password</h3>
-          {!editingPassword ? (
-            <button
-              onClick={() => setEditingPassword(true)}
-              style={{
-                background: "rgba(255,255,255,0.2)",
-                border: "1px solid white",
-                borderRadius: "8px",
-                padding: "10px 20px",
-                color: "white",
-                cursor: "pointer",
-              }}
-            >
-              Change Password
-            </button>
-          ) : (
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "10px" }}
-            >
-              <input
-                type="password"
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-                placeholder="Current password"
-                style={{
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "none",
-                  fontSize: "16px",
-                }}
-              />
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="New password"
-                style={{
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "none",
-                  fontSize: "16px",
-                }}
-              />
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm new password"
-                style={{
-                  padding: "12px",
-                  borderRadius: "8px",
-                  border: "none",
-                  fontSize: "16px",
-                }}
-              />
-              <div style={{ display: "flex", gap: "10px" }}>
-                <button
-                  onClick={handleUpdatePassword}
-                  style={{
-                    flex: 1,
-                    background: "rgba(232,160,32,0.9)",
-                    border: "none",
-                    padding: "10px",
-                    color: "#0d0a05",
-                    cursor: "pointer",
-                    fontWeight: "700",
-                    letterSpacing: "1px",
-                  }}
-                >
-                  Update Password
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingPassword(false);
-                    setOldPassword("");
-                    setNewPassword("");
-                    setConfirmPassword("");
-                  }}
-                  style={{
-                    flex: 1,
-                    background: "rgba(255,255,255,0.2)",
-                    border: "1px solid white",
-                    borderRadius: "8px",
-                    padding: "10px",
-                    color: "white",
-                    cursor: "pointer",
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Admin Button - only shown if user is admin */}
-        {gameState.isAdmin && (
-          <button
-            onClick={() => (window.location.href = "/admin")}
-            style={{
-              width: "100%",
-              background: "#27ae60",
-              border: "2px solid #2ecc71",
-              borderRadius: "12px",
-              padding: "12px",
-              color: "white",
-              fontSize: "18px",
-              cursor: "pointer",
-              fontWeight: "bold",
-              marginBottom: "10px",
-            }}
-          >
-            ADMIN
-          </button>
+            )}
+          </>
         )}
-
-        </>)}
         {/* ── STATS TAB ─────────────────────────────────────── */}
         {activeTab === "stats" && (
           <div>
             {statsLoading && (
-              <div style={{ textAlign: "center", color: "#c8a84b", padding: "40px 0", letterSpacing: "2px", textTransform: "uppercase", fontSize: "14px" }}>
+              <div
+                style={{
+                  textAlign: "center",
+                  color: "#c8a84b",
+                  padding: "40px 0",
+                  letterSpacing: "2px",
+                  textTransform: "uppercase",
+                  fontSize: "14px",
+                }}
+              >
                 Loading stats...
               </div>
             )}
             {!statsLoading && !stats && (
-              <div style={{ textAlign: "center", color: "rgba(200,168,75,0.5)", padding: "40px 0" }}>
+              <div
+                style={{
+                  textAlign: "center",
+                  color: "rgba(200,168,75,0.5)",
+                  padding: "40px 0",
+                }}
+              >
                 No stats available yet. Play a game to start tracking!
               </div>
             )}
             {!statsLoading && stats && (
               <div>
-                <div style={{ fontSize: "11px", color: "rgba(200,168,75,0.6)", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "20px", textAlign: "center" }}>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "rgba(200,168,75,0.6)",
+                    letterSpacing: "2px",
+                    textTransform: "uppercase",
+                    marginBottom: "20px",
+                    textAlign: "center",
+                  }}
+                >
                   Career Overview
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "24px" }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "12px",
+                    marginBottom: "24px",
+                  }}
+                >
                   {[
-                    { label: "Shots Fired", value: stats.total_shots.toLocaleString(), icon: "🔫" },
-                    { label: "Shots Hit",   value: stats.shots_hit.toLocaleString(),   icon: "🎯" },
-                    { label: "Accuracy",    value: `${stats.total_shots > 0 ? ((stats.shots_hit / stats.total_shots) * 100).toFixed(1) : "0.0"}%`, icon: "📊" },
-                    { label: "Deaths",      value: stats.deaths.toLocaleString(),       icon: "💀" },
-                    { label: "Time Played", value: Math.floor(stats.minutes_played / 60) > 0 ? `${Math.floor(stats.minutes_played / 60)}h ${stats.minutes_played % 60}m` : `${stats.minutes_played}m`, icon: "⏱" },
+                    {
+                      label: "Shots Fired",
+                      value: stats.total_shots.toLocaleString(),
+                      icon: "🔫",
+                    },
+                    {
+                      label: "Shots Hit",
+                      value: stats.shots_hit.toLocaleString(),
+                      icon: "🎯",
+                    },
+                    {
+                      label: "Accuracy",
+                      value: `${stats.total_shots > 0 ? ((stats.shots_hit / stats.total_shots) * 100).toFixed(1) : "0.0"}%`,
+                      icon: "📊",
+                    },
+                    {
+                      label: "Deaths",
+                      value: stats.deaths.toLocaleString(),
+                      icon: "💀",
+                    },
+                    {
+                      label: "Time Played",
+                      value:
+                        Math.floor(stats.minutes_played / 60) > 0
+                          ? `${Math.floor(stats.minutes_played / 60)}h ${stats.minutes_played % 60}m`
+                          : `${stats.minutes_played}m`,
+                      icon: "⏱",
+                    },
                   ].map((card) => (
-                    <div key={card.label} style={{ background: "rgba(12,8,2,0.8)", border: "1px solid rgba(232,160,32,0.2)", padding: "18px 14px", textAlign: "center" }}>
-                      <div style={{ fontSize: "22px", marginBottom: "6px" }}>{card.icon}</div>
-                      <div style={{ fontSize: "26px", fontWeight: "700", color: "#e8a020", letterSpacing: "1px", marginBottom: "4px" }}>
+                    <div
+                      key={card.label}
+                      style={{
+                        background: "rgba(12,8,2,0.8)",
+                        border: "1px solid rgba(232,160,32,0.2)",
+                        padding: "18px 14px",
+                        textAlign: "center",
+                      }}
+                    >
+                      <div style={{ fontSize: "22px", marginBottom: "6px" }}>
+                        {card.icon}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "26px",
+                          fontWeight: "700",
+                          color: "#e8a020",
+                          letterSpacing: "1px",
+                          marginBottom: "4px",
+                        }}
+                      >
                         {card.value}
                       </div>
-                      <div style={{ fontSize: "10px", color: "rgba(200,168,75,0.6)", letterSpacing: "2px", textTransform: "uppercase" }}>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "rgba(200,168,75,0.6)",
+                          letterSpacing: "2px",
+                          textTransform: "uppercase",
+                        }}
+                      >
                         {card.label}
                       </div>
                     </div>
                   ))}
                 </div>
-                <div style={{ background: "rgba(12,8,2,0.8)", border: "1px solid rgba(232,160,32,0.2)", padding: "16px", marginBottom: "12px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                    <span style={{ fontSize: "11px", letterSpacing: "2px", textTransform: "uppercase", color: "rgba(200,168,75,0.7)" }}>Accuracy</span>
-                    <span style={{ fontSize: "13px", fontWeight: "700", color: "#e8a020" }}>
-                      {stats.total_shots > 0 ? ((stats.shots_hit / stats.total_shots) * 100).toFixed(1) : "0.0"}%
+                <div
+                  style={{
+                    background: "rgba(12,8,2,0.8)",
+                    border: "1px solid rgba(232,160,32,0.2)",
+                    padding: "16px",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        letterSpacing: "2px",
+                        textTransform: "uppercase",
+                        color: "rgba(200,168,75,0.7)",
+                      }}
+                    >
+                      Accuracy
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "13px",
+                        fontWeight: "700",
+                        color: "#e8a020",
+                      }}
+                    >
+                      {stats.total_shots > 0
+                        ? ((stats.shots_hit / stats.total_shots) * 100).toFixed(
+                            1,
+                          )
+                        : "0.0"}
+                      %
                     </span>
                   </div>
-                  <div style={{ height: "6px", background: "rgba(255,255,255,0.08)" }}>
-                    <div style={{
-                      height: "100%",
-                      width: `${stats.total_shots > 0 ? Math.min((stats.shots_hit / stats.total_shots) * 100, 100) : 0}%`,
-                      background: "linear-gradient(90deg, #c8a84b, #e8a020)",
-                      transition: "width 0.6s ease",
-                    }} />
+                  <div
+                    style={{
+                      height: "6px",
+                      background: "rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${stats.total_shots > 0 ? Math.min((stats.shots_hit / stats.total_shots) * 100, 100) : 0}%`,
+                        background: "linear-gradient(90deg, #c8a84b, #e8a020)",
+                        transition: "width 0.6s ease",
+                      }}
+                    />
                   </div>
                 </div>
               </div>
@@ -4355,13 +4960,24 @@ function ProfilePage({
 }
 
 // Doom-style menu button used on the home screen
-function MenuButton({ label, onClick, onHover }: { label: string; onClick: () => void; onHover: () => void }) {
+function MenuButton({
+  label,
+  onClick,
+  onHover,
+}: {
+  label: string;
+  onClick: () => void;
+  onHover: () => void;
+}) {
   const [hovered, setHovered] = React.useState(false);
 
   return (
     <button
       onClick={onClick}
-      onMouseEnter={() => { setHovered(true); onHover(); }}
+      onMouseEnter={() => {
+        setHovered(true);
+        onHover();
+      }}
       onMouseLeave={() => setHovered(false)}
       style={{
         display: "flex",
@@ -4381,12 +4997,23 @@ function MenuButton({ label, onClick, onHover }: { label: string; onClick: () =>
         textAlign: "left",
         width: "100%",
         transition: "all 0.12s ease",
-        textShadow: hovered ? "0 0 12px rgba(255,180,60,0.7)" : "0 1px 4px rgba(0,0,0,0.9)",
+        textShadow: hovered
+          ? "0 0 12px rgba(255,180,60,0.7)"
+          : "0 1px 4px rgba(0,0,0,0.9)",
         boxShadow: hovered ? "inset 0 0 20px rgba(0,0,0,0.3)" : "none",
       }}
     >
       {hovered && (
-        <span style={{ color: "#e8a020", fontSize: "18px", lineHeight: 1, flexShrink: 0 }}>▶</span>
+        <span
+          style={{
+            color: "#e8a020",
+            fontSize: "18px",
+            lineHeight: 1,
+            flexShrink: 0,
+          }}
+        >
+          ▶
+        </span>
       )}
       {label}
     </button>
@@ -4410,13 +5037,31 @@ function HUD({
   const [shopLoading, setShopLoading] = useState(false);
   const [shopError, setShopError] = useState<string | null>(null);
   const [purchaseLoading, setPurchaseLoading] = useState(false);
-  const [paymentModal, setPaymentModal] = useState<{ id: number; price: string; gold: number; amountUSD: number } | null>(null);
+  const [paymentModal, setPaymentModal] = useState<{
+    id: number;
+    price: string;
+    gold: number;
+    amountUSD: number;
+  } | null>(null);
   const [payCardNumber, setPayCardNumber] = useState("");
   const [payExpiry, setPayExpiry] = useState("");
   const [payCVC, setPayCVC] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [ownedItemIds, setOwnedItemIds] = useState<number[]>([]);
+  const [showAugmentCategoryModal, setShowAugmentCategoryModal] =
+    useState(false);
+  const [selectedAugmentCategory, setSelectedAugmentCategory] = useState<
+    "weapons" | "user" | null
+  >(null);
+
+  // Reset augment modal when leaving level transition (prevents UI from persisting between waves)
+  useEffect(() => {
+    if (gameState.gamePhase !== "levelTransition") {
+      setShowAugmentCategoryModal(false);
+      setSelectedAugmentCategory(null);
+    }
+  }, [gameState.gamePhase]);
 
   // Fetch shop items and owned items when entering the shop
   useEffect(() => {
@@ -4468,18 +5113,18 @@ function HUD({
 
   // Save leaderboard data only when completing the entire game (victory)
   const victorySavedRef = React.useRef<number | null>(null);
-  
+
   useEffect(() => {
     // Only save on victory (completing entire campaign)
     if (gameState.gamePhase !== "victory") return;
-    
+
     // Only save for logged-in users (not guests)
     if (gameState.user.isGuest) return;
-    
+
     // Prevent duplicate saves for the same victory (using gameStartTime as unique identifier)
     if (victorySavedRef.current === gameState.gameStartTime) return;
     victorySavedRef.current = gameState.gameStartTime;
-    
+
     // Calculate run time
     let fastestRunTime: string | null = null;
     if (gameState.gameStartTime) {
@@ -4488,11 +5133,13 @@ function HUD({
       const hours = Math.floor(totalSeconds / 3600);
       const minutes = Math.floor((totalSeconds % 3600) / 60);
       const seconds = totalSeconds % 60;
-      fastestRunTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      fastestRunTime = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
     }
-    
-    console.log(`Saving campaign victory leaderboard: fastestRunTime=${fastestRunTime}`);
-    
+
+    console.log(
+      `Saving campaign victory leaderboard: fastestRunTime=${fastestRunTime}`,
+    );
+
     // Save to leaderboard — only run time for campaign
     fetch("/api/leaderboard", {
       method: "POST",
@@ -4504,9 +5151,15 @@ function HUD({
     })
       .then((res) => {
         if (res.ok) {
-          console.log(`Campaign victory leaderboard saved: time=${fastestRunTime}`);
+          console.log(
+            `Campaign victory leaderboard saved: time=${fastestRunTime}`,
+          );
         } else {
-          res.text().then(text => console.error("Failed to save leaderboard entry:", text));
+          res
+            .text()
+            .then((text) =>
+              console.error("Failed to save leaderboard entry:", text),
+            );
         }
       })
       .catch((err) => console.error("Error saving leaderboard:", err));
@@ -4514,38 +5167,45 @@ function HUD({
 
   // Save total kills to localStorage after every wave (level transition)
   const levelTransitionSavedRef = React.useRef<number>(-1);
-  
+
   useEffect(() => {
     if (gameState.gamePhase !== "levelTransition") return;
-    
+
     // Prevent duplicate saves for the same level
-    if (levelTransitionSavedRef.current === gameState.level.currentLevel) return;
+    if (levelTransitionSavedRef.current === gameState.level.currentLevel)
+      return;
     levelTransitionSavedRef.current = gameState.level.currentLevel;
-    
+
     const totalKills = gameState.story.totalKills;
     const savedKills = getLocalStorage("savedTotalKills") || 0;
-    
+
     // Only save if current kills are higher
     if (totalKills > savedKills) {
       setLocalStorage("savedTotalKills", totalKills);
       console.log(`Saved total kills after wave: ${totalKills}`);
     }
-  }, [gameState.gamePhase, gameState.level.currentLevel, gameState.story.totalKills]);
+  }, [
+    gameState.gamePhase,
+    gameState.level.currentLevel,
+    gameState.story.totalKills,
+  ]);
 
   // Save fastest time to localStorage when completing the whole game (victory)
   const fastestTimeSavedRef = React.useRef<number | null>(null);
-  
+
   useEffect(() => {
     if (gameState.gamePhase !== "victory") return;
-    
+
     // Prevent duplicate saves for the same victory
     if (fastestTimeSavedRef.current === gameState.gameStartTime) return;
     fastestTimeSavedRef.current = gameState.gameStartTime;
-    
+
     if (gameState.gameStartTime) {
       const runTimeMs = Date.now() - gameState.gameStartTime;
-      const savedFastestTime = getLocalStorage("savedFastestTime") as number | null;
-      
+      const savedFastestTime = getLocalStorage("savedFastestTime") as
+        | number
+        | null;
+
       // Only save if this is a new best time (or first completion)
       if (savedFastestTime === null || runTimeMs < savedFastestTime) {
         setLocalStorage("savedFastestTime", runTimeMs);
@@ -4553,11 +5213,11 @@ function HUD({
         const hours = Math.floor(totalSeconds / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         const seconds = totalSeconds % 60;
-        const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        const timeStr = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
         console.log(`New fastest time saved: ${timeStr}`);
       }
     }
-    
+
     // Also save final total kills on victory
     const totalKills = gameState.story.totalKills;
     const savedKills = getLocalStorage("savedTotalKills") || 0;
@@ -4565,25 +5225,29 @@ function HUD({
       setLocalStorage("savedTotalKills", totalKills);
       console.log(`Saved final total kills: ${totalKills}`);
     }
-  }, [gameState.gamePhase, gameState.gameStartTime, gameState.story.totalKills]);
+  }, [
+    gameState.gamePhase,
+    gameState.gameStartTime,
+    gameState.story.totalKills,
+  ]);
 
   // Save total kills to leaderboard on death in endless mode
   const endlessDeathSavedRef = React.useRef<number | null>(null);
-  
+
   useEffect(() => {
     // Only trigger on gameover in endless mode
     if (gameState.gamePhase !== "gameover") return;
     if (gameState.gameMode !== "endless") return;
-    
+
     // Only save for logged-in users (not guests)
     if (gameState.user.isGuest) return;
-    
+
     // Prevent duplicate saves using gameStartTime as unique identifier
     if (endlessDeathSavedRef.current === gameState.gameStartTime) return;
     endlessDeathSavedRef.current = gameState.gameStartTime;
-    
+
     const totalKills = gameState.story.totalKills;
-    
+
     // Save to leaderboard
     fetch("/api/leaderboard", {
       method: "POST",
@@ -4593,20 +5257,33 @@ function HUD({
     })
       .then((res) => {
         if (res.ok) {
-          console.log(`Endless mode: Saved ${totalKills} kills to leaderboard on death`);
+          console.log(
+            `Endless mode: Saved ${totalKills} kills to leaderboard on death`,
+          );
         }
       })
       .catch((error) => {
-        console.error("Failed to save endless mode kills to leaderboard:", error);
+        console.error(
+          "Failed to save endless mode kills to leaderboard:",
+          error,
+        );
       });
-    
+
     // Also save to localStorage
     const savedKills = getLocalStorage("savedTotalKills") || 0;
     if (totalKills > savedKills) {
       setLocalStorage("savedTotalKills", totalKills);
-      console.log(`Saved endless mode total kills to localStorage: ${totalKills}`);
+      console.log(
+        `Saved endless mode total kills to localStorage: ${totalKills}`,
+      );
     }
-  }, [gameState.gamePhase, gameState.gameMode, gameState.gameStartTime, gameState.story.totalKills, gameState.user.isGuest]);
+  }, [
+    gameState.gamePhase,
+    gameState.gameMode,
+    gameState.gameStartTime,
+    gameState.story.totalKills,
+    gameState.user.isGuest,
+  ]);
 
   // Save shots/hits/deaths to DB on game over (logged-in users only)
   const statsSavedRef = React.useRef<number | null>(null);
@@ -4624,7 +5301,13 @@ function HUD({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ shots, hits, deaths: 1 }),
     }).catch((err) => console.error("Failed to save stats:", err));
-  }, [gameState.gamePhase, gameState.gameStartTime, gameState.user.isGuest, gameState.sessionShotsFired, gameState.sessionShotsHit]);
+  }, [
+    gameState.gamePhase,
+    gameState.gameStartTime,
+    gameState.user.isGuest,
+    gameState.sessionShotsFired,
+    gameState.sessionShotsHit,
+  ]);
 
   // Currency bundle options (mock purchases - no real payment yet)
   const currencyBundles = [
@@ -4645,7 +5328,12 @@ function HUD({
       return;
     }
     const amountUSD = parseFloat(bundle.price.replace("$", ""));
-    setPaymentModal({ id: bundle.id, price: bundle.price, gold: bundle.gold, amountUSD });
+    setPaymentModal({
+      id: bundle.id,
+      price: bundle.price,
+      gold: bundle.gold,
+      amountUSD,
+    });
     setPayCardNumber("");
     setPayExpiry("");
     setPayCVC("");
@@ -4671,9 +5359,18 @@ function HUD({
     setPaymentError("");
 
     const rawCard = payCardNumber.replace(/\s/g, "");
-    if (rawCard.length !== 16) { setPaymentError("Card number must be 16 digits."); return; }
-    if (!/^\d{2}\/\d{2}$/.test(payExpiry)) { setPaymentError("Expiry must be MM/YY."); return; }
-    if (!/^\d{3,4}$/.test(payCVC)) { setPaymentError("CVC must be 3 or 4 digits."); return; }
+    if (rawCard.length !== 16) {
+      setPaymentError("Card number must be 16 digits.");
+      return;
+    }
+    if (!/^\d{2}\/\d{2}$/.test(payExpiry)) {
+      setPaymentError("Expiry must be MM/YY.");
+      return;
+    }
+    if (!/^\d{3,4}$/.test(payCVC)) {
+      setPaymentError("CVC must be 3 or 4 digits.");
+      return;
+    }
 
     setPaymentLoading(true);
     try {
@@ -4694,9 +5391,14 @@ function HUD({
         setPaymentError(data.error || "Payment failed. Please try again.");
         return;
       }
-      setGameState((prev) => ({ ...prev, user: { ...prev.user, currency: data.newGold } }));
+      setGameState((prev) => ({
+        ...prev,
+        user: { ...prev.user, currency: data.newGold },
+      }));
       setPaymentModal(null);
-      alert(`✅ ${paymentModal.gold.toLocaleString()} gold added to your account!`);
+      alert(
+        `✅ ${paymentModal.gold.toLocaleString()} gold added to your account!`,
+      );
     } catch (err) {
       setPaymentError("Network error. Please try again.");
     } finally {
@@ -4790,10 +5492,30 @@ function HUD({
             width: "100%",
           }}
         >
-          <div style={{ fontSize: "13px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase", marginBottom: "6px" }}>
+          <div
+            style={{
+              fontSize: "13px",
+              color: "#c8a84b",
+              letterSpacing: "3px",
+              textTransform: "uppercase",
+              marginBottom: "6px",
+            }}
+          >
             DOG: THE HOTDOG WARS
           </div>
-          <h2 style={{ fontSize: "28px", fontWeight: "700", marginBottom: "28px", color: "#e8a020", letterSpacing: "2px", textTransform: "uppercase", margin: "0 0 28px 0" }}>Sign In</h2>
+          <h2
+            style={{
+              fontSize: "28px",
+              fontWeight: "700",
+              marginBottom: "28px",
+              color: "#e8a020",
+              letterSpacing: "2px",
+              textTransform: "uppercase",
+              margin: "0 0 28px 0",
+            }}
+          >
+            Sign In
+          </h2>
           <div
             style={{
               display: "flex",
@@ -5002,10 +5724,27 @@ function HUD({
             width: "100%",
           }}
         >
-          <div style={{ fontSize: "13px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase", marginBottom: "6px" }}>
+          <div
+            style={{
+              fontSize: "13px",
+              color: "#c8a84b",
+              letterSpacing: "3px",
+              textTransform: "uppercase",
+              marginBottom: "6px",
+            }}
+          >
             DOG: THE HOTDOG WARS
           </div>
-          <h2 style={{ fontSize: "28px", fontWeight: "700", color: "#e8a020", letterSpacing: "2px", textTransform: "uppercase", margin: "0 0 28px 0" }}>
+          <h2
+            style={{
+              fontSize: "28px",
+              fontWeight: "700",
+              color: "#e8a020",
+              letterSpacing: "2px",
+              textTransform: "uppercase",
+              margin: "0 0 28px 0",
+            }}
+          >
             Create Account
           </h2>
           <div
@@ -5176,7 +5915,11 @@ function HUD({
         label: "Story Mode",
         onClick: () => {
           playClick();
-          setGameState((prev) => ({ ...prev, gamePhase: "introCutscene", gameMode: "story" }));
+          setGameState((prev) => ({
+            ...prev,
+            gamePhase: "introCutscene",
+            gameMode: "story",
+          }));
         },
       },
       {
@@ -5194,33 +5937,61 @@ function HUD({
             enemies: [],
             bullets: [],
             enemyProjectiles: [],
-            story: { currentSettlement: 0, alliesRescued: 0, settlementsConquered: [], totalKills: 0 },
+            story: {
+              currentSettlement: 0,
+              alliesRescued: 0,
+              settlementsConquered: [],
+              totalKills: 0,
+            },
             sessionShotsFired: 0,
             sessionShotsHit: 0,
-            level: { currentLevel: 1, killsThisLevel: 0, giantsSpawnedThisLevel: 0 },
+            level: {
+              currentLevel: 1,
+              killsThisLevel: 0,
+              giantsSpawnedThisLevel: 0,
+            },
           }));
           document.body.requestPointerLock();
         },
       },
       {
         label: "Leaderboard",
-        onClick: () => { playClick(); setGameState((prev) => ({ ...prev, gamePhase: "leaderboard" })); },
+        onClick: () => {
+          playClick();
+          setGameState((prev) => ({ ...prev, gamePhase: "leaderboard" }));
+        },
       },
       {
         label: "Shop",
-        onClick: () => { playClick(); setGameState((prev) => ({ ...prev, gamePhase: "shop" })); },
+        onClick: () => {
+          playClick();
+          setGameState((prev) => ({ ...prev, gamePhase: "shop" }));
+        },
       },
       {
         label: "Inventory",
-        onClick: () => { playClick(); setGameState((prev) => ({ ...prev, gamePhase: "inventory" })); },
+        onClick: () => {
+          playClick();
+          setGameState((prev) => ({ ...prev, gamePhase: "inventory" }));
+        },
       },
       {
         label: "Settings",
-        onClick: () => { playClick(); setGameState((prev) => ({ ...prev, gamePhase: "settings", previousGamePhase: "menu" })); },
+        onClick: () => {
+          playClick();
+          setGameState((prev) => ({
+            ...prev,
+            gamePhase: "settings",
+            previousGamePhase: "menu",
+          }));
+        },
       },
       {
         label: "Profile",
-        onClick: () => { playClick(); setGameState((prev) => ({ ...prev, gamePhase: "profile" })); },
+        onClick: () => {
+          playClick();
+          setGameState((prev) => ({ ...prev, gamePhase: "profile" }));
+        },
       },
     ];
 
@@ -5247,7 +6018,8 @@ function HUD({
           style={{
             position: "absolute",
             inset: 0,
-            background: "linear-gradient(to right, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.38) 45%, transparent 70%)",
+            background:
+              "linear-gradient(to right, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.38) 45%, transparent 70%)",
             pointerEvents: "none",
           }}
         />
@@ -5262,20 +6034,47 @@ function HUD({
             maxWidth: "420px",
           }}
         >
-          <div style={{ fontSize: "35px", color: "#c8a84b", letterSpacing: "10px", textTransform: "uppercase", marginBottom: "6px" }}>
+          <div
+            style={{
+              fontSize: "35px",
+              color: "#c8a84b",
+              letterSpacing: "10px",
+              textTransform: "uppercase",
+              marginBottom: "6px",
+            }}
+          >
             DOG: THE HOTDOG WARS
           </div>
           {/* Player info */}
           <div style={{ marginBottom: "32px" }}>
-            <div style={{ fontSize: "25px", color: "#c8a84b", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "4px" }}>
+            <div
+              style={{
+                fontSize: "25px",
+                color: "#c8a84b",
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+                marginBottom: "4px",
+              }}
+            >
               {gameState.user.isGuest ? "Playing as Guest" : `Welcome back`}
             </div>
-            <div style={{ fontSize: "29px", fontWeight: "bold", color: "#fff", textShadow: "0 2px 8px rgba(0,0,0,0.8)" }}>
+            <div
+              style={{
+                fontSize: "29px",
+                fontWeight: "bold",
+                color: "#fff",
+                textShadow: "0 2px 8px rgba(0,0,0,0.8)",
+              }}
+            >
               {gameState.user.username}
             </div>
             {!gameState.user.isGuest && (
-              <div style={{ fontSize: "14px", color: "#e8c96a", marginTop: "4px" }}>
-                🪙 {gameState.user.currency === 67 ? "∞" : gameState.user.currency} Gold
+              <div
+                style={{ fontSize: "14px", color: "#e8c96a", marginTop: "4px" }}
+              >
+                🪙{" "}
+                {gameState.user.currency === 67 ? "∞" : gameState.user.currency}{" "}
+                Gold
               </div>
             )}
           </div>
@@ -5283,7 +6082,12 @@ function HUD({
           {/* Menu items */}
           <nav style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
             {menuItems.map((item) => (
-              <MenuButton key={item.label} label={item.label} onClick={item.onClick} onHover={playHover} />
+              <MenuButton
+                key={item.label}
+                label={item.label}
+                onClick={item.onClick}
+                onHover={playHover}
+              />
             ))}
           </nav>
         </div>
@@ -5312,439 +6116,557 @@ function HUD({
 
   // Shop Page
   if (gameState.gamePhase === "shop") {
-    return (<>
-      <div
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: "100vw",
-          height: "100vh",
-          background: "#0d0a05",
-          display: "flex",
-          flexDirection: "column",
-          color: "rgba(220,210,195,0.9)",
-          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
-          zIndex: 1000,
-          padding: "20px",
-        }}
-      >
-        {/* Top Bar */}
+    return (
+      <>
         <div
           style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            background: "#0d0a05",
             display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "20px",
-            padding: "16px 24px",
-            background: "rgba(18,12,5,0.95)",
-            borderBottom: "1px solid rgba(232,160,32,0.25)",
+            flexDirection: "column",
+            color: "rgba(220,210,195,0.9)",
+            fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+            zIndex: 1000,
+            padding: "20px",
           }}
         >
-          <div>
-            <div style={{ fontSize: "11px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase" }}>DOG: The Hotdog Wars</div>
-            <h1 style={{ fontSize: "28px", margin: "2px 0 0 0", fontWeight: "700", color: "#e8a020", letterSpacing: "3px", textTransform: "uppercase" }}>ARMORY</h1>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
-            <span style={{ fontSize: "17px", color: "#c8a84b" }}>
-              🪙 {gameState.user.currency === 67 ? "∞" : gameState.user.currency}
-            </span>
-            <button
-              onClick={() =>
-                setGameState((prev) => ({ ...prev, gamePhase: "menu" }))
-              }
-              style={{
-                padding: "10px 22px",
-                fontSize: "13px",
-                fontWeight: "700",
-                background: "transparent",
-                color: "rgba(200,168,75,0.85)",
-                border: "1px solid rgba(232,160,32,0.35)",
-                cursor: "pointer",
-                letterSpacing: "1px",
-                textTransform: "uppercase",
-                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
-              }}
-            >
-              ← BACK
-            </button>
-          </div>
-        </div>
-
-        {/* Buy Gold Section - Compact */}
-        <div
-          style={{
-            marginBottom: "15px",
-            padding: "12px 18px",
-            background: "rgba(18,12,5,0.95)",
-            border: "1px solid rgba(232,160,32,0.3)",
-          }}
-        >
+          {/* Top Bar */}
           <div
             style={{
               display: "flex",
-              alignItems: "center",
               justifyContent: "space-between",
-              gap: "15px",
+              alignItems: "center",
+              marginBottom: "20px",
+              padding: "16px 24px",
+              background: "rgba(18,12,5,0.95)",
+              borderBottom: "1px solid rgba(232,160,32,0.25)",
             }}
           >
-            <div style={{ flexShrink: 0 }}>
-              <span style={{ fontSize: "16px", fontWeight: "bold" }}>
-                💎 BUY GOLD
-              </span>
+            <div>
+              <div
+                style={{
+                  fontSize: "11px",
+                  color: "#c8a84b",
+                  letterSpacing: "3px",
+                  textTransform: "uppercase",
+                }}
+              >
+                DOG: The Hotdog Wars
+              </div>
+              <h1
+                style={{
+                  fontSize: "28px",
+                  margin: "2px 0 0 0",
+                  fontWeight: "700",
+                  color: "#e8a020",
+                  letterSpacing: "3px",
+                  textTransform: "uppercase",
+                }}
+              >
+                ARMORY
+              </h1>
             </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "17px", color: "#c8a84b" }}>
+                🪙{" "}
+                {gameState.user.currency === 67 ? "∞" : gameState.user.currency}
+              </span>
+              <button
+                onClick={() =>
+                  setGameState((prev) => ({ ...prev, gamePhase: "menu" }))
+                }
+                style={{
+                  padding: "10px 22px",
+                  fontSize: "13px",
+                  fontWeight: "700",
+                  background: "transparent",
+                  color: "rgba(200,168,75,0.85)",
+                  border: "1px solid rgba(232,160,32,0.35)",
+                  cursor: "pointer",
+                  letterSpacing: "1px",
+                  textTransform: "uppercase",
+                  fontFamily:
+                    '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                }}
+              >
+                ← BACK
+              </button>
+            </div>
+          </div>
+
+          {/* Buy Gold Section - Compact */}
+          <div
+            style={{
+              marginBottom: "15px",
+              padding: "12px 18px",
+              background: "rgba(18,12,5,0.95)",
+              border: "1px solid rgba(232,160,32,0.3)",
+            }}
+          >
             <div
               style={{
                 display: "flex",
-                gap: "10px",
-                flexWrap: "wrap",
-                justifyContent: "flex-end",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "15px",
               }}
             >
-              {currencyBundles.map((bundle) => (
-                <button
-                  key={bundle.id}
-                  onClick={() => handleBuyCurrency(bundle)}
-                  style={{
-                    background: bundle.popular
-                      ? "rgba(255,255,255,0.35)"
-                      : "rgba(0,0,0,0.3)",
-                    border: bundle.popular
-                      ? "2px solid #fff"
-                      : "1px solid rgba(255,255,255,0.3)",
-                    borderRadius: "6px",
-                    padding: "6px 12px",
-                    cursor: "pointer",
-                    color: "white",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                  }}
-                >
-                  <span style={{ fontSize: "14px", fontWeight: "bold" }}>
-                    {bundle.gold.toLocaleString()} 💰
-                  </span>
-                  <span
+              <div style={{ flexShrink: 0 }}>
+                <span style={{ fontSize: "16px", fontWeight: "bold" }}>
+                  💎 BUY GOLD
+                </span>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "10px",
+                  flexWrap: "wrap",
+                  justifyContent: "flex-end",
+                }}
+              >
+                {currencyBundles.map((bundle) => (
+                  <button
+                    key={bundle.id}
+                    onClick={() => handleBuyCurrency(bundle)}
                     style={{
-                      fontSize: "12px",
-                      background: "rgba(232,160,32,0.9)",
-                      color: "#0d0a05",
-                      padding: "2px 8px",
-                      fontWeight: "700",
+                      background: bundle.popular
+                        ? "rgba(255,255,255,0.35)"
+                        : "rgba(0,0,0,0.3)",
+                      border: bundle.popular
+                        ? "2px solid #fff"
+                        : "1px solid rgba(255,255,255,0.3)",
+                      borderRadius: "6px",
+                      padding: "6px 12px",
+                      cursor: "pointer",
+                      color: "white",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
                     }}
                   >
-                    {bundle.price}
-                  </span>
-                </button>
-              ))}
+                    <span style={{ fontSize: "14px", fontWeight: "bold" }}>
+                      {bundle.gold.toLocaleString()} 💰
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        background: "rgba(232,160,32,0.9)",
+                        color: "#0d0a05",
+                        padding: "2px 8px",
+                        fontWeight: "700",
+                      }}
+                    >
+                      {bundle.price}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
+            <p
+              style={{
+                margin: "8px 0 0 0",
+                fontSize: "11px",
+                textAlign: "center",
+                opacity: 0.7,
+              }}
+            >
+              ⚠️ Test mode - No real charges
+            </p>
           </div>
-          <p
+
+          {/* Content */}
+          <div
             style={{
-              margin: "8px 0 0 0",
-              fontSize: "11px",
-              textAlign: "center",
-              opacity: 0.7,
+              flex: 1,
+              overflowY: "auto",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+              gap: "20px",
+              padding: "20px",
+              background: "rgba(0,0,0,0.3)",
+              borderRadius: "10px",
             }}
           >
-            ⚠️ Test mode - No real charges
-          </p>
-        </div>
-
-        {/* Content */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-            gap: "20px",
-            padding: "20px",
-            background: "rgba(0,0,0,0.3)",
-            borderRadius: "10px",
-          }}
-        >
-          {shopLoading && (
-            <div
-              style={{
-                gridColumn: "1 / -1",
-                textAlign: "center",
-                fontSize: "20px",
-              }}
-            >
-              Loading shop items...
-            </div>
-          )}
-
-          {shopError && (
-            <div
-              style={{
-                gridColumn: "1 / -1",
-                padding: "20px",
-                background: "rgba(255,0,0,0.3)",
-                borderRadius: "8px",
-                textAlign: "center",
-                fontSize: "18px",
-              }}
-            >
-              {shopError}
-            </div>
-          )}
-
-          {!shopLoading && shopItems.length === 0 && !shopError && (
-            <div
-              style={{
-                gridColumn: "1 / -1",
-                textAlign: "center",
-                fontSize: "18px",
-              }}
-            >
-              No items available
-            </div>
-          )}
-
-          {shopItems.map((item) => {
-            const isOwned = ownedItemIds.includes(item.id);
-            // Special case: gold value of 67 means unlimited purchases
-            const hasUnlimitedGold = gameState.user.currency === 67;
-            const canAfford =
-              hasUnlimitedGold || gameState.user.currency >= item.price;
-
-            // Parse weapon and skin name from item name (e.g., "Pistol - Gold Plated")
-            const nameParts = item.name.split(" - ");
-            const weaponType = nameParts[0] || item.name;
-            const skinName = nameParts[1] || "Skin";
-
-            // Rarity-based styling
-            const rarityColors: Record<string, string> = {
-              common: "#808080",
-              uncommon: "#2ecc71",
-              rare: "#3498db",
-              epic: "#9b59b6",
-              legendary: "#f39c12",
-            };
-
-            // Weapon type colors
-            const weaponColors: Record<string, string> = {
-              Pistol: "#4CAF50",
-              Rifle: "#2196F3",
-              Sniper: "#9C27B0",
-              Plasma: "#FF5722",
-            };
-
-            return (
+            {shopLoading && (
               <div
-                key={item.id}
                 style={{
-                  padding: "15px",
-                  background: "rgba(0,0,0,0.5)",
-                  borderRadius: "8px",
-                  border: `2px solid ${rarityColors[item.rarity] || "#fff"}`,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "10px",
+                  gridColumn: "1 / -1",
+                  textAlign: "center",
+                  fontSize: "20px",
                 }}
               >
-                {/* Weapon Type Badge */}
+                Loading shop items...
+              </div>
+            )}
+
+            {shopError && (
+              <div
+                style={{
+                  gridColumn: "1 / -1",
+                  padding: "20px",
+                  background: "rgba(255,0,0,0.3)",
+                  borderRadius: "8px",
+                  textAlign: "center",
+                  fontSize: "18px",
+                }}
+              >
+                {shopError}
+              </div>
+            )}
+
+            {!shopLoading && shopItems.length === 0 && !shopError && (
+              <div
+                style={{
+                  gridColumn: "1 / -1",
+                  textAlign: "center",
+                  fontSize: "18px",
+                }}
+              >
+                No items available
+              </div>
+            )}
+
+            {shopItems.map((item) => {
+              const isOwned = ownedItemIds.includes(item.id);
+              // Special case: gold value of 67 means unlimited purchases
+              const hasUnlimitedGold = gameState.user.currency === 67;
+              const canAfford =
+                hasUnlimitedGold || gameState.user.currency >= item.price;
+
+              // Parse weapon and skin name from item name (e.g., "Pistol - Gold Plated")
+              const nameParts = item.name.split(" - ");
+              const weaponType = nameParts[0] || item.name;
+              const skinName = nameParts[1] || "Skin";
+
+              // Rarity-based styling
+              const rarityColors: Record<string, string> = {
+                common: "#808080",
+                uncommon: "#2ecc71",
+                rare: "#3498db",
+                epic: "#9b59b6",
+                legendary: "#f39c12",
+              };
+
+              // Weapon type colors
+              const weaponColors: Record<string, string> = {
+                Pistol: "#4CAF50",
+                Rifle: "#2196F3",
+                Sniper: "#9C27B0",
+                Plasma: "#FF5722",
+              };
+
+              return (
                 <div
+                  key={item.id}
                   style={{
-                    background: weaponColors[weaponType] || "#555",
-                    color: "white",
-                    padding: "4px 10px",
-                    borderRadius: "4px",
-                    fontSize: "11px",
-                    fontWeight: "bold",
-                    textTransform: "uppercase",
-                    alignSelf: "flex-start",
+                    padding: "15px",
+                    background: "rgba(0,0,0,0.5)",
+                    borderRadius: "8px",
+                    border: `2px solid ${rarityColors[item.rarity] || "#fff"}`,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
                   }}
                 >
-                  {weaponType}
-                </div>
-                {item.image_url && (
+                  {/* Weapon Type Badge */}
                   <div
                     style={{
-                      width: "100%",
-                      height: "120px",
-                      backgroundImage: `url(${item.image_url})`,
-                      backgroundSize: "cover",
-                      backgroundPosition: "center",
-                      borderRadius: "6px",
-                    }}
-                  />
-                )}
-                <div>
-                  <h3 style={{ margin: "0 0 5px 0", fontSize: "16px" }}>
-                    {skinName}
-                  </h3>
-                  <p
-                    style={{
-                      margin: "0 0 10px 0",
-                      fontSize: "12px",
-                      opacity: 0.8,
-                      minHeight: "30px",
-                    }}
-                  >
-                    {item.description}
-                  </p>
-                  <div
-                    style={{
-                      fontSize: "12px",
-                      color: rarityColors[item.rarity] || "#fff",
-                      marginBottom: "10px",
-                      textTransform: "capitalize",
-                    }}
-                  >
-                    {item.rarity}
-                  </div>
-                </div>
-                {isOwned ? (
-                  <button
-                    disabled
-                    style={{
-                      padding: "10px",
-                      fontSize: "14px",
-                      background: "#666",
+                      background: weaponColors[weaponType] || "#555",
                       color: "white",
-                      border: "none",
-                      borderRadius: "6px",
-                      cursor: "not-allowed",
+                      padding: "4px 10px",
+                      borderRadius: "4px",
+                      fontSize: "11px",
+                      fontWeight: "bold",
+                      textTransform: "uppercase",
+                      alignSelf: "flex-start",
                     }}
                   >
-                    ✓ OWNED
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleBuyItem(item)}
-                    disabled={!canAfford}
-                    style={{
-                      padding: "10px",
-                      fontSize: "13px",
-                      background: canAfford ? "rgba(232,160,32,0.9)" : "rgba(60,50,35,0.7)",
-                      color: canAfford ? "#0d0a05" : "rgba(160,140,110,0.6)",
-                      border: "none",
-                      cursor: canAfford ? "pointer" : "not-allowed",
-                      fontWeight: "700",
-                      letterSpacing: "1px",
-                      textTransform: "uppercase" as const,
-                    }}
-                  >
-                    {canAfford ? `BUY ${item.price}` : "NOT ENOUGH"}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      {paymentModal && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-          background: "rgba(0,0,0,0.85)", display: "flex", justifyContent: "center",
-          alignItems: "center", zIndex: 9999, pointerEvents: "all",
-        }}>
-          <div style={{
-            background: "#1a1a2e", border: "1px solid #333", borderRadius: "14px",
-            padding: "32px", width: "100%", maxWidth: "420px", color: "white",
-            fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
-            boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
-          }}>
-            <h2 style={{ margin: "0 0 6px 0", fontSize: "22px" }}>💳 Purchase Gold</h2>
-            <p style={{ margin: "0 0 20px 0", color: "#aaa", fontSize: "14px" }}>
-              {paymentModal.gold.toLocaleString()} 💰 for <strong style={{ color: "#f39c12" }}>{paymentModal.price}</strong>
-            </p>
-            <p style={{
-              margin: "0 0 20px 0", padding: "10px", borderRadius: "8px",
-              background: "rgba(255,193,7,0.15)", border: "1px solid rgba(255,193,7,0.3)",
-              color: "#ffc107", fontSize: "12px", textAlign: "center",
-            }}>
-              ⚠️ Test mode — no real charges will be made
-            </p>
-            <label style={{ display: "block", marginBottom: "14px" }}>
-              <span style={{ fontSize: "13px", color: "#aaa" }}>Card Number</span>
-              <input
-                type="text"
-                placeholder="1234 5678 9012 3456"
-                value={payCardNumber}
-                onChange={(e) => setPayCardNumber(formatCardNumber(e.target.value))}
-                maxLength={19}
-                style={{
-                  display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
-                  borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
-                  color: "white", fontSize: "16px", letterSpacing: "2px", boxSizing: "border-box",
-                }}
-              />
-            </label>
-            <div style={{ display: "flex", gap: "12px", marginBottom: "14px" }}>
-              <label style={{ flex: 1 }}>
-                <span style={{ fontSize: "13px", color: "#aaa" }}>Expiry (MM/YY)</span>
-                <input
-                  type="text"
-                  placeholder="MM/YY"
-                  value={payExpiry}
-                  onChange={(e) => setPayExpiry(formatExpiry(e.target.value))}
-                  maxLength={5}
-                  style={{
-                    display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
-                    borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
-                    color: "white", fontSize: "15px", boxSizing: "border-box",
-                  }}
-                />
-              </label>
-              <label style={{ flex: 1 }}>
-                <span style={{ fontSize: "13px", color: "#aaa" }}>CVC</span>
-                <input
-                  type="text"
-                  placeholder="123"
-                  value={payCVC}
-                  onChange={(e) => setPayCVC(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                  maxLength={4}
-                  style={{
-                    display: "block", width: "100%", marginTop: "6px", padding: "10px 12px",
-                    borderRadius: "7px", border: "1px solid #444", background: "#0f1a30",
-                    color: "white", fontSize: "15px", boxSizing: "border-box",
-                  }}
-                />
-              </label>
-            </div>
-            {paymentError && (
-              <p style={{
-                margin: "0 0 14px 0", padding: "10px", borderRadius: "7px",
-                background: "rgba(231,76,60,0.15)", border: "1px solid rgba(231,76,60,0.4)",
-                color: "#e74c3c", fontSize: "13px",
-              }}>
-                {paymentError}
-              </p>
-            )}
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button
-                onClick={handleSubmitPayment}
-                disabled={paymentLoading}
-                style={{
-                  flex: 1, padding: "12px", borderRadius: "8px", border: "none",
-                  background: paymentLoading ? "rgba(130,110,70,0.5)" : "rgba(232,160,32,0.9)",
-                  color: paymentLoading ? "rgba(200,180,140,0.6)" : "#0d0a05", fontSize: "15px", fontWeight: "700",
-                  cursor: paymentLoading ? "not-allowed" : "pointer",
-                  fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
-                }}
-              >
-                {paymentLoading ? "Processing..." : `Pay ${paymentModal.price}`}
-              </button>
-              <button
-                onClick={() => { setPaymentModal(null); setPaymentError(""); }}
-                disabled={paymentLoading}
-                style={{
-                  padding: "12px 20px", borderRadius: "8px", border: "1px solid #555",
-                  background: "transparent", color: "#aaa", fontSize: "15px", cursor: "pointer",
-                  fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
-                }}
-              >
-                Cancel
-              </button>
-            </div>
+                    {weaponType}
+                  </div>
+                  {item.image_url && (
+                    <div
+                      style={{
+                        width: "100%",
+                        height: "120px",
+                        backgroundImage: `url(${item.image_url})`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center",
+                        borderRadius: "6px",
+                      }}
+                    />
+                  )}
+                  <div>
+                    <h3 style={{ margin: "0 0 5px 0", fontSize: "16px" }}>
+                      {skinName}
+                    </h3>
+                    <p
+                      style={{
+                        margin: "0 0 10px 0",
+                        fontSize: "12px",
+                        opacity: 0.8,
+                        minHeight: "30px",
+                      }}
+                    >
+                      {item.description}
+                    </p>
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        color: rarityColors[item.rarity] || "#fff",
+                        marginBottom: "10px",
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      {item.rarity}
+                    </div>
+                  </div>
+                  {isOwned ? (
+                    <button
+                      disabled
+                      style={{
+                        padding: "10px",
+                        fontSize: "14px",
+                        background: "#666",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "6px",
+                        cursor: "not-allowed",
+                      }}
+                    >
+                      ✓ OWNED
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleBuyItem(item)}
+                      disabled={!canAfford}
+                      style={{
+                        padding: "10px",
+                        fontSize: "13px",
+                        background: canAfford
+                          ? "rgba(232,160,32,0.9)"
+                          : "rgba(60,50,35,0.7)",
+                        color: canAfford ? "#0d0a05" : "rgba(160,140,110,0.6)",
+                        border: "none",
+                        cursor: canAfford ? "pointer" : "not-allowed",
+                        fontWeight: "700",
+                        letterSpacing: "1px",
+                        textTransform: "uppercase" as const,
+                      }}
+                    >
+                      {canAfford ? `BUY ${item.price}` : "NOT ENOUGH"}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
-      )}
-    </>);
+        {paymentModal && (
+          <div
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(0,0,0,0.85)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: 9999,
+              pointerEvents: "all",
+            }}
+          >
+            <div
+              style={{
+                background: "#1a1a2e",
+                border: "1px solid #333",
+                borderRadius: "14px",
+                padding: "32px",
+                width: "100%",
+                maxWidth: "420px",
+                color: "white",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
+              }}
+            >
+              <h2 style={{ margin: "0 0 6px 0", fontSize: "22px" }}>
+                💳 Purchase Gold
+              </h2>
+              <p
+                style={{
+                  margin: "0 0 20px 0",
+                  color: "#aaa",
+                  fontSize: "14px",
+                }}
+              >
+                {paymentModal.gold.toLocaleString()} 💰 for{" "}
+                <strong style={{ color: "#f39c12" }}>
+                  {paymentModal.price}
+                </strong>
+              </p>
+              <p
+                style={{
+                  margin: "0 0 20px 0",
+                  padding: "10px",
+                  borderRadius: "8px",
+                  background: "rgba(255,193,7,0.15)",
+                  border: "1px solid rgba(255,193,7,0.3)",
+                  color: "#ffc107",
+                  fontSize: "12px",
+                  textAlign: "center",
+                }}
+              >
+                ⚠️ Test mode — no real charges will be made
+              </p>
+              <label style={{ display: "block", marginBottom: "14px" }}>
+                <span style={{ fontSize: "13px", color: "#aaa" }}>
+                  Card Number
+                </span>
+                <input
+                  type="text"
+                  placeholder="1234 5678 9012 3456"
+                  value={payCardNumber}
+                  onChange={(e) =>
+                    setPayCardNumber(formatCardNumber(e.target.value))
+                  }
+                  maxLength={19}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    marginTop: "6px",
+                    padding: "10px 12px",
+                    borderRadius: "7px",
+                    border: "1px solid #444",
+                    background: "#0f1a30",
+                    color: "white",
+                    fontSize: "16px",
+                    letterSpacing: "2px",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </label>
+              <div
+                style={{ display: "flex", gap: "12px", marginBottom: "14px" }}
+              >
+                <label style={{ flex: 1 }}>
+                  <span style={{ fontSize: "13px", color: "#aaa" }}>
+                    Expiry (MM/YY)
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="MM/YY"
+                    value={payExpiry}
+                    onChange={(e) => setPayExpiry(formatExpiry(e.target.value))}
+                    maxLength={5}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      marginTop: "6px",
+                      padding: "10px 12px",
+                      borderRadius: "7px",
+                      border: "1px solid #444",
+                      background: "#0f1a30",
+                      color: "white",
+                      fontSize: "15px",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </label>
+                <label style={{ flex: 1 }}>
+                  <span style={{ fontSize: "13px", color: "#aaa" }}>CVC</span>
+                  <input
+                    type="text"
+                    placeholder="123"
+                    value={payCVC}
+                    onChange={(e) =>
+                      setPayCVC(e.target.value.replace(/\D/g, "").slice(0, 4))
+                    }
+                    maxLength={4}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      marginTop: "6px",
+                      padding: "10px 12px",
+                      borderRadius: "7px",
+                      border: "1px solid #444",
+                      background: "#0f1a30",
+                      color: "white",
+                      fontSize: "15px",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </label>
+              </div>
+              {paymentError && (
+                <p
+                  style={{
+                    margin: "0 0 14px 0",
+                    padding: "10px",
+                    borderRadius: "7px",
+                    background: "rgba(231,76,60,0.15)",
+                    border: "1px solid rgba(231,76,60,0.4)",
+                    color: "#e74c3c",
+                    fontSize: "13px",
+                  }}
+                >
+                  {paymentError}
+                </p>
+              )}
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  onClick={handleSubmitPayment}
+                  disabled={paymentLoading}
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "none",
+                    background: paymentLoading
+                      ? "rgba(130,110,70,0.5)"
+                      : "rgba(232,160,32,0.9)",
+                    color: paymentLoading ? "rgba(200,180,140,0.6)" : "#0d0a05",
+                    fontSize: "15px",
+                    fontWeight: "700",
+                    cursor: paymentLoading ? "not-allowed" : "pointer",
+                    fontFamily:
+                      '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                  }}
+                >
+                  {paymentLoading
+                    ? "Processing..."
+                    : `Pay ${paymentModal.price}`}
+                </button>
+                <button
+                  onClick={() => {
+                    setPaymentModal(null);
+                    setPaymentError("");
+                  }}
+                  disabled={paymentLoading}
+                  style={{
+                    padding: "12px 20px",
+                    borderRadius: "8px",
+                    border: "1px solid #555",
+                    background: "transparent",
+                    color: "#aaa",
+                    fontSize: "15px",
+                    cursor: "pointer",
+                    fontFamily:
+                      '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    );
   }
 
   // Level Transition Cutscene with Shop
@@ -5765,7 +6687,8 @@ function HUD({
       weaponUnlock = { id: 4, name: weapons[4].name }; // Lacerating Muffin Generator after level 4
     }
 
-    const canAffordToken = gameState.coins >= 2;
+    const tokenCost = 2 + gameState.tokensPurchased;
+    const canAffordToken = gameState.coins >= tokenCost;
 
     return (
       <div
@@ -5794,6 +6717,7 @@ function HUD({
             boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
             maxWidth: "800px",
             margin: "20px",
+            width: "100%",
           }}
         >
           <h2
@@ -5809,6 +6733,7 @@ function HUD({
           >
             LEVEL COMPLETE
           </h2>
+
           <div
             style={{
               fontSize: "20px",
@@ -5882,6 +6807,7 @@ function HUD({
             >
               🛒 SHOPKEEPER
             </h3>
+
             <p
               style={{
                 fontSize: "14px",
@@ -5893,22 +6819,24 @@ function HUD({
               "Traveler! I have something for you..."
             </p>
 
-            {/* Token Item */}
             <div
               style={{
-                padding: "15px",
-                background: "rgba(0,0,0,0.4)",
-                borderRadius: "8px",
-                marginBottom: "10px",
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                gap: "15px",
+                alignItems: "stretch",
               }}
             >
+              {/* Health Buff Card */}
               <div
                 style={{
+                  padding: "15px",
+                  background: "rgba(0,0,0,0.4)",
+                  borderRadius: "8px",
                   display: "flex",
-                  alignItems: "center",
+                  flexDirection: "column",
                   justifyContent: "space-between",
-                  flexWrap: "wrap",
-                  gap: "10px",
+                  minHeight: "180px",
                 }}
               >
                 <div style={{ textAlign: "left" }}>
@@ -5929,7 +6857,7 @@ function HUD({
                       style={{
                         fontSize: "13px",
                         color: "#4caf50",
-                        marginTop: "5px",
+                        marginTop: "8px",
                       }}
                     >
                       Owned: {gameState.tokensPurchased} | Max Health:{" "}
@@ -5937,12 +6865,13 @@ function HUD({
                     </div>
                   )}
                 </div>
+
                 <button
                   onClick={() => {
                     if (canAffordToken) {
                       setGameState((prev) => ({
                         ...prev,
-                        coins: prev.coins - (2 + prev.tokensPurchased),
+                        coins: prev.coins - tokenCost,
                         maxHealth: prev.maxHealth + 10,
                         health: Math.min(prev.health + 10, prev.maxHealth + 10),
                         tokensPurchased: prev.tokensPurchased + 1,
@@ -5951,6 +6880,7 @@ function HUD({
                   }}
                   disabled={!canAffordToken}
                   style={{
+                    marginTop: "15px",
                     padding: "10px 20px",
                     fontSize: "16px",
                     fontWeight: "bold",
@@ -5959,14 +6889,537 @@ function HUD({
                     border: "none",
                     borderRadius: "8px",
                     cursor: canAffordToken ? "pointer" : "not-allowed",
-                    fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                    fontFamily:
+                      '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
                   }}
                 >
-                  BUY - {2 + gameState.tokensPurchased} 💰
+                  BUY - {tokenCost} 💰
+                </button>
+              </div>
+
+              {/* Weapon Augments Card */}
+              <div
+                style={{
+                  padding: "15px",
+                  background: "rgba(0,0,0,0.4)",
+                  borderRadius: "8px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  minHeight: "180px",
+                }}
+              >
+                <div style={{ textAlign: "left" }}>
+                  <div
+                    style={{
+                      fontSize: "18px",
+                      fontWeight: "bold",
+                      marginBottom: "5px",
+                    }}
+                  >
+                    ⚔️ Weapon Augments
+                  </div>
+                  <div style={{ fontSize: "14px", opacity: 0.7 }}>
+                    Open the augment framework for future upgrades to weapons
+                    and player stats.
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "13px",
+                      color: "#ffcc80",
+                      marginTop: "8px",
+                    }}
+                  >
+                    Framework only for now — no upgrade logic yet.
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setShowAugmentCategoryModal(true)}
+                  style={{
+                    marginTop: "15px",
+                    padding: "10px 20px",
+                    fontSize: "16px",
+                    fontWeight: "bold",
+                    background: "#ff9800",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontFamily:
+                      '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                  }}
+                >
+                  OPEN AUGMENTS
                 </button>
               </div>
             </div>
           </div>
+
+          {showAugmentCategoryModal && (
+            <div
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                width: "100vw",
+                height: "100vh",
+                background: "rgba(0,0,0,0.78)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1200,
+                padding: "20px",
+              }}
+              onClick={() => {
+                setShowAugmentCategoryModal(false);
+                setSelectedAugmentCategory(null);
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: "100%",
+                  maxWidth: "620px",
+                  background: "rgba(18,12,5,0.98)",
+                  border: "1px solid rgba(255,152,0,0.45)",
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.85)",
+                  padding: "30px",
+                  textAlign: "center",
+                }}
+              >
+                {selectedAugmentCategory === null ? (
+                  <>
+                    <h3
+                      style={{
+                        fontSize: "28px",
+                        marginBottom: "10px",
+                        color: "#ff9800",
+                        letterSpacing: "2px",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Weapon Augments
+                    </h3>
+
+                    <p
+                      style={{
+                        fontSize: "15px",
+                        opacity: 0.8,
+                        marginBottom: "24px",
+                        lineHeight: "1.6",
+                      }}
+                    >
+                      Choose which upgrade path you want to expand later.
+                    </p>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "14px",
+                        marginBottom: "18px",
+                      }}
+                    >
+                      <button
+                        onClick={() => setSelectedAugmentCategory("weapons")}
+                        style={{
+                          padding: "18px 16px",
+                          fontSize: "18px",
+                          fontWeight: "bold",
+                          background: "rgba(33,150,243,0.85)",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "10px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Weapons
+                      </button>
+
+                      <button
+                        onClick={() => setSelectedAugmentCategory("user")}
+                        style={{
+                          padding: "18px 16px",
+                          fontSize: "18px",
+                          fontWeight: "bold",
+                          background: "rgba(156,39,176,0.85)",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "10px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        User
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setShowAugmentCategoryModal(false);
+                        setSelectedAugmentCategory(null);
+                      }}
+                      style={{
+                        padding: "12px 20px",
+                        fontSize: "14px",
+                        fontWeight: "bold",
+                        background: "transparent",
+                        color: "rgba(200,168,75,0.9)",
+                        border: "1px solid rgba(232,160,32,0.35)",
+                        cursor: "pointer",
+                        letterSpacing: "1px",
+                        textTransform: "uppercase",
+                        fontFamily:
+                          '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                      }}
+                    >
+                      Close
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <h3
+                      style={{
+                        fontSize: "28px",
+                        marginBottom: "10px",
+                        color:
+                          selectedAugmentCategory === "weapons"
+                            ? "#42a5f5"
+                            : "#ba68c8",
+                        letterSpacing: "2px",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {selectedAugmentCategory === "weapons"
+                        ? "Weapons Upgrades"
+                        : "User Upgrades"}
+                    </h3>
+
+                    <p
+                      style={{
+                        fontSize: "15px",
+                        opacity: 0.8,
+                        marginBottom: "24px",
+                        lineHeight: "1.6",
+                      }}
+                    >
+                      Framework panel only for now. These cards are placeholders
+                      for the next upgrade pass.
+                    </p>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "14px",
+                        marginBottom: "18px",
+                      }}
+                    >
+                      {selectedAugmentCategory === "weapons" ? (
+                        <>
+                          <div
+                            style={{
+                              padding: "16px",
+                              background: "rgba(255,255,255,0.08)",
+                              border: "1px solid rgba(66,165,245,0.35)",
+                              borderRadius: "10px",
+                              textAlign: "left",
+                            }}
+                          >
+                            <button
+                              onClick={() => {
+                                const damageCost = 3 + gameState.augmentLevels.weaponDamage;
+
+                                if (gameState.coins < damageCost) return;
+
+                                setGameState((prev) => ({
+                                  ...prev,
+                                  coins: prev.coins - damageCost,
+                                  augmentLevels: {
+                                    ...prev.augmentLevels,
+                                    weaponDamage: prev.augmentLevels.weaponDamage + 1,
+                                  },
+                                }));
+                              }}
+                              style={{
+                                padding: "16px",
+                                background: "rgba(255,255,255,0.08)",
+                                border: "1px solid rgba(66,165,245,0.35)",
+                                borderRadius: "10px",
+                                textAlign: "left",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <div style={{ fontSize: "17px", fontWeight: "bold", marginBottom: "6px" }}>
+                                Damage
+                              </div>
+                              <div style={{ fontSize: "13px", opacity: 0.75, marginBottom: "8px" }}>
+                                Increase weapon damage per shot.
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#90caf9" }}>
+                                Level: {gameState.augmentLevels.weaponDamage}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ffd54f", marginTop: "4px" }}>
+                                Cost: {3 + gameState.augmentLevels.weaponDamage} coins
+                              </div>
+                            </button>
+                            
+                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
+                              Increase weapon damage per shot.
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              padding: "16px",
+                              background: "rgba(255,255,255,0.08)",
+                              border: "1px solid rgba(66,165,245,0.35)",
+                              borderRadius: "10px",
+                              textAlign: "left",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "17px",
+                                fontWeight: "bold",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Fire Rate
+                            </div>
+                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
+                              Shoot faster with automatic weapons.
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              padding: "16px",
+                              background: "rgba(255,255,255,0.08)",
+                              border: "1px solid rgba(66,165,245,0.35)",
+                              borderRadius: "10px",
+                              textAlign: "left",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "17px",
+                                fontWeight: "bold",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Reload Speed
+                            </div>
+                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
+                              Reduce reload downtime.
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              padding: "16px",
+                              background: "rgba(255,255,255,0.08)",
+                              border: "1px solid rgba(66,165,245,0.35)",
+                              borderRadius: "10px",
+                              textAlign: "left",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "17px",
+                                fontWeight: "bold",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Spread Control
+                            </div>
+                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
+                              Improve pellet spread and accuracy.
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div
+                            style={{
+                              padding: "16px",
+                              background: "rgba(255,255,255,0.08)",
+                              border: "1px solid rgba(186,104,200,0.35)",
+                              borderRadius: "10px",
+                              textAlign: "left",
+                            }}
+                          >
+                            <button
+                              onClick={() => {
+                                const healthCost = 3 + gameState.augmentLevels.userMaxHealth;
+
+                                if (gameState.coins < healthCost) return;
+
+                                setGameState((prev) => ({
+                                  ...prev,
+                                  coins: prev.coins - healthCost,
+                                  maxHealth: prev.maxHealth + 10,
+                                  health: Math.min(prev.health + 10, prev.maxHealth + 10),
+                                  augmentLevels: {
+                                    ...prev.augmentLevels,
+                                    userMaxHealth: prev.augmentLevels.userMaxHealth + 1,
+                                  },
+                                }));
+                              }}
+                              style={{
+                                padding: "16px",
+                                background: "rgba(255,255,255,0.08)",
+                                border: "1px solid rgba(186,104,200,0.35)",
+                                borderRadius: "10px",
+                                textAlign: "left",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <div style={{ fontSize: "17px", fontWeight: "bold", marginBottom: "6px" }}>
+                                Max Health
+                              </div>
+                              <div style={{ fontSize: "13px", opacity: 0.75, marginBottom: "8px" }}>
+                                Increase total health pool by +10.
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ce93d8" }}>
+                                Level: {gameState.augmentLevels.userMaxHealth}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ffd54f", marginTop: "4px" }}>
+                                Cost: {3 + gameState.augmentLevels.userMaxHealth} coins
+                              </div>
+                            </button>
+                            
+                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
+                              Increase total health pool.
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              padding: "16px",
+                              background: "rgba(255,255,255,0.08)",
+                              border: "1px solid rgba(186,104,200,0.35)",
+                              borderRadius: "10px",
+                              textAlign: "left",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "17px",
+                                fontWeight: "bold",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Move Speed
+                            </div>
+                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
+                              Move faster between threats.
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              padding: "16px",
+                              background: "rgba(255,255,255,0.08)",
+                              border: "1px solid rgba(186,104,200,0.35)",
+                              borderRadius: "10px",
+                              textAlign: "left",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "17px",
+                                fontWeight: "bold",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Regen
+                            </div>
+                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
+                              Recover health over time later.
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              padding: "16px",
+                              background: "rgba(255,255,255,0.08)",
+                              border: "1px solid rgba(186,104,200,0.35)",
+                              borderRadius: "10px",
+                              textAlign: "left",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "17px",
+                                fontWeight: "bold",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Damage Resist
+                            </div>
+                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
+                              Reduce incoming damage later.
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "center",
+                        gap: "12px",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <button
+                        onClick={() => setSelectedAugmentCategory(null)}
+                        style={{
+                          padding: "12px 20px",
+                          fontSize: "14px",
+                          fontWeight: "bold",
+                          background: "transparent",
+                          color: "rgba(200,168,75,0.9)",
+                          border: "1px solid rgba(232,160,32,0.35)",
+                          cursor: "pointer",
+                          letterSpacing: "1px",
+                          textTransform: "uppercase",
+                          fontFamily:
+                            '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                        }}
+                      >
+                        Back
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setShowAugmentCategoryModal(false);
+                          setSelectedAugmentCategory(null);
+                        }}
+                        style={{
+                          padding: "12px 20px",
+                          fontSize: "14px",
+                          fontWeight: "bold",
+                          background: "transparent",
+                          color: "rgba(200,168,75,0.9)",
+                          border: "1px solid rgba(232,160,32,0.35)",
+                          cursor: "pointer",
+                          letterSpacing: "1px",
+                          textTransform: "uppercase",
+                          fontFamily:
+                            '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                        }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {nextLevel && (
             <div
@@ -6004,15 +7457,15 @@ function HUD({
           <button
             onClick={() => {
               setGameState((prev) => {
-                // Add weapon unlock (main weapon + any additional tier unlocks)
                 let newUnlockedWeapons = prev.unlockedWeapons;
+
                 if (
                   weaponUnlock &&
                   !prev.unlockedWeapons.includes(weaponUnlock.id)
                 ) {
                   newUnlockedWeapons = [...newUnlockedWeapons, weaponUnlock.id];
                 }
-                // Add additional tier weapons (e.g., Spreadshot when Mustard Launcher unlocks)
+
                 for (const additionalId of additionalUnlocks) {
                   if (!newUnlockedWeapons.includes(additionalId)) {
                     newUnlockedWeapons = [...newUnlockedWeapons, additionalId];
@@ -6182,8 +7635,8 @@ function HUD({
                     const hours = Math.floor(totalSeconds / 3600);
                     const minutes = Math.floor((totalSeconds % 3600) / 60);
                     const seconds = totalSeconds % 60;
-                    const fastestRunTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                    
+                    const fastestRunTime = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+
                     try {
                       await fetch("/api/leaderboard", {
                         method: "POST",
@@ -6220,6 +7673,10 @@ function HUD({
                   },
                   unlockedWeapons: [1],
                   inventory: [],
+                  augmentLevels: {
+                    weaponDamage: 0,
+                    userMaxHealth: 0,
+                  },
                   gameStartTime: Date.now(),
                   user: {
                     ...prev.user,
@@ -6271,8 +7728,8 @@ function HUD({
                     const hours = Math.floor(totalSeconds / 3600);
                     const minutes = Math.floor((totalSeconds % 3600) / 60);
                     const seconds = totalSeconds % 60;
-                    const fastestRunTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                    
+                    const fastestRunTime = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+
                     try {
                       await fetch("/api/leaderboard", {
                         method: "POST",
@@ -6383,7 +7840,9 @@ function HUD({
             {gameState.gameMode === "endless" && (
               <div style={{ marginBottom: "10px" }}>
                 Total Kills:{" "}
-                <span style={{ color: "#E91E63" }}>{gameState.story.totalKills}</span>
+                <span style={{ color: "#E91E63" }}>
+                  {gameState.story.totalKills}
+                </span>
               </div>
             )}
             <div style={{ marginBottom: "10px" }}>
@@ -6396,8 +7855,8 @@ function HUD({
             </div>
             {!gameState.user.isGuest && (
               <div style={{ fontSize: "16px", opacity: 0.8 }}>
-                {gameState.gameMode === "endless" 
-                  ? "Kills saved to leaderboard!" 
+                {gameState.gameMode === "endless"
+                  ? "Kills saved to leaderboard!"
                   : "Currency added to your account!"}
               </div>
             )}
@@ -6572,7 +8031,15 @@ function HUD({
             minWidth: "320px",
           }}
         >
-          <div style={{ fontSize: "12px", color: "#c8a84b", letterSpacing: "3px", textTransform: "uppercase", marginBottom: "6px" }}>
+          <div
+            style={{
+              fontSize: "12px",
+              color: "#c8a84b",
+              letterSpacing: "3px",
+              textTransform: "uppercase",
+              marginBottom: "6px",
+            }}
+          >
             Paused
           </div>
           <h2
@@ -6687,173 +8154,176 @@ function HUD({
 
   return (
     <>
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        width: "100vw",
-        height: "100vh",
-        pointerEvents: "none",
-        zIndex: 100,
-        fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
-      }}
-    >
-      <Crosshair />
-      {/* Health */}
       <div
         style={{
-          position: "absolute",
-          bottom: "40px",
-          left: "40px",
-          background: "rgba(0,0,0,0.7)",
-          padding: "15px",
-          borderRadius: "8px",
-          color: "white",
-          border: "2px solid rgba(255,255,255,0.3)",
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          pointerEvents: "none",
+          zIndex: 100,
+          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
         }}
       >
+        <Crosshair />
+        {/* Health */}
         <div
           style={{
-            marginBottom: "8px",
-            fontSize: "14px",
-            fontWeight: "bold",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-          }}
-        >
-          HEALTH
-          {gameState.tokensPurchased > 0 && (
-            <div
-              style={{
-                fontSize: "13px",
-                background: "rgba(76,175,80,0.3)",
-                padding: "3px 7px",
-                borderRadius: "4px",
-                border: "1px solid #4caf50",
-                color: "#4caf50",
-              }}
-              title={`Health Buff Tokens: ${gameState.tokensPurchased}`}
-            >
-              💚 +{gameState.tokensPurchased * 10}
-            </div>
-          )}
-        </div>
-        <div
-          style={{
-            width: "200px",
-            height: "20px",
-            background: "rgba(255,255,255,0.2)",
-            borderRadius: "4px",
-            overflow: "hidden",
+            position: "absolute",
+            bottom: "40px",
+            left: "40px",
+            background: "rgba(0,0,0,0.7)",
+            padding: "15px",
+            borderRadius: "8px",
+            color: "white",
+            border: "2px solid rgba(255,255,255,0.3)",
           }}
         >
           <div
             style={{
-              width: `${(gameState.health / gameState.maxHealth) * 100}%`,
-              height: "100%",
-              background:
-                gameState.health > gameState.maxHealth * 0.3
-                  ? "#00ff00"
-                  : "#ff0000",
-              transition: "width 0.3s ease",
+              marginBottom: "8px",
+              fontSize: "14px",
+              fontWeight: "bold",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
             }}
-          />
+          >
+            HEALTH
+            {gameState.tokensPurchased > 0 && (
+              <div
+                style={{
+                  fontSize: "13px",
+                  background: "rgba(76,175,80,0.3)",
+                  padding: "3px 7px",
+                  borderRadius: "4px",
+                  border: "1px solid #4caf50",
+                  color: "#4caf50",
+                }}
+                title={`Health Buff Tokens: ${gameState.tokensPurchased}`}
+              >
+                💚 +{gameState.tokensPurchased * 10}
+              </div>
+            )}
+          </div>
+          <div
+            style={{
+              width: "200px",
+              height: "20px",
+              background: "rgba(255,255,255,0.2)",
+              borderRadius: "4px",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${(gameState.health / gameState.maxHealth) * 100}%`,
+                height: "100%",
+                background:
+                  gameState.health > gameState.maxHealth * 0.3
+                    ? "#00ff00"
+                    : "#ff0000",
+                transition: "width 0.3s ease",
+              }}
+            />
+          </div>
+          <div style={{ marginTop: "4px", fontSize: "12px" }}>
+            {gameState.health} / {gameState.maxHealth}
+          </div>
         </div>
-        <div style={{ marginTop: "4px", fontSize: "12px" }}>
-          {gameState.health} / {gameState.maxHealth}
-        </div>
-      </div>
 
-      {/* Weapon & Ammo */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: "40px",
-          right: "40px",
-          background: "rgba(0,0,0,0.7)",
-          padding: "15px",
-          borderRadius: "8px",
-          color: "white",
-          textAlign: "center",
-          border: "2px solid rgba(255,255,255,0.3)",
-        }}
-      >
+        {/* Weapon & Ammo */}
         <div
           style={{
-            fontSize: "16px",
-            fontWeight: "bold",
-            marginBottom: "8px",
-            color: "#ffeb3b",
+            position: "absolute",
+            bottom: "40px",
+            right: "40px",
+            background: "rgba(0,0,0,0.7)",
+            padding: "15px",
+            borderRadius: "8px",
+            color: "white",
+            textAlign: "center",
+            border: "2px solid rgba(255,255,255,0.3)",
           }}
         >
-          {weapons[gameState.currentWeapon].name}
+          <div
+            style={{
+              fontSize: "16px",
+              fontWeight: "bold",
+              marginBottom: "8px",
+              color: "#ffeb3b",
+            }}
+          >
+            {weapons[gameState.currentWeapon].name}
+          </div>
+          <div
+            style={{
+              fontSize: "24px",
+              fontWeight: "bold",
+              marginBottom: "4px",
+            }}
+          >
+            {gameState.isReloading ? "RELOADING..." : gameState.ammo}
+          </div>
+          <div style={{ fontSize: "12px", opacity: 0.8 }}>
+            / {weapons[gameState.currentWeapon].maxAmmo}
+          </div>
+          <div style={{ fontSize: "10px", marginTop: "4px", opacity: 0.6 }}>
+            AMMO
+          </div>
+          <div style={{ fontSize: "8px", marginTop: "4px", opacity: 0.5 }}>
+            Keys: 1-4 to switch | R to reload
+          </div>
         </div>
-        <div
-          style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "4px" }}
-        >
-          {gameState.isReloading ? "RELOADING..." : gameState.ammo}
-        </div>
-        <div style={{ fontSize: "12px", opacity: 0.8 }}>
-          / {weapons[gameState.currentWeapon].maxAmmo}
-        </div>
-        <div style={{ fontSize: "10px", marginTop: "4px", opacity: 0.6 }}>
-          AMMO
-        </div>
-        <div style={{ fontSize: "8px", marginTop: "4px", opacity: 0.5 }}>
-          Keys: 1-4 to switch | R to reload
-        </div>
-      </div>
 
-      {/* Coins & Level Progress */}
-      <div
-        style={{
-          position: "absolute",
-          top: "40px",
-          left: "40px",
-          background: "rgba(0,0,0,0.7)",
-          padding: "15px",
-          borderRadius: "8px",
-          color: "white",
-          border: "2px solid rgba(255,215,0,0.5)",
-          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
-        }}
-      >
+        {/* Coins & Level Progress */}
         <div
           style={{
-            fontSize: "14px",
-            fontWeight: "bold",
-            marginBottom: "8px",
-            color: "#fdc830",
+            position: "absolute",
+            top: "40px",
+            left: "40px",
+            background: "rgba(0,0,0,0.7)",
+            padding: "15px",
+            borderRadius: "8px",
+            color: "white",
+            border: "2px solid rgba(255,215,0,0.5)",
+            fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
           }}
         >
-          💰 COINS: {gameState.coins}
-        </div>
-        <div
-          style={{
-            fontSize: "12px",
-            color: "#ffeb3b",
-            fontWeight: "bold",
-            marginBottom: "4px",
-          }}
-        >
-          {LEVELS[gameState.level.currentLevel]?.name || "Final Level"}
-        </div>
-        <div style={{ fontSize: "11px", marginBottom: "8px" }}>
-          Kills: {gameState.level.killsThisLevel}/
-          {LEVELS[gameState.level.currentLevel]?.killsRequired || "∞"}
-        </div>
-        <div style={{ fontSize: "11px", color: "#90EE90" }}>
-          ✓ Allies Rescued: {gameState.story.alliesRescued}
-        </div>
-        <div style={{ fontSize: "11px", color: "#FFD700" }}>
-          ✓ Settlements: {gameState.story.settlementsConquered.length}/
-          {SETTLEMENTS.length}
+          <div
+            style={{
+              fontSize: "14px",
+              fontWeight: "bold",
+              marginBottom: "8px",
+              color: "#fdc830",
+            }}
+          >
+            💰 COINS: {gameState.coins}
+          </div>
+          <div
+            style={{
+              fontSize: "12px",
+              color: "#ffeb3b",
+              fontWeight: "bold",
+              marginBottom: "4px",
+            }}
+          >
+            {LEVELS[gameState.level.currentLevel]?.name || "Final Level"}
+          </div>
+          <div style={{ fontSize: "11px", marginBottom: "8px" }}>
+            Kills: {gameState.level.killsThisLevel}/
+            {LEVELS[gameState.level.currentLevel]?.killsRequired || "∞"}
+          </div>
+          <div style={{ fontSize: "11px", color: "#90EE90" }}>
+            ✓ Allies Rescued: {gameState.story.alliesRescued}
+          </div>
+          <div style={{ fontSize: "11px", color: "#FFD700" }}>
+            ✓ Settlements: {gameState.story.settlementsConquered.length}/
+            {SETTLEMENTS.length}
+          </div>
         </div>
       </div>
-    </div>
-
     </>
   );
 }
@@ -7027,6 +8497,10 @@ function Game() {
     unlockedWeapons: [1], // Start with pistol only
     inventory: [], // No items purchased yet
     tokensPurchased: 0, // No health buff tokens purchased yet
+    augmentLevels: {
+      weaponDamage: 0,
+      userMaxHealth: 0,
+    },
     lastDamageTime: 0,
     currentWeapon: 1, // Start with pistol
     isReloading: false,
@@ -7071,7 +8545,9 @@ function Game() {
           }));
           // Restore saved settings
           try {
-            const settingsRes = await fetch("/api/settings", { credentials: "include" });
+            const settingsRes = await fetch("/api/settings", {
+              credentials: "include",
+            });
             const settingsData = await settingsRes.json();
             if (settingsData.success && settingsData.settings) {
               const s = settingsData.settings;
@@ -7092,7 +8568,10 @@ function Game() {
 
   // Release pointer lock when entering non-game phases so UI is clickable
   useEffect(() => {
-    if (gameState.gamePhase === "levelTransition" || gameState.gamePhase === "paused") {
+    if (
+      gameState.gamePhase === "levelTransition" ||
+      gameState.gamePhase === "paused"
+    ) {
       document.exitPointerLock();
     }
   }, [gameState.gamePhase]);
@@ -7100,16 +8579,21 @@ function Game() {
   // Show a brief loading screen while checking session to avoid login flash
   if (sessionChecking) {
     return (
-      <div style={{
-        position: "fixed", inset: 0,
-        background: "#0d0a05",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
-        color: "rgba(232,160,32,0.9)",
-        fontSize: "22px",
-        letterSpacing: "3px",
-        textTransform: "uppercase",
-      }}>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "#0d0a05",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+          color: "rgba(232,160,32,0.9)",
+          fontSize: "22px",
+          letterSpacing: "3px",
+          textTransform: "uppercase",
+        }}
+      >
         Loading...
       </div>
     );
@@ -7130,7 +8614,10 @@ function Game() {
         gl={{ antialias: true, powerPreference: "high-performance" }}
         style={{ width: "100vw", height: "100vh" }}
         onClick={() => {
-          if (gameState.gamePhase === "playing" && !document.pointerLockElement) {
+          if (
+            gameState.gamePhase === "playing" &&
+            !document.pointerLockElement
+          ) {
             document.body.requestPointerLock();
           }
         }}
