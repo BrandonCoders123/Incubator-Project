@@ -1150,7 +1150,6 @@ function Enemy({
         distanceToPlayer,
         archetype.moveSpeed,
         deltaTime,
-        enemy.health / archetype.health,
       );
 
       const walls = getWallsForLevel(gameState.level.currentLevel);
