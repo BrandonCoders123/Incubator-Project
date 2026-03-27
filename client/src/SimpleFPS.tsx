@@ -140,12 +140,18 @@ const LEVELS = [
 
 // Enemy types and archetypes
 type EnemyType = "melee" | "ranged" | "giant" | "rat";
+type EnemyBehavior = "chase" | "kite";
 
 interface Enemy {
   id: string;
   type: EnemyType;
+  behavior: EnemyBehavior;
   position: [number, number, number];
   velocity: [number, number, number];
+  movementDirection: [number, number, number];
+  isMoving: boolean;
+  blockedMoveFrames: number;
+  steeringPreference: -1 | 1;
   health: number;
   nextAttackAt: number;
 }
@@ -190,6 +196,13 @@ const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     color: "#363636",
     size: 0.5, //2x smaller than normal enemies
   },
+};
+
+const ENEMY_BEHAVIOR_BY_TYPE: Record<EnemyType, EnemyBehavior> = {
+  melee: "chase",
+  giant: "chase",
+  rat: "chase",
+  ranged: "kite",
 };
 
 interface Wall {
@@ -343,6 +356,88 @@ function checkRampCollision(
     }
   }
   return false;
+}
+
+function getEnemyMovementIntent(
+  enemy: Enemy,
+  behavior: EnemyBehavior,
+  toPlayerDirection: THREE.Vector3,
+  distanceToPlayer: number,
+  moveSpeed: number,
+  deltaTime: number,
+): THREE.Vector3 {
+  const step = moveSpeed * deltaTime;
+  const healthRatio = enemy.health / ENEMY_ARCHETYPES[enemy.type].health;
+  const lateral = new THREE.Vector3(
+    -toPlayerDirection.z,
+    0,
+    toPlayerDirection.x,
+  ).multiplyScalar(enemy.steeringPreference * 0.2 * step);
+
+  if (behavior === "kite") {
+    // Lower-health ranged enemies become more evasive and keep extra spacing.
+    const minDistance = healthRatio < 0.5 ? 10 : 8;
+    const maxDistance = healthRatio < 0.5 ? 14 : 12;
+
+    if (distanceToPlayer < minDistance) {
+      return toPlayerDirection.clone().multiplyScalar(-step);
+    }
+    if (distanceToPlayer > maxDistance) {
+      return toPlayerDirection.clone().multiplyScalar(step).add(lateral);
+    }
+
+    // Maintain pressure by orbiting slightly while in ideal range.
+    return lateral;
+  }
+
+  if (healthRatio < 0.3 && distanceToPlayer < 2.5) {
+    // Critically wounded melee units can briefly disengage to re-approach.
+    return toPlayerDirection.clone().multiplyScalar(-step * 0.5).add(lateral);
+  }
+
+  return toPlayerDirection.clone().multiplyScalar(step).add(lateral);
+}
+
+function resolveMovementWithFallback(
+  originalPos: THREE.Vector3,
+  movementIntent: THREE.Vector3,
+  walls: { position: number[]; size: number[] }[],
+  collisionRadius: number,
+  steeringPreference: -1 | 1,
+): {
+  resolvedPos: THREE.Vector3;
+  appliedMovement: THREE.Vector3;
+} {
+  const rotatedIntent = (angle: number) =>
+    movementIntent.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+  const steerSign = steeringPreference >= 0 ? 1 : -1;
+
+  const candidates = [
+    movementIntent.clone(),
+    new THREE.Vector3(movementIntent.x, 0, 0),
+    new THREE.Vector3(0, 0, movementIntent.z),
+    rotatedIntent((Math.PI / 8) * steerSign),
+    rotatedIntent((Math.PI / 8) * -steerSign),
+    rotatedIntent((Math.PI / 4) * steerSign),
+    rotatedIntent((Math.PI / 4) * -steerSign),
+    rotatedIntent((Math.PI / 2) * steerSign).multiplyScalar(0.8),
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate.lengthSq() <= 0.000001) continue;
+    const targetPos = originalPos.clone().add(candidate);
+    if (!checkWallCollision(targetPos, walls, collisionRadius)) {
+      return {
+        resolvedPos: targetPos,
+        appliedMovement: candidate,
+      };
+    }
+  }
+
+  return {
+    resolvedPos: originalPos.clone(),
+    appliedMovement: new THREE.Vector3(0, 0, 0),
+  };
 }
 
 // Get ramps for current level
@@ -1124,61 +1219,45 @@ function Enemy({
 
       // AI Movement - different behavior for melee vs ranged
       const playerPos = camera.position.clone();
-      const direction = new THREE.Vector3().subVectors(playerPos, enemyPos);
-      direction.y = 0; // Keep movement on horizontal plane
-      const distanceToPlayer = direction.length();
-      direction.normalize();
+      const toPlayerDirection = new THREE.Vector3().subVectors(
+        playerPos,
+        enemyPos,
+      );
+      toPlayerDirection.y = 0; // Keep movement on horizontal plane
+      const distanceToPlayer = toPlayerDirection.length();
+      const normalizedDirection =
+        distanceToPlayer > 0
+          ? toPlayerDirection.clone().divideScalar(distanceToPlayer)
+          : new THREE.Vector3(0, 0, 0);
+      const behavior = enemy.behavior ?? ENEMY_BEHAVIOR_BY_TYPE[enemy.type];
+      const movementIntent = getEnemyMovementIntent(
+        enemy,
+        behavior,
+        normalizedDirection,
+        distanceToPlayer,
+        archetype.moveSpeed,
+        deltaTime,
+      );
 
-      // Preserve original position before movement
-      const originalPos = enemyPos.clone();
-      let newPos = enemyPos.clone();
-
-      if (
-        enemy.type === "melee" ||
-        enemy.type === "giant" ||
-        enemy.type === "rat"
-      ) {
-        // Melee, Giant, and Rat: Always move towards player
-        newPos = newPos.add(
-          direction.clone().multiplyScalar(archetype.moveSpeed * deltaTime),
-        );
-      } else if (enemy.type === "ranged") {
-        // Ranged: Keep distance of 8-12 units
-        const idealDistance = 10;
-        if (distanceToPlayer < 8) {
-          // Too close, back away
-          newPos = newPos.add(
-            direction.clone().multiplyScalar(-archetype.moveSpeed * deltaTime),
-          );
-        } else if (distanceToPlayer > 12) {
-          // Too far, move closer
-          newPos = newPos.add(
-            direction.clone().multiplyScalar(archetype.moveSpeed * deltaTime),
-          );
-        }
-        // If in ideal range (8-12), don't move much
-      }
-
-      // Wall collision detection for enemies with sliding
       const walls = getWallsForLevel(gameState.level.currentLevel);
-      if (checkWallCollision(newPos, walls, 0.4)) {
-        // Enemy hit a wall, try sliding along walls
-        const xOnly = originalPos.clone();
-        xOnly.x = newPos.x;
-        const zOnly = originalPos.clone();
-        zOnly.z = newPos.z;
-
-        if (!checkWallCollision(xOnly, walls, 0.4)) {
-          // Can move in X direction
-          newPos.copy(xOnly);
-        } else if (!checkWallCollision(zOnly, walls, 0.4)) {
-          // Can move in Z direction
-          newPos.copy(zOnly);
-        } else {
-          // Can't move at all, revert to original position
-          newPos.copy(originalPos);
-        }
-      }
+      const { resolvedPos, appliedMovement } = resolveMovementWithFallback(
+        enemyPos,
+        movementIntent,
+        walls,
+        0.4,
+        enemy.steeringPreference ?? 1,
+      );
+      const isMoving = appliedMovement.lengthSq() > 0.0001;
+      const movementDirection = isMoving
+        ? appliedMovement.clone().normalize()
+        : normalizedDirection;
+      const blockedMoveFrames = isMoving ? 0 : (enemy.blockedMoveFrames ?? 0) + 1;
+      const steeringPreference: -1 | 1 =
+        blockedMoveFrames > 18
+          ? enemy.steeringPreference === 1
+            ? -1
+            : 1
+          : (enemy.steeringPreference ?? 1);
 
       // Update enemy position in game state
       setGameState((prev) => ({
@@ -1187,10 +1266,19 @@ function Enemy({
           e.id === enemy.id
             ? {
                 ...e,
-                position: [newPos.x, newPos.y, newPos.z] as [
+                position: [resolvedPos.x, resolvedPos.y, resolvedPos.z] as [
                   number,
                   number,
                   number,
+                ],
+                behavior,
+                isMoving,
+                blockedMoveFrames,
+                steeringPreference,
+                movementDirection: [
+                  movementDirection.x,
+                  movementDirection.y,
+                  movementDirection.z,
                 ],
               }
             : e,
@@ -1229,7 +1317,7 @@ function Enemy({
         const currentTime = Date.now();
         if (currentTime >= enemy.nextAttackAt && distanceToPlayer < 20) {
           // Spawn enemy projectile
-          const projectileDir = direction.clone();
+          const projectileDir = normalizedDirection.clone();
           setGameState((prev) => ({
             ...prev,
             enemies: prev.enemies.map((e) =>
@@ -8441,8 +8529,13 @@ function GameLogic({
           {
             id: `enemy_${Date.now()}_${Math.random()}`,
             type: enemyType,
+            behavior: ENEMY_BEHAVIOR_BY_TYPE[enemyType],
             position: [x, 1, z],
             velocity: [0, 0, 0],
+            movementDirection: [0, 0, 1],
+            isMoving: false,
+            blockedMoveFrames: 0,
+            steeringPreference: Math.random() < 0.5 ? -1 : 1,
             health: archetype.health,
             nextAttackAt: 0,
           },
