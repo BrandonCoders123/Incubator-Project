@@ -280,7 +280,9 @@ interface GameState {
   tokensPurchased: number; // Track number of health buff tokens purchased
   augmentLevels: {
     weaponDamage: number;
+    weaponFireRate: number;
     userMaxHealth: number;
+    userMoveSpeed: number;
   };
   lastDamageTime: number;
   currentWeapon: number;
@@ -649,7 +651,11 @@ function Player({
         if (currentWeapon.fireRate === 0) {
           // Semi-automatic
           const now = Date.now();
-          if (now - currentState.lastShotTime >= 100) {
+          const semiAutoInterval = Math.max(
+            40,
+            100 - currentState.augmentLevels.weaponFireRate * 6,
+          );
+          if (now - currentState.lastShotTime >= semiAutoInterval) {
             // Minimum delay for semi-auto
             // Shoot bullet(s)
             const baseDirection = new THREE.Vector3(
@@ -769,7 +775,9 @@ function Player({
       !gameState.isReloading
     ) {
       const now = Date.now();
-      const fireInterval = 1000 / currentWeapon.fireRate;
+      const fireRateMultiplier =
+        1 + gameState.augmentLevels.weaponFireRate * 0.08;
+      const fireInterval = 1000 / (currentWeapon.fireRate * fireRateMultiplier);
 
       if (now - gameState.lastShotTime >= fireInterval) {
         // Shoot bullet
@@ -807,7 +815,7 @@ function Player({
     }
 
     // Movement
-    const moveSpeed = 10;
+    const moveSpeed = 10 + gameState.augmentLevels.userMoveSpeed * 0.8;
     const jumpSpeed = 12;
 
     // Update player rotation and billboarding
@@ -6982,17 +6990,7 @@ function HUD({
                     ⚔️ Weapon Augments
                   </div>
                   <div style={{ fontSize: "14px", opacity: 0.7 }}>
-                    Open the augment framework for future upgrades to weapons
-                    and player stats.
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "13px",
-                      color: "#ffcc80",
-                      marginTop: "8px",
-                    }}
-                  >
-                    Framework only for now — no upgrade logic yet.
+                    Spend coins on run-based weapon and player upgrades.
                   </div>
                 </div>
 
@@ -7072,7 +7070,7 @@ function HUD({
                         lineHeight: "1.6",
                       }}
                     >
-                      Choose which upgrade path you want to expand later.
+                      Choose which upgrade path to improve this run.
                     </p>
 
                     <div
@@ -7165,8 +7163,8 @@ function HUD({
                         lineHeight: "1.6",
                       }}
                     >
-                      Framework panel only for now. These cards are placeholders
-                      for the next upgrade pass.
+                      Buy active upgrades now. Placeholder cards are marked
+                      "coming soon".
                     </p>
 
                     <div
@@ -7240,18 +7238,43 @@ function HUD({
                               textAlign: "left",
                             }}
                           >
-                            <div
+                            <button
+                              onClick={() => {
+                                const fireRateCost = 3 + gameState.augmentLevels.weaponFireRate;
+
+                                if (gameState.coins < fireRateCost) return;
+
+                                setGameState((prev) => ({
+                                  ...prev,
+                                  coins: prev.coins - fireRateCost,
+                                  augmentLevels: {
+                                    ...prev.augmentLevels,
+                                    weaponFireRate: prev.augmentLevels.weaponFireRate + 1,
+                                  },
+                                }));
+                              }}
                               style={{
-                                fontSize: "17px",
-                                fontWeight: "bold",
-                                marginBottom: "6px",
+                                padding: "16px",
+                                background: "rgba(255,255,255,0.08)",
+                                border: "1px solid rgba(66,165,245,0.35)",
+                                borderRadius: "10px",
+                                textAlign: "left",
+                                cursor: "pointer",
                               }}
                             >
-                              Fire Rate
-                            </div>
-                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
-                              Shoot faster with automatic weapons.
-                            </div>
+                              <div style={{ fontSize: "17px", fontWeight: "bold", marginBottom: "6px" }}>
+                                Fire Rate
+                              </div>
+                              <div style={{ fontSize: "13px", opacity: 0.75, marginBottom: "8px" }}>
+                                Increase firing speed and reduce shot delay.
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#90caf9" }}>
+                                Level: {gameState.augmentLevels.weaponFireRate}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ffd54f", marginTop: "4px" }}>
+                                Cost: {3 + gameState.augmentLevels.weaponFireRate} coins
+                              </div>
+                            </button>
                           </div>
 
                           <div
@@ -7273,7 +7296,7 @@ function HUD({
                               Reload Speed
                             </div>
                             <div style={{ fontSize: "13px", opacity: 0.75 }}>
-                              Reduce reload downtime.
+                              Coming soon: reduce reload downtime.
                             </div>
                           </div>
 
@@ -7296,7 +7319,7 @@ function HUD({
                               Spread Control
                             </div>
                             <div style={{ fontSize: "13px", opacity: 0.75 }}>
-                              Improve pellet spread and accuracy.
+                              Coming soon: improve pellet spread and accuracy.
                             </div>
                           </div>
                         </>
@@ -7365,18 +7388,43 @@ function HUD({
                               textAlign: "left",
                             }}
                           >
-                            <div
+                            <button
+                              onClick={() => {
+                                const moveSpeedCost = 3 + gameState.augmentLevels.userMoveSpeed;
+
+                                if (gameState.coins < moveSpeedCost) return;
+
+                                setGameState((prev) => ({
+                                  ...prev,
+                                  coins: prev.coins - moveSpeedCost,
+                                  augmentLevels: {
+                                    ...prev.augmentLevels,
+                                    userMoveSpeed: prev.augmentLevels.userMoveSpeed + 1,
+                                  },
+                                }));
+                              }}
                               style={{
-                                fontSize: "17px",
-                                fontWeight: "bold",
-                                marginBottom: "6px",
+                                padding: "16px",
+                                background: "rgba(255,255,255,0.08)",
+                                border: "1px solid rgba(186,104,200,0.35)",
+                                borderRadius: "10px",
+                                textAlign: "left",
+                                cursor: "pointer",
                               }}
                             >
-                              Move Speed
-                            </div>
-                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
-                              Move faster between threats.
-                            </div>
+                              <div style={{ fontSize: "17px", fontWeight: "bold", marginBottom: "6px" }}>
+                                Move Speed
+                              </div>
+                              <div style={{ fontSize: "13px", opacity: 0.75, marginBottom: "8px" }}>
+                                Increase movement speed for this run.
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ce93d8" }}>
+                                Level: {gameState.augmentLevels.userMoveSpeed}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ffd54f", marginTop: "4px" }}>
+                                Cost: {3 + gameState.augmentLevels.userMoveSpeed} coins
+                              </div>
+                            </button>
                           </div>
 
                           <div
@@ -7398,7 +7446,7 @@ function HUD({
                               Regen
                             </div>
                             <div style={{ fontSize: "13px", opacity: 0.75 }}>
-                              Recover health over time later.
+                              Coming soon: recover health over time.
                             </div>
                           </div>
 
@@ -7421,7 +7469,7 @@ function HUD({
                               Damage Resist
                             </div>
                             <div style={{ fontSize: "13px", opacity: 0.75 }}>
-                              Reduce incoming damage later.
+                              Coming soon: reduce incoming damage.
                             </div>
                           </div>
                         </>
@@ -7737,7 +7785,9 @@ function HUD({
                   inventory: [],
                   augmentLevels: {
                     weaponDamage: 0,
+                    weaponFireRate: 0,
                     userMaxHealth: 0,
+                    userMoveSpeed: 0,
                   },
                   gameStartTime: Date.now(),
                   user: {
@@ -8564,7 +8614,9 @@ function Game() {
     tokensPurchased: 0, // No health buff tokens purchased yet
     augmentLevels: {
       weaponDamage: 0,
+      weaponFireRate: 0,
       userMaxHealth: 0,
+      userMoveSpeed: 0,
     },
     lastDamageTime: 0,
     currentWeapon: 1, // Start with pistol
