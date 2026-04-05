@@ -142,6 +142,22 @@ const LEVELS = [
     spawnRate: 1.5,
     maxEnemies: 20,
   },
+  {
+    id: 6,
+    name: "Shattered Skybridge",
+    description: "A ruined aerial crossing swarming with reinforcements",
+    killsRequired: 65,
+    spawnRate: 1.25,
+    maxEnemies: 24,
+  },
+  {
+    id: 7,
+    name: "Core Meltdown Nexus",
+    description: "The reactor core erupts with endless robotic defenders",
+    killsRequired: 80,
+    spawnRate: 1.0,
+    maxEnemies: 30,
+  },
 ];
 
 // Enemy types and archetypes
@@ -337,22 +353,12 @@ function checkRampCollision(
   ramps: Ramp[],
   radius: number = 0.5,
 ): boolean {
-  for (const ramp of ramps) {
-    const [rx, ry, rz] = ramp.position;
-    // Treat ramp as a simple box for collision (horizontal check)
-    const halfWidth = ramp.width / 2;
-    const halfLength = ramp.length / 2;
-
-    if (
-      position.x + radius > rx - halfWidth &&
-      position.x - radius < rx + halfWidth &&
-      position.z + radius > rz - halfLength &&
-      position.z - radius < rz + halfLength &&
-      position.y < ry + 2 // Check if player is at ramp height
-    ) {
-      return true; // Collision detected
-    }
-  }
+  // Ramps are currently visual traversal helpers. The old box-collision approach
+  // could trap the player in place when jumping into a ramp, so we explicitly
+  // disable blocking collision here until proper slope physics is implemented.
+  void position;
+  void ramps;
+  void radius;
   return false;
 }
 
@@ -375,6 +381,19 @@ function getRampsForLevel(level: number): Ramp[] {
       { position: [22, 1, 0], rotation: Math.PI, width: 4, length: 8 },
       { position: [0, 1, -22], rotation: Math.PI / 2, width: 4, length: 8 },
       { position: [0, 1, 22], rotation: -Math.PI / 2, width: 4, length: 8 },
+    ];
+  } else if (level === 5) {
+    return [
+      { position: [-24, 1, -18], rotation: Math.PI / 8, width: 4, length: 10 },
+      { position: [24, 1, 18], rotation: -Math.PI / 8, width: 4, length: 10 },
+      { position: [0, 1, -24], rotation: Math.PI / 2, width: 4, length: 12 },
+    ];
+  } else if (level === 6) {
+    return [
+      { position: [-20, 1, 0], rotation: 0, width: 6, length: 10 },
+      { position: [20, 1, 0], rotation: Math.PI, width: 6, length: 10 },
+      { position: [0, 1, -20], rotation: Math.PI / 2, width: 6, length: 10 },
+      { position: [0, 1, 20], rotation: -Math.PI / 2, width: 6, length: 10 },
     ];
   }
   return [];
@@ -441,6 +460,38 @@ function getWallsForLevel(
       { position: [-15, 5, 0], size: [1, 10, 30] },
       { position: [22, 5, 22], size: [8, 10, 8] },
       { position: [-22, 5, -22], size: [8, 10, 8] },
+    ];
+  } else if (level === 5) {
+    return [
+      { position: [30, 5, 0], size: [1, 10, 60] },
+      { position: [-30, 5, 0], size: [1, 10, 60] },
+      { position: [0, 5, 30], size: [60, 10, 1] },
+      { position: [0, 5, -30], size: [60, 10, 1] },
+      // Broken bridge lanes
+      { position: [0, 5, 8], size: [40, 10, 1] },
+      { position: [0, 5, -8], size: [40, 10, 1] },
+      { position: [-18, 5, 0], size: [1, 10, 30] },
+      { position: [18, 5, 0], size: [1, 10, 30] },
+      // Offset blockers forcing route changes
+      { position: [-8, 5, 18], size: [16, 10, 1] },
+      { position: [12, 5, -18], size: [12, 10, 1] },
+    ];
+  } else if (level === 6) {
+    return [
+      { position: [30, 5, 0], size: [1, 10, 60] },
+      { position: [-30, 5, 0], size: [1, 10, 60] },
+      { position: [0, 5, 30], size: [60, 10, 1] },
+      { position: [0, 5, -30], size: [60, 10, 1] },
+      // Cross + ring maze
+      { position: [0, 5, 0], size: [1, 10, 42] },
+      { position: [0, 5, 0], size: [42, 10, 1] },
+      { position: [12, 5, 12], size: [12, 10, 1] },
+      { position: [-12, 5, -12], size: [12, 10, 1] },
+      { position: [12, 5, -12], size: [1, 10, 12] },
+      { position: [-12, 5, 12], size: [1, 10, 12] },
+      // Tight outer choke points
+      { position: [24, 5, 0], size: [1, 10, 18] },
+      { position: [-24, 5, 0], size: [1, 10, 18] },
     ];
   }
   return [];
@@ -539,6 +590,8 @@ function Player({
         2: [0, 1, 20], // Level 3 (Palace): Spawn in safe area
         3: [-10, 1, -10], // Level 4 (Crimson Battlefield): Spawn in corner
         4: [0, 1, 0], // Level 5 (Mustard Mountain): Center spawn
+        5: [0, 1, -24], // Level 6 (Shattered Skybridge): back lane spawn
+        6: [0, 1, 24], // Level 7 (Core Meltdown Nexus): opposite lane spawn
       };
 
       const spawnPoint = spawnPoints[gameState.level.currentLevel] || [0, 1, 0];
@@ -8419,6 +8472,8 @@ function GameLogic({
       // Level 2 (Palace):           25% melee, 25% ranged, 20% giant (max 3), 30% rat
       // Level 3 (Crimson Battlefield): 20% melee, 15% ranged, 30% giant (max 8), 35% rat
       // Level 4 (Mustard Mountain): 20% melee, 10% ranged, 30% giant (max 10), 40% rat
+      // Level 5 (Shattered Skybridge): 15% melee, 10% ranged, 35% giant (max 12), 40% rat
+      // Level 6 (Core Meltdown Nexus): 10% melee, 10% ranged, 45% giant (max 16), 35% rat
       let enemyType: EnemyType = "melee";
       const currentLevel = gameState.level.currentLevel;
 
@@ -8467,6 +8522,30 @@ function GameLogic({
         } else if (roll < 0.5) {
           enemyType = "melee";
         } else if (roll < 0.6) {
+          enemyType = "ranged";
+        } else {
+          enemyType = "rat";
+        }
+      } else if (currentLevel === 5) {
+        // Level 6 (Shattered Skybridge): 15% melee, 10% ranged, 35% giant (max 12), 40% rat
+        const roll = Math.random();
+        if (roll < 0.35 && gameState.level.giantsSpawnedThisLevel < 12) {
+          enemyType = "giant";
+        } else if (roll < 0.5) {
+          enemyType = "melee";
+        } else if (roll < 0.6) {
+          enemyType = "ranged";
+        } else {
+          enemyType = "rat";
+        }
+      } else if (currentLevel >= 6) {
+        // Level 7+ (Core Meltdown Nexus and beyond): 10% melee, 10% ranged, 45% giant (max 16), 35% rat
+        const roll = Math.random();
+        if (roll < 0.45 && gameState.level.giantsSpawnedThisLevel < 16) {
+          enemyType = "giant";
+        } else if (roll < 0.55) {
+          enemyType = "melee";
+        } else if (roll < 0.65) {
           enemyType = "ranged";
         } else {
           enemyType = "rat";
