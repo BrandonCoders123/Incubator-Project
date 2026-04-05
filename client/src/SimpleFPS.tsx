@@ -289,8 +289,12 @@ interface GameState {
   augmentLevels: {
     weaponDamage: number;
     weaponFireRate: number;
+    weaponReloadSpeed: number;
+    weaponSpreadControl: number;
     userMaxHealth: number;
     userMoveSpeed: number;
+    userRegen: number;
+    userDamageResist: number;
   };
   lastDamageTime: number;
   currentWeapon: number;
@@ -351,6 +355,9 @@ function checkWallCollision(
 
 const RAMP_THICKNESS = 0.5;
 const RAMP_HEIGHT_GAIN = 2;
+const MIN_RELOAD_MULTIPLIER = 0.4;
+const MIN_SPREAD_MULTIPLIER = 0.35;
+const MAX_DAMAGE_RESISTANCE = 0.6;
 
 function getRampLocalPosition(position: THREE.Vector3, ramp: Ramp) {
   const [rx, , rz] = ramp.position;
@@ -719,8 +726,12 @@ function Player({
             if (currentWeapon.pelletCount && currentWeapon.spreadAngle) {
               // Shotgun-type weapon: create multiple pellets in a cone
               const pelletCount = currentWeapon.pelletCount;
+              const spreadControlMultiplier = Math.max(
+                MIN_SPREAD_MULTIPLIER,
+                1 - currentState.augmentLevels.weaponSpreadControl * 0.08,
+              );
               const spreadAngleRad =
-                (currentWeapon.spreadAngle * Math.PI) / 180;
+                ((currentWeapon.spreadAngle * spreadControlMultiplier) * Math.PI) / 180;
 
               for (let i = 0; i < pelletCount; i++) {
                 // Random spread within cone
@@ -853,6 +864,18 @@ function Player({
     // Movement
     const moveSpeed = 10 + gameState.augmentLevels.userMoveSpeed * 0.8;
     const jumpSpeed = 12;
+
+    if (
+      gameState.augmentLevels.userRegen > 0 &&
+      gameState.health < gameState.maxHealth
+    ) {
+      const regenPerSecond = gameState.augmentLevels.userRegen * 1.2;
+      const regenAmount = regenPerSecond * deltaTime;
+      setGameState((prev) => ({
+        ...prev,
+        health: Math.min(prev.maxHealth, prev.health + regenAmount),
+      }));
+    }
 
     // Update player rotation and billboarding
     if (playerRef.current) {
@@ -1016,12 +1039,16 @@ function Player({
         gameState.currentWeapon === 5
           ? Math.max(0, shotsMissing - 1) * 1000
           : 0;
+      const reloadMultiplier = Math.max(
+        MIN_RELOAD_MULTIPLIER,
+        1 - gameState.augmentLevels.weaponReloadSpeed * 0.1,
+      );
 
       setGameState((prev) => ({
         ...prev,
         isReloading: true,
         reloadStartTime: Date.now(),
-        reloadDuration: weapon.reloadTime + extraReloadTime,
+        reloadDuration: (weapon.reloadTime + extraReloadTime) * reloadMultiplier,
       }));
     }
 
@@ -1332,7 +1359,12 @@ function Enemy({
               currentTime - prev.lastDamageTime > archetype.attackInterval &&
               prev.gamePhase === "playing"
             ) {
-              const newHealth = Math.max(0, prev.health - archetype.damage);
+              const damageReduction = Math.min(
+                MAX_DAMAGE_RESISTANCE,
+                prev.augmentLevels.userDamageResist * 0.06,
+              );
+              const reducedDamage = archetype.damage * (1 - damageReduction);
+              const newHealth = Math.max(0, prev.health - reducedDamage);
               return {
                 ...prev,
                 health: newHealth,
@@ -1631,7 +1663,12 @@ function EnemyProjectile({
     if (distanceToPlayer < 1) {
       // Hit player
       setGameState((prev) => {
-        const newHealth = Math.max(0, prev.health - projectile.damage);
+        const damageReduction = Math.min(
+          MAX_DAMAGE_RESISTANCE,
+          prev.augmentLevels.userDamageResist * 0.06,
+        );
+        const reducedDamage = projectile.damage * (1 - damageReduction);
+        const newHealth = Math.max(0, prev.health - reducedDamage);
         return {
           ...prev,
           health: newHealth,
@@ -7363,18 +7400,43 @@ function HUD({
                               textAlign: "left",
                             }}
                           >
-                            <div
+                            <button
+                              onClick={() => {
+                                const reloadCost = 3 + gameState.augmentLevels.weaponReloadSpeed;
+
+                                if (gameState.coins < reloadCost) return;
+
+                                setGameState((prev) => ({
+                                  ...prev,
+                                  coins: prev.coins - reloadCost,
+                                  augmentLevels: {
+                                    ...prev.augmentLevels,
+                                    weaponReloadSpeed: prev.augmentLevels.weaponReloadSpeed + 1,
+                                  },
+                                }));
+                              }}
                               style={{
-                                fontSize: "17px",
-                                fontWeight: "bold",
-                                marginBottom: "6px",
+                                padding: "16px",
+                                background: "rgba(255,255,255,0.08)",
+                                border: "1px solid rgba(66,165,245,0.35)",
+                                borderRadius: "10px",
+                                textAlign: "left",
+                                cursor: "pointer",
                               }}
                             >
-                              Reload Speed
-                            </div>
-                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
-                              Coming soon: reduce reload downtime.
-                            </div>
+                              <div style={{ fontSize: "17px", fontWeight: "bold", marginBottom: "6px" }}>
+                                Reload Speed
+                              </div>
+                              <div style={{ fontSize: "13px", opacity: 0.75, marginBottom: "8px" }}>
+                                Reduce reload downtime.
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#90caf9" }}>
+                                Level: {gameState.augmentLevels.weaponReloadSpeed}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ffd54f", marginTop: "4px" }}>
+                                Cost: {3 + gameState.augmentLevels.weaponReloadSpeed} coins
+                              </div>
+                            </button>
                           </div>
 
                           <div
@@ -7386,19 +7448,45 @@ function HUD({
                               textAlign: "left",
                             }}
                           >
-                            <div
+                            <button
+                              onClick={() => {
+                                const spreadCost = 3 + gameState.augmentLevels.weaponSpreadControl;
+
+                                if (gameState.coins < spreadCost) return;
+
+                                setGameState((prev) => ({
+                                  ...prev,
+                                  coins: prev.coins - spreadCost,
+                                  augmentLevels: {
+                                    ...prev.augmentLevels,
+                                    weaponSpreadControl: prev.augmentLevels.weaponSpreadControl + 1,
+                                  },
+                                }));
+                              }}
                               style={{
-                                fontSize: "17px",
-                                fontWeight: "bold",
-                                marginBottom: "6px",
+                                padding: "16px",
+                                background: "rgba(255,255,255,0.08)",
+                                border: "1px solid rgba(66,165,245,0.35)",
+                                borderRadius: "10px",
+                                textAlign: "left",
+                                cursor: "pointer",
                               }}
                             >
-                              Spread Control
-                            </div>
-                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
-                              Coming soon: improve pellet spread and accuracy.
-                            </div>
+                              <div style={{ fontSize: "17px", fontWeight: "bold", marginBottom: "6px" }}>
+                                Spread Control
+                              </div>
+                              <div style={{ fontSize: "13px", opacity: 0.75, marginBottom: "8px" }}>
+                                Tighten pellet spread and improve accuracy.
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#90caf9" }}>
+                                Level: {gameState.augmentLevels.weaponSpreadControl}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ffd54f", marginTop: "4px" }}>
+                                Cost: {3 + gameState.augmentLevels.weaponSpreadControl} coins
+                              </div>
+                            </button>
                           </div>
+
                         </>
                       ) : (
                         <>
@@ -7513,18 +7601,43 @@ function HUD({
                               textAlign: "left",
                             }}
                           >
-                            <div
+                            <button
+                              onClick={() => {
+                                const regenCost = 3 + gameState.augmentLevels.userRegen;
+
+                                if (gameState.coins < regenCost) return;
+
+                                setGameState((prev) => ({
+                                  ...prev,
+                                  coins: prev.coins - regenCost,
+                                  augmentLevels: {
+                                    ...prev.augmentLevels,
+                                    userRegen: prev.augmentLevels.userRegen + 1,
+                                  },
+                                }));
+                              }}
                               style={{
-                                fontSize: "17px",
-                                fontWeight: "bold",
-                                marginBottom: "6px",
+                                padding: "16px",
+                                background: "rgba(255,255,255,0.08)",
+                                border: "1px solid rgba(186,104,200,0.35)",
+                                borderRadius: "10px",
+                                textAlign: "left",
+                                cursor: "pointer",
                               }}
                             >
-                              Regen
-                            </div>
-                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
-                              Coming soon: recover health over time.
-                            </div>
+                              <div style={{ fontSize: "17px", fontWeight: "bold", marginBottom: "6px" }}>
+                                Regen
+                              </div>
+                              <div style={{ fontSize: "13px", opacity: 0.75, marginBottom: "8px" }}>
+                                Regenerate health over time.
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ce93d8" }}>
+                                Level: {gameState.augmentLevels.userRegen}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ffd54f", marginTop: "4px" }}>
+                                Cost: {3 + gameState.augmentLevels.userRegen} coins
+                              </div>
+                            </button>
                           </div>
 
                           <div
@@ -7536,19 +7649,45 @@ function HUD({
                               textAlign: "left",
                             }}
                           >
-                            <div
+                            <button
+                              onClick={() => {
+                                const resistCost = 3 + gameState.augmentLevels.userDamageResist;
+
+                                if (gameState.coins < resistCost) return;
+
+                                setGameState((prev) => ({
+                                  ...prev,
+                                  coins: prev.coins - resistCost,
+                                  augmentLevels: {
+                                    ...prev.augmentLevels,
+                                    userDamageResist: prev.augmentLevels.userDamageResist + 1,
+                                  },
+                                }));
+                              }}
                               style={{
-                                fontSize: "17px",
-                                fontWeight: "bold",
-                                marginBottom: "6px",
+                                padding: "16px",
+                                background: "rgba(255,255,255,0.08)",
+                                border: "1px solid rgba(186,104,200,0.35)",
+                                borderRadius: "10px",
+                                textAlign: "left",
+                                cursor: "pointer",
                               }}
                             >
-                              Damage Resist
-                            </div>
-                            <div style={{ fontSize: "13px", opacity: 0.75 }}>
-                              Coming soon: reduce incoming damage.
-                            </div>
+                              <div style={{ fontSize: "17px", fontWeight: "bold", marginBottom: "6px" }}>
+                                Damage Resist
+                              </div>
+                              <div style={{ fontSize: "13px", opacity: 0.75, marginBottom: "8px" }}>
+                                Reduce incoming enemy damage.
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ce93d8" }}>
+                                Level: {gameState.augmentLevels.userDamageResist}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#ffd54f", marginTop: "4px" }}>
+                                Cost: {3 + gameState.augmentLevels.userDamageResist} coins
+                              </div>
+                            </button>
                           </div>
+
                         </>
                       )}
                     </div>
@@ -7867,8 +8006,12 @@ function HUD({
                   augmentLevels: {
                     weaponDamage: 0,
                     weaponFireRate: 0,
+                    weaponReloadSpeed: 0,
+                    weaponSpreadControl: 0,
                     userMaxHealth: 0,
                     userMoveSpeed: 0,
+                    userRegen: 0,
+                    userDamageResist: 0,
                   },
                   gameStartTime: Date.now(),
                   user: {
@@ -8732,8 +8875,12 @@ function Game() {
     augmentLevels: {
       weaponDamage: 0,
       weaponFireRate: 0,
+      weaponReloadSpeed: 0,
+      weaponSpreadControl: 0,
       userMaxHealth: 0,
       userMoveSpeed: 0,
+      userRegen: 0,
+      userDamageResist: 0,
     },
     lastDamageTime: 0,
     currentWeapon: 1, // Start with pistol
