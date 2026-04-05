@@ -35,6 +35,8 @@ export interface IStorage {
   updateUserGold(userId: number, newGold: number): Promise<void>;
   getUserSettings(userId: number): Promise<any>;
   saveUserSettings(userId: number, settings: any): Promise<void>;
+  getUserRunProgress(userId: number): Promise<any>;
+  saveUserRunProgress(userId: number, progress: any): Promise<void>;
   
   // Admin methods
   isUserAdmin(userId: number): Promise<boolean>;
@@ -550,6 +552,98 @@ class MySQLStorage implements IStorage {
       }
     } catch (err) {
       console.error('Error saving user settings:', err);
+      throw err;
+    }
+  }
+
+  // ---------- Story run progress ----------
+
+  private async ensureUserRunProgressTable(): Promise<void> {
+    await this.pool.execute(`
+      CREATE TABLE IF NOT EXISTS user_run_progress (
+        user_id INT PRIMARY KEY,
+        current_level INT NOT NULL DEFAULT 0,
+        augment_build JSON NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+  }
+
+  async getUserRunProgress(userId: number): Promise<any> {
+    const defaultAugments = {
+      weaponDamage: 0,
+      weaponFireRate: 0,
+      weaponReloadSpeed: 0,
+      weaponSpreadControl: 0,
+      userMaxHealth: 0,
+      userMoveSpeed: 0,
+      userRegen: 0,
+      userDamageResist: 0,
+    };
+
+    try {
+      await this.ensureUserRunProgressTable();
+      const [rows] = await this.pool.execute(
+        `SELECT current_level, augment_build FROM user_run_progress WHERE user_id = ?`,
+        [userId]
+      );
+      const result = rows as any[];
+      if (result.length === 0) {
+        return {
+          currentLevel: 0,
+          augmentLevels: defaultAugments,
+        };
+      }
+
+      let parsedAugments = defaultAugments;
+      try {
+        const raw = result[0].augment_build;
+        parsedAugments =
+          typeof raw === "string" ? JSON.parse(raw) : { ...defaultAugments, ...(raw || {}) };
+      } catch {
+        parsedAugments = defaultAugments;
+      }
+
+      return {
+        currentLevel: Number(result[0].current_level) || 0,
+        augmentLevels: { ...defaultAugments, ...parsedAugments },
+      };
+    } catch (err) {
+      console.error("Error fetching user run progress:", err);
+      return {
+        currentLevel: 0,
+        augmentLevels: defaultAugments,
+      };
+    }
+  }
+
+  async saveUserRunProgress(userId: number, progress: any): Promise<void> {
+    const level = Number(progress?.currentLevel) || 0;
+    const augmentLevels = progress?.augmentLevels || {};
+
+    const safeAugments = {
+      weaponDamage: Number(augmentLevels.weaponDamage) || 0,
+      weaponFireRate: Number(augmentLevels.weaponFireRate) || 0,
+      weaponReloadSpeed: Number(augmentLevels.weaponReloadSpeed) || 0,
+      weaponSpreadControl: Number(augmentLevels.weaponSpreadControl) || 0,
+      userMaxHealth: Number(augmentLevels.userMaxHealth) || 0,
+      userMoveSpeed: Number(augmentLevels.userMoveSpeed) || 0,
+      userRegen: Number(augmentLevels.userRegen) || 0,
+      userDamageResist: Number(augmentLevels.userDamageResist) || 0,
+    };
+
+    try {
+      await this.ensureUserRunProgressTable();
+      await this.pool.execute(
+        `INSERT INTO user_run_progress (user_id, current_level, augment_build)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           current_level = VALUES(current_level),
+           augment_build = VALUES(augment_build)`,
+        [userId, Math.max(0, level), JSON.stringify(safeAugments)]
+      );
+    } catch (err) {
+      console.error("Error saving user run progress:", err);
       throw err;
     }
   }

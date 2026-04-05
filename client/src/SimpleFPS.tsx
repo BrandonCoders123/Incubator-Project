@@ -324,6 +324,17 @@ interface ShopItem {
   category: string;
 }
 
+const DEFAULT_AUGMENT_LEVELS = {
+  weaponDamage: 0,
+  weaponFireRate: 0,
+  weaponReloadSpeed: 0,
+  weaponSpreadControl: 0,
+  userMaxHealth: 0,
+  userMoveSpeed: 0,
+  userRegen: 0,
+  userDamageResist: 0,
+};
+
 // Wall collision detection helper - AABB collision
 function checkWallCollision(
   position: THREE.Vector3,
@@ -5733,6 +5744,28 @@ function HUD({
 
                   if (response.ok) {
                     const data = await response.json();
+                    let persistedProgress = {
+                      currentLevel: 0,
+                      augmentLevels: { ...DEFAULT_AUGMENT_LEVELS },
+                    };
+                    try {
+                      const progressRes = await fetch("/api/progress", {
+                        credentials: "include",
+                      });
+                      const progressData = await progressRes.json();
+                      if (progressData.success && progressData.progress) {
+                        persistedProgress = {
+                          currentLevel:
+                            Number(progressData.progress.currentLevel) || 0,
+                          augmentLevels: {
+                            ...DEFAULT_AUGMENT_LEVELS,
+                            ...(progressData.progress.augmentLevels || {}),
+                          },
+                        };
+                      }
+                    } catch (e) {
+                      console.error("Failed to load progress:", e);
+                    }
                     setGameState((prev) => ({
                       ...prev,
                       gamePhase: "menu",
@@ -5753,6 +5786,12 @@ function HUD({
                       },
                       loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
                       isAdmin: data.isAdmin || false,
+                      level: {
+                        currentLevel: persistedProgress.currentLevel,
+                        killsThisLevel: 0,
+                        giantsSpawnedThisLevel: 0,
+                      },
+                      augmentLevels: persistedProgress.augmentLevels,
                     }));
 
                     // Load user settings after login
@@ -6097,7 +6136,7 @@ function HUD({
             sessionShotsFired: 0,
             sessionShotsHit: 0,
             level: {
-              currentLevel: 0,
+              currentLevel: prev.level.currentLevel,
               killsThisLevel: 0,
               giantsSpawnedThisLevel: 0,
             },
@@ -8470,7 +8509,7 @@ function HUD({
                     totalKills: 0,
                   },
                   level: {
-                    currentLevel: 0,
+                    currentLevel: prev.level.currentLevel,
                     killsThisLevel: 0,
                     giantsSpawnedThisLevel: 0,
                   },
@@ -8872,16 +8911,7 @@ function Game() {
     unlockedWeapons: [1], // Start with pistol only
     inventory: [], // No items purchased yet
     tokensPurchased: 0, // No health buff tokens purchased yet
-    augmentLevels: {
-      weaponDamage: 0,
-      weaponFireRate: 0,
-      weaponReloadSpeed: 0,
-      weaponSpreadControl: 0,
-      userMaxHealth: 0,
-      userMoveSpeed: 0,
-      userRegen: 0,
-      userDamageResist: 0,
-    },
+    augmentLevels: { ...DEFAULT_AUGMENT_LEVELS },
     lastDamageTime: 0,
     currentWeapon: 1, // Start with pistol
     isReloading: false,
@@ -8908,6 +8938,31 @@ function Game() {
 
   // On mount, check if the user already has an active session
   const [sessionChecking, setSessionChecking] = useState(true);
+  const loadStoryProgress = async () => {
+    try {
+      const progressRes = await fetch("/api/progress", {
+        credentials: "include",
+      });
+      const progressData = await progressRes.json();
+      if (progressData.success && progressData.progress) {
+        return {
+          currentLevel: Number(progressData.progress.currentLevel) || 0,
+          augmentLevels: {
+            ...DEFAULT_AUGMENT_LEVELS,
+            ...(progressData.progress.augmentLevels || {}),
+          },
+        };
+      }
+    } catch (error) {
+      console.error("Failed to load progress:", error);
+    }
+
+    return {
+      currentLevel: 0,
+      augmentLevels: { ...DEFAULT_AUGMENT_LEVELS },
+    };
+  };
+
   useEffect(() => {
     const { setKeybinding, setNormalSensitivity } = useSettings.getState();
     fetch("/api/session", { credentials: "include" })
@@ -8925,6 +8980,7 @@ function Game() {
             parsedAdminTestLevel <= LEVELS.length;
           const shouldStartAdminLevelTest =
             !!data.isAdmin && hasValidAdminTestLevel;
+          const persistedProgress = await loadStoryProgress();
 
           setGameState((prev) => ({
             ...prev,
@@ -8956,10 +9012,13 @@ function Game() {
             level: {
               currentLevel: shouldStartAdminLevelTest
                 ? parsedAdminTestLevel - 1
-                : 0,
+                : persistedProgress.currentLevel,
               killsThisLevel: 0,
               giantsSpawnedThisLevel: 0,
             },
+            augmentLevels: shouldStartAdminLevelTest
+              ? { ...DEFAULT_AUGMENT_LEVELS }
+              : persistedProgress.augmentLevels,
             adminLevelTestMode: shouldStartAdminLevelTest,
             adminTestStartLevel: shouldStartAdminLevelTest
               ? parsedAdminTestLevel
@@ -9011,6 +9070,39 @@ function Game() {
       adminTestStartLevel: null,
     }));
   }, [gameState.gamePhase, gameState.adminLevelTestMode]);
+
+  // Persist current story progress (level + augment build) for logged-in users.
+  useEffect(() => {
+    if (sessionChecking) return;
+    if (gameState.user.isGuest || !gameState.user.username) return;
+    if (gameState.adminLevelTestMode) return;
+    if (gameState.gameMode !== "story") return;
+    if (gameState.gamePhase === "login" || gameState.gamePhase === "register")
+      return;
+
+    const timer = window.setTimeout(() => {
+      fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          currentLevel: gameState.level.currentLevel,
+          augmentLevels: gameState.augmentLevels,
+        }),
+      }).catch((error) => console.error("Failed to save progress:", error));
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    sessionChecking,
+    gameState.user.isGuest,
+    gameState.user.username,
+    gameState.adminLevelTestMode,
+    gameState.gameMode,
+    gameState.gamePhase,
+    gameState.level.currentLevel,
+    gameState.augmentLevels,
+  ]);
 
   // Release pointer lock when entering non-game phases so UI is clickable
   useEffect(() => {

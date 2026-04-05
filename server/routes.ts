@@ -549,6 +549,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get current story run progress (current level + augments)
+  app.get("/api/progress", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const progress = await storage.getUserRunProgress(userId);
+      res.json({ success: true, progress });
+    } catch (error) {
+      console.error("Get progress error:", error);
+      res.status(500).json({ success: false, error: "Failed to load progress" });
+    }
+  });
+
+  // Save current story run progress (current level + augments)
+  app.post("/api/progress", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId!;
+      const { currentLevel = 0, augmentLevels = {} } = req.body || {};
+
+      await storage.saveUserRunProgress(userId, {
+        currentLevel,
+        augmentLevels,
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Save progress error:", error);
+      res.status(500).json({ success: false, error: "Failed to save progress" });
+    }
+  });
+
   // ============ ADMIN ROUTES ============
 
   // Check admin session - uses regular user session + adminCheck from DB
