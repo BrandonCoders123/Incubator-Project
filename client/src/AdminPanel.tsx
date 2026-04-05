@@ -345,6 +345,8 @@ export default function AdminPanel() {
               <option value={3}>Level 3 - Palace of the Robot King</option>
               <option value={4}>Level 4 - Crimson Battlefield</option>
               <option value={5}>Level 5 - Mustard Mountain Summit</option>
+              <option value={6}>Level 6 - Shattered Skybridge</option>
+              <option value={7}>Level 7 - Core Meltdown Reactor</option>
             </select>
             <button
               onClick={handleStartLevelTest}

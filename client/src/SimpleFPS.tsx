@@ -142,6 +142,22 @@ const LEVELS = [
     spawnRate: 1.5,
     maxEnemies: 20,
   },
+  {
+    id: 6,
+    name: "Shattered Skybridge",
+    description: "Broken catwalks and crossfire from every angle",
+    killsRequired: 65,
+    spawnRate: 1.2,
+    maxEnemies: 24,
+  },
+  {
+    id: 7,
+    name: "Core Meltdown Reactor",
+    description: "Maximum pressure in the collapsing robot core",
+    killsRequired: 80,
+    spawnRate: 0.95,
+    maxEnemies: 30,
+  },
 ];
 
 // Enemy types and archetypes
@@ -333,29 +349,69 @@ function checkWallCollision(
   return false;
 }
 
-// Ramp collision detection helper
+const RAMP_THICKNESS = 0.5;
+const RAMP_HEIGHT_GAIN = 2;
+
+function getRampLocalPosition(position: THREE.Vector3, ramp: Ramp) {
+  const [rx, , rz] = ramp.position;
+  const dx = position.x - rx;
+  const dz = position.z - rz;
+  const cos = Math.cos(-ramp.rotation);
+  const sin = Math.sin(-ramp.rotation);
+
+  return {
+    x: dx * cos - dz * sin,
+    z: dx * sin + dz * cos,
+  };
+}
+
+function getRampSurfaceY(position: THREE.Vector3, ramp: Ramp): number | null {
+  const { x: localX, z: localZ } = getRampLocalPosition(position, ramp);
+  const halfWidth = ramp.width / 2;
+  const halfLength = ramp.length / 2;
+
+  if (Math.abs(localX) > halfWidth || Math.abs(localZ) > halfLength) {
+    return null;
+  }
+
+  const progress = (localZ + halfLength) / ramp.length;
+  const [_, ry] = ramp.position;
+
+  return ry - RAMP_HEIGHT_GAIN / 2 + progress * RAMP_HEIGHT_GAIN + RAMP_THICKNESS / 2;
+}
+
+// Ramp collision detection helper (solid collision volume for non-player entities)
 function checkRampCollision(
   position: THREE.Vector3,
   ramps: Ramp[],
   radius: number = 0.5,
 ): boolean {
   for (const ramp of ramps) {
-    const [rx, ry, rz] = ramp.position;
-    // Treat ramp as a simple box for collision (horizontal check)
-    const halfWidth = ramp.width / 2;
-    const halfLength = ramp.length / 2;
+    const surfaceY = getRampSurfaceY(position, ramp);
+    if (surfaceY === null) continue;
 
-    if (
-      position.x + radius > rx - halfWidth &&
-      position.x - radius < rx + halfWidth &&
-      position.z + radius > rz - halfLength &&
-      position.z - radius < rz + halfLength &&
-      position.y < ry + 2 // Check if player is at ramp height
-    ) {
-      return true; // Collision detected
+    const rampBottomY = Math.max(0, surfaceY - (RAMP_THICKNESS + 0.75));
+    const rampTopY = surfaceY + RAMP_THICKNESS;
+
+    if (position.y + radius > rampBottomY && position.y - radius < rampTopY) {
+      return true;
     }
   }
   return false;
+}
+
+function getRampCollisionBoxes(ramps: Ramp[]): { position: number[]; size: number[] }[] {
+  return ramps.map((ramp) => {
+    const [rx, ry, rz] = ramp.position;
+    const alignedToX = Math.abs(Math.cos(ramp.rotation)) >= Math.abs(Math.sin(ramp.rotation));
+    const footprintX = alignedToX ? ramp.width : ramp.length;
+    const footprintZ = alignedToX ? ramp.length : ramp.width;
+
+    return {
+      position: [rx, ry + 0.5, rz],
+      size: [footprintX + 0.5, RAMP_HEIGHT_GAIN + 1.5, footprintZ + 0.5],
+    };
+  });
 }
 
 // Get ramps for current level
@@ -373,10 +429,26 @@ function getRampsForLevel(level: number): Ramp[] {
     ];
   } else if (level === 4) {
     return [
-      { position: [-22, 1, 0], rotation: 0, width: 4, length: 8 },
-      { position: [22, 1, 0], rotation: Math.PI, width: 4, length: 8 },
+      { position: [-20, 1, -6], rotation: 0, width: 4, length: 10 },
+      { position: [20, 1, 6], rotation: Math.PI, width: 4, length: 10 },
       { position: [0, 1, -22], rotation: Math.PI / 2, width: 4, length: 8 },
       { position: [0, 1, 22], rotation: -Math.PI / 2, width: 4, length: 8 },
+    ];
+  } else if (level === 5) {
+    return [
+      { position: [-24, 1, 0], rotation: 0, width: 4, length: 10 },
+      { position: [24, 1, 0], rotation: Math.PI, width: 4, length: 10 },
+      { position: [0, 1, -24], rotation: Math.PI / 2, width: 4, length: 10 },
+      { position: [0, 1, 24], rotation: -Math.PI / 2, width: 4, length: 10 },
+      { position: [0, 1, 0], rotation: 0, width: 5, length: 12 },
+    ];
+  } else if (level === 6) {
+    return [
+      { position: [-18, 1, -18], rotation: Math.PI / 4, width: 4, length: 10 },
+      { position: [18, 1, -18], rotation: -Math.PI / 4, width: 4, length: 10 },
+      { position: [-18, 1, 18], rotation: (3 * Math.PI) / 4, width: 4, length: 10 },
+      { position: [18, 1, 18], rotation: (-3 * Math.PI) / 4, width: 4, length: 10 },
+      { position: [0, 1, 0], rotation: Math.PI / 2, width: 5, length: 14 },
     ];
   }
   return [];
@@ -437,12 +509,43 @@ function getWallsForLevel(
       { position: [-30, 5, 0], size: [1, 10, 60] },
       { position: [0, 5, 30], size: [60, 10, 1] },
       { position: [0, 5, -30], size: [60, 10, 1] },
-      { position: [0, 5, 15], size: [30, 10, 1] },
-      { position: [0, 5, -15], size: [30, 10, 1] },
-      { position: [15, 5, 0], size: [1, 10, 30] },
-      { position: [-15, 5, 0], size: [1, 10, 30] },
-      { position: [22, 5, 22], size: [8, 10, 8] },
-      { position: [-22, 5, -22], size: [8, 10, 8] },
+      { position: [0, 5, 0], size: [1, 10, 42] },
+      { position: [0, 5, 14], size: [22, 10, 1] },
+      { position: [0, 5, -14], size: [22, 10, 1] },
+      { position: [18, 5, 8], size: [10, 10, 1] },
+      { position: [-18, 5, -8], size: [10, 10, 1] },
+      { position: [12, 5, -20], size: [1, 10, 12] },
+      { position: [-12, 5, 20], size: [1, 10, 12] },
+    ];
+  } else if (level === 5) {
+    return [
+      { position: [30, 5, 0], size: [1, 10, 60] },
+      { position: [-30, 5, 0], size: [1, 10, 60] },
+      { position: [0, 5, 30], size: [60, 10, 1] },
+      { position: [0, 5, -30], size: [60, 10, 1] },
+      { position: [0, 5, 0], size: [48, 10, 1] },
+      { position: [0, 5, 0], size: [1, 10, 48] },
+      { position: [15, 5, 15], size: [12, 10, 1] },
+      { position: [-15, 5, -15], size: [12, 10, 1] },
+      { position: [15, 5, -15], size: [1, 10, 12] },
+      { position: [-15, 5, 15], size: [1, 10, 12] },
+      { position: [0, 5, 20], size: [20, 10, 1] },
+      { position: [0, 5, -20], size: [20, 10, 1] },
+    ];
+  } else if (level === 6) {
+    return [
+      { position: [30, 5, 0], size: [1, 10, 60] },
+      { position: [-30, 5, 0], size: [1, 10, 60] },
+      { position: [0, 5, 30], size: [60, 10, 1] },
+      { position: [0, 5, -30], size: [60, 10, 1] },
+      { position: [-20, 5, 0], size: [1, 10, 40] },
+      { position: [20, 5, 0], size: [1, 10, 40] },
+      { position: [0, 5, -20], size: [40, 10, 1] },
+      { position: [0, 5, 20], size: [40, 10, 1] },
+      { position: [-10, 5, -10], size: [16, 10, 1] },
+      { position: [10, 5, 10], size: [16, 10, 1] },
+      { position: [-10, 5, 10], size: [1, 10, 16] },
+      { position: [10, 5, -10], size: [1, 10, 16] },
     ];
   }
   return [];
@@ -485,7 +588,7 @@ function GameEnvironment({ gameState }: { gameState: GameState }) {
         <mesh
           key={`ramp-${index}`}
           position={ramp.position as [number, number, number]}
-          rotation={[0, ramp.rotation, Math.PI / 6]}
+          rotation={[Math.PI / 6, ramp.rotation, 0]}
         >
           <boxGeometry args={[ramp.width, 0.5, ramp.length]} />
           <meshLambertMaterial map={asphaltTexture} color="#666666" />
@@ -540,7 +643,9 @@ function Player({
         1: [0, 1, -15], // Level 2 (Robot Factory): Spawn away from center wall
         2: [0, 1, 20], // Level 3 (Palace): Spawn in safe area
         3: [-10, 1, -10], // Level 4 (Crimson Battlefield): Spawn in corner
-        4: [0, 1, 0], // Level 5 (Mustard Mountain): Center spawn
+        4: [0, 1, -22], // Level 5 (Mustard Mountain): open lane spawn
+        5: [-22, 1, 22], // Level 6 (Shattered Skybridge): corner spawn
+        6: [0, 1, 24], // Level 7 (Core Meltdown): outer ring spawn
       };
 
       const spawnPoint = spawnPoints[gameState.level.currentLevel] || [0, 1, 0];
@@ -823,9 +928,8 @@ function Player({
       const ramps = getRampsForLevel(gameState.level.currentLevel);
 
       const hasWallCollision = checkWallCollision(newPos, walls, 0.5);
-      const hasRampCollision = checkRampCollision(newPos, ramps, 0.5);
 
-      if (hasWallCollision || hasRampCollision) {
+      if (hasWallCollision) {
         // Collision detected, don't move in that direction
         // Try sliding along obstacles - check X and Z separately
         const xOnly = playerRef.current.position.clone();
@@ -833,12 +937,8 @@ function Player({
         const zOnly = playerRef.current.position.clone();
         zOnly.z = newPos.z;
 
-        const canMoveX =
-          !checkWallCollision(xOnly, walls, 0.5) &&
-          !checkRampCollision(xOnly, ramps, 0.5);
-        const canMoveZ =
-          !checkWallCollision(zOnly, walls, 0.5) &&
-          !checkRampCollision(zOnly, ramps, 0.5);
+        const canMoveX = !checkWallCollision(xOnly, walls, 0.5);
+        const canMoveZ = !checkWallCollision(zOnly, walls, 0.5);
 
         if (canMoveX) {
           // Can move in X direction
@@ -851,6 +951,22 @@ function Player({
         } else {
           // Can't move at all, revert to current position
           newPos.copy(playerRef.current.position);
+        }
+      }
+
+      const rampSurfaceY = ramps
+        .map((ramp) => getRampSurfaceY(newPos, ramp))
+        .filter((y): y is number => y !== null)
+        .reduce<number | null>((highest, y) =>
+          highest === null || y > highest ? y : highest,
+        null);
+
+      if (rampSurfaceY !== null) {
+        const targetPlayerY = rampSurfaceY + 1;
+        if (velocityRef.current.y <= 0 && newPos.y <= targetPlayerY + 0.2) {
+          newPos.y = targetPlayerY;
+          velocityRef.current.y = 0;
+          isOnGroundRef.current = true;
         }
       }
 
@@ -1163,10 +1279,12 @@ function Enemy({
       );
 
       const walls = getWallsForLevel(gameState.level.currentLevel);
+      const ramps = getRampsForLevel(gameState.level.currentLevel);
+      const staticObstacles = [...walls, ...getRampCollisionBoxes(ramps)];
       const { resolvedPos, appliedMovement } = resolveMovementWithFallback(
         enemyPos,
         movementIntent,
-        walls,
+        staticObstacles,
         0.4,
       );
       const isMoving = appliedMovement.lengthSq() > 0.0001;
@@ -1477,7 +1595,8 @@ function EnemyProjectile({
 
     // Check wall collision for projectiles
     const walls = getWallsForLevel(gameState.level.currentLevel);
-    if (checkWallCollision(newPos, walls, 0.3)) {
+    const ramps = getRampsForLevel(gameState.level.currentLevel);
+    if (checkWallCollision(newPos, walls, 0.3) || checkRampCollision(newPos, ramps, 0.3)) {
       // Hit a wall, remove projectile
       setGameState((prev) => ({
         ...prev,
@@ -8512,6 +8631,30 @@ function GameLogic({
         } else if (roll < 0.5) {
           enemyType = "melee";
         } else if (roll < 0.6) {
+          enemyType = "ranged";
+        } else {
+          enemyType = "rat";
+        }
+      } else if (currentLevel === 5) {
+        // Level 6 (Skybridge): 15% melee, 20% ranged, 35% giant (max 14), 30% rat
+        const roll = Math.random();
+        if (roll < 0.35 && gameState.level.giantsSpawnedThisLevel < 14) {
+          enemyType = "giant";
+        } else if (roll < 0.5) {
+          enemyType = "melee";
+        } else if (roll < 0.7) {
+          enemyType = "ranged";
+        } else {
+          enemyType = "rat";
+        }
+      } else {
+        // Level 7+ (Reactor): 10% melee, 25% ranged, 40% giant (max 18), 25% rat
+        const roll = Math.random();
+        if (roll < 0.4 && gameState.level.giantsSpawnedThisLevel < 18) {
+          enemyType = "giant";
+        } else if (roll < 0.5) {
+          enemyType = "melee";
+        } else if (roll < 0.75) {
           enemyType = "ranged";
         } else {
           enemyType = "rat";
