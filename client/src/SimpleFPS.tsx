@@ -146,7 +146,6 @@ const LEVELS = [
 
 // Enemy types and archetypes
 type EnemyType = "melee" | "ranged" | "giant" | "rat";
-type EnemyBehavior = "chase" | "kite";
 
 interface Enemy {
   id: string;
@@ -200,13 +199,6 @@ const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     color: "#363636",
     size: 0.5, //2x smaller than normal enemies
   },
-};
-
-const ENEMY_BEHAVIOR_BY_TYPE: Record<EnemyType, EnemyBehavior> = {
-  melee: "chase",
-  giant: "chase",
-  rat: "chase",
-  ranged: "kite",
 };
 
 interface Wall {
@@ -362,69 +354,6 @@ function checkRampCollision(
     }
   }
   return false;
-}
-
-function getEnemyMovementIntent(
-  behavior: EnemyBehavior,
-  toPlayerDirection: THREE.Vector3,
-  distanceToPlayer: number,
-  moveSpeed: number,
-  deltaTime: number,
-): THREE.Vector3 {
-  const step = moveSpeed * deltaTime;
-
-  if (behavior === "kite") {
-    if (distanceToPlayer < 8) {
-      return toPlayerDirection.clone().multiplyScalar(-step);
-    }
-    if (distanceToPlayer > 12) {
-      return toPlayerDirection.clone().multiplyScalar(step);
-    }
-    return new THREE.Vector3(0, 0, 0);
-  }
-
-  return toPlayerDirection.clone().multiplyScalar(step);
-}
-
-function resolveMovementWithFallback(
-  originalPos: THREE.Vector3,
-  movementIntent: THREE.Vector3,
-  walls: { position: number[]; size: number[] }[],
-  collisionRadius: number,
-): {
-  resolvedPos: THREE.Vector3;
-  appliedMovement: THREE.Vector3;
-} {
-  const targetPos = originalPos.clone().add(movementIntent);
-  if (!checkWallCollision(targetPos, walls, collisionRadius)) {
-    return {
-      resolvedPos: targetPos,
-      appliedMovement: movementIntent.clone(),
-    };
-  }
-
-  const xOnly = originalPos.clone();
-  xOnly.x += movementIntent.x;
-  if (!checkWallCollision(xOnly, walls, collisionRadius)) {
-    return {
-      resolvedPos: xOnly,
-      appliedMovement: new THREE.Vector3(movementIntent.x, 0, 0),
-    };
-  }
-
-  const zOnly = originalPos.clone();
-  zOnly.z += movementIntent.z;
-  if (!checkWallCollision(zOnly, walls, collisionRadius)) {
-    return {
-      resolvedPos: zOnly,
-      appliedMovement: new THREE.Vector3(0, 0, movementIntent.z),
-    };
-  }
-
-  return {
-    resolvedPos: originalPos.clone(),
-    appliedMovement: new THREE.Vector3(0, 0, 0),
-  };
 }
 
 // Get ramps for current level
