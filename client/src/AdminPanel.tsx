@@ -65,6 +65,7 @@ export default function AdminPanel() {
   const [filterById, setFilterById] = useState("all");
   const [filterWarnings, setFilterWarnings] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [testLevel, setTestLevel] = useState(1);
 
   const filteredUsers = users.filter((user) => {
     if (filterName && !user.username.toLowerCase().includes(filterName.toLowerCase())) return false;
@@ -265,6 +266,10 @@ export default function AdminPanel() {
     }
   };
 
+  const handleStartLevelTest = () => {
+    window.location.href = `/?adminTestLevel=${testLevel}`;
+  };
+
   if (loading) {
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#1a1a2e", color: "white" }}>
@@ -300,6 +305,64 @@ export default function AdminPanel() {
 
       {/* Scrollable Content */}
       <div style={{ flex: 1, overflow: "auto", padding: "20px 30px" }}>
+        <div
+          style={{
+            background: "#0f3460",
+            border: "1px solid #2f4f7f",
+            borderRadius: "10px",
+            padding: "16px",
+            marginBottom: "20px",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "12px",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <h2 style={{ margin: "0 0 4px 0", fontSize: "18px" }}>
+              Level Testing
+            </h2>
+            <p style={{ margin: 0, color: "#b8c7e0", fontSize: "13px" }}>
+              Launch directly into any campaign level in no-save admin test mode.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            <select
+              value={testLevel}
+              onChange={(e) => setTestLevel(Number(e.target.value))}
+              style={{
+                padding: "10px 12px",
+                borderRadius: "6px",
+                border: "1px solid #3a5c8a",
+                background: "#16213e",
+                color: "white",
+                cursor: "pointer",
+              }}
+            >
+              <option value={1}>Level 1 - Bun Valley Outpost</option>
+              <option value={2}>Level 2 - Robot Factory</option>
+              <option value={3}>Level 3 - Palace of the Robot King</option>
+              <option value={4}>Level 4 - Crimson Battlefield</option>
+              <option value={5}>Level 5 - Mustard Mountain Summit</option>
+            </select>
+            <button
+              onClick={handleStartLevelTest}
+              style={{
+                padding: "10px 16px",
+                background: "#4CAF50",
+                border: "none",
+                borderRadius: "6px",
+                color: "white",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Start Test
+            </button>
+          </div>
+        </div>
+
         <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
           <button
             onClick={() => setActiveTab("users")}

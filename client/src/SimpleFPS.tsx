@@ -290,6 +290,8 @@ interface GameState {
   gameMode: "story" | "endless"; // Game mode: story (with levels) or endless (wave survival)
   sessionShotsFired: number; // Shots fired this session (saved to DB on death)
   sessionShotsHit: number; // Bullet hits on enemies this session
+  adminLevelTestMode: boolean;
+  adminTestStartLevel: number | null;
 }
 
 interface ShopItem {
@@ -5116,6 +5118,7 @@ function HUD({
   useEffect(() => {
     // Only save on victory (completing entire campaign)
     if (gameState.gamePhase !== "victory") return;
+    if (gameState.adminLevelTestMode) return;
 
     // Only save for logged-in users (not guests)
     if (gameState.user.isGuest) return;
@@ -5169,6 +5172,7 @@ function HUD({
 
   useEffect(() => {
     if (gameState.gamePhase !== "levelTransition") return;
+    if (gameState.adminLevelTestMode) return;
 
     // Prevent duplicate saves for the same level
     if (levelTransitionSavedRef.current === gameState.level.currentLevel)
@@ -5194,6 +5198,7 @@ function HUD({
 
   useEffect(() => {
     if (gameState.gamePhase !== "victory") return;
+    if (gameState.adminLevelTestMode) return;
 
     // Prevent duplicate saves for the same victory
     if (fastestTimeSavedRef.current === gameState.gameStartTime) return;
@@ -5237,6 +5242,7 @@ function HUD({
     // Only trigger on gameover in endless mode
     if (gameState.gamePhase !== "gameover") return;
     if (gameState.gameMode !== "endless") return;
+    if (gameState.adminLevelTestMode) return;
 
     // Only save for logged-in users (not guests)
     if (gameState.user.isGuest) return;
@@ -5288,6 +5294,7 @@ function HUD({
   const statsSavedRef = React.useRef<number | null>(null);
   useEffect(() => {
     if (gameState.gamePhase !== "gameover") return;
+    if (gameState.adminLevelTestMode) return;
     if (gameState.user.isGuest) return;
     if (statsSavedRef.current === gameState.gameStartTime) return;
     statsSavedRef.current = gameState.gameStartTime;
@@ -5918,6 +5925,28 @@ function HUD({
             ...prev,
             gamePhase: "introCutscene",
             gameMode: "story",
+            gameStartTime: null,
+            health: prev.maxHealth,
+            ammo: 12,
+            coins: 0,
+            enemies: [],
+            bullets: [],
+            enemyProjectiles: [],
+            story: {
+              currentSettlement: 0,
+              alliesRescued: 0,
+              settlementsConquered: [],
+              totalKills: 0,
+            },
+            sessionShotsFired: 0,
+            sessionShotsHit: 0,
+            level: {
+              currentLevel: 0,
+              killsThisLevel: 0,
+              giantsSpawnedThisLevel: 0,
+            },
+            adminLevelTestMode: false,
+            adminTestStartLevel: null,
           }));
         },
       },
@@ -7653,7 +7682,11 @@ function HUD({
                   ? gameState.user.currency
                   : gameState.user.currency + currencyEarned;
 
-                if (!gameState.user.isGuest && gameState.user.username) {
+                if (
+                  !gameState.adminLevelTestMode &&
+                  !gameState.user.isGuest &&
+                  gameState.user.username
+                ) {
                   try {
                     await fetch("/api/update-currency", {
                       method: "POST",
@@ -7748,7 +7781,11 @@ function HUD({
                   ? gameState.user.currency
                   : gameState.user.currency + currencyEarned;
 
-                if (!gameState.user.isGuest && gameState.user.username) {
+                if (
+                  !gameState.adminLevelTestMode &&
+                  !gameState.user.isGuest &&
+                  gameState.user.username
+                ) {
                   try {
                     await fetch("/api/update-currency", {
                       method: "POST",
@@ -7912,7 +7949,11 @@ function HUD({
                   : gameState.user.currency + currencyEarned;
 
                 // Save currency to backend for registered users
-                if (!gameState.user.isGuest && gameState.user.username) {
+                if (
+                  !gameState.adminLevelTestMode &&
+                  !gameState.user.isGuest &&
+                  gameState.user.username
+                ) {
                   try {
                     await fetch("/api/update-currency", {
                       method: "POST",
@@ -7980,7 +8021,11 @@ function HUD({
                   : gameState.user.currency + currencyEarned;
 
                 // Save currency to backend for registered users
-                if (!gameState.user.isGuest && gameState.user.username) {
+                if (
+                  !gameState.adminLevelTestMode &&
+                  !gameState.user.isGuest &&
+                  gameState.user.username
+                ) {
                   try {
                     await fetch("/api/update-currency", {
                       method: "POST",
@@ -8567,6 +8612,8 @@ function Game() {
     gameMode: "story",
     sessionShotsFired: 0,
     sessionShotsHit: 0,
+    adminLevelTestMode: false,
+    adminTestStartLevel: null,
   });
 
   // On mount, check if the user already has an active session
@@ -8577,9 +8624,21 @@ function Game() {
       .then(async (res) => {
         if (res.ok) {
           const data = await res.json();
+          const params = new URLSearchParams(window.location.search);
+          const adminTestLevelParam = params.get("adminTestLevel");
+          const parsedAdminTestLevel = adminTestLevelParam
+            ? parseInt(adminTestLevelParam, 10)
+            : NaN;
+          const hasValidAdminTestLevel =
+            !Number.isNaN(parsedAdminTestLevel) &&
+            parsedAdminTestLevel >= 1 &&
+            parsedAdminTestLevel <= LEVELS.length;
+          const shouldStartAdminLevelTest =
+            !!data.isAdmin && hasValidAdminTestLevel;
+
           setGameState((prev) => ({
             ...prev,
-            gamePhase: "menu",
+            gamePhase: shouldStartAdminLevelTest ? "playing" : "menu",
             user: {
               username: data.user.username,
               isGuest: false,
@@ -8588,7 +8647,37 @@ function Game() {
               equippedSkin: null,
             },
             isAdmin: data.isAdmin || false,
+            gameMode: "story",
+            gameStartTime: shouldStartAdminLevelTest ? Date.now() : null,
+            health: prev.maxHealth,
+            ammo: 12,
+            coins: 0,
+            enemies: [],
+            bullets: [],
+            enemyProjectiles: [],
+            story: {
+              currentSettlement: 0,
+              alliesRescued: 0,
+              settlementsConquered: [],
+              totalKills: 0,
+            },
+            sessionShotsFired: 0,
+            sessionShotsHit: 0,
+            level: {
+              currentLevel: shouldStartAdminLevelTest
+                ? parsedAdminTestLevel - 1
+                : 0,
+              killsThisLevel: 0,
+              giantsSpawnedThisLevel: 0,
+            },
+            adminLevelTestMode: shouldStartAdminLevelTest,
+            adminTestStartLevel: shouldStartAdminLevelTest
+              ? parsedAdminTestLevel
+              : null,
           }));
+          if (adminTestLevelParam) {
+            window.history.replaceState({}, "", window.location.pathname);
+          }
           // Restore saved settings
           try {
             const settingsRes = await fetch("/api/settings", {
@@ -8611,6 +8700,27 @@ function Game() {
       .catch(() => {})
       .finally(() => setSessionChecking(false));
   }, []);
+
+  // Reset test-mode progress when returning to menu so future runs start fresh.
+  useEffect(() => {
+    if (gameState.gamePhase !== "menu" || !gameState.adminLevelTestMode) return;
+    setGameState((prev) => ({
+      ...prev,
+      story: {
+        currentSettlement: 0,
+        alliesRescued: 0,
+        settlementsConquered: [],
+        totalKills: 0,
+      },
+      level: {
+        currentLevel: 0,
+        killsThisLevel: 0,
+        giantsSpawnedThisLevel: 0,
+      },
+      adminLevelTestMode: false,
+      adminTestStartLevel: null,
+    }));
+  }, [gameState.gamePhase, gameState.adminLevelTestMode]);
 
   // Release pointer lock when entering non-game phases so UI is clickable
   useEffect(() => {
