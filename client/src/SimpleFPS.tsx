@@ -2514,6 +2514,8 @@ function InventoryPage({
             justifyContent: "center",
             alignItems: "center",
             zIndex: 2000,
+            padding: "20px 14px",
+            overflowY: "auto",
           }}
           onClick={() => setShowLoadoutPopup(false)}
         >
@@ -2524,6 +2526,8 @@ function InventoryPage({
               padding: "30px",
               maxWidth: "600px",
               width: "90%",
+              maxHeight: "calc(100vh - 40px)",
+              overflowY: "auto",
               border: "1px solid rgba(232,160,32,0.35)",
             }}
           >
@@ -3755,18 +3759,19 @@ function SettingsPage({
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: "flex-start",
         color: "rgba(220,210,195,0.9)",
         fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
         zIndex: 1000,
-        padding: "20px",
-        overflow: "auto",
+        padding: "32px 20px",
+        overflowY: "auto",
       }}
     >
       <div
         style={{
           textAlign: "center",
           padding: "44px 50px",
+          margin: "12px 0 32px",
           background: "rgba(18,12,5,0.96)",
           border: "1px solid rgba(232,160,32,0.25)",
           boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
@@ -9160,6 +9165,13 @@ function Game() {
             parsedAdminTestLevel <= LEVELS.length;
           const shouldStartAdminLevelTest =
             !!data.isAdmin && hasValidAdminTestLevel;
+          const adminFullLoadoutEnabled =
+            !!data.isAdmin &&
+            (localStorage.getItem("adminFullLoadout") === "true" ||
+              shouldStartAdminLevelTest);
+          const unlockedWeaponsAtStart = adminFullLoadoutEnabled
+            ? [1, 2, 3, 4, 5]
+            : [1];
 
           setGameState((prev) => ({
             ...prev,
@@ -9196,6 +9208,7 @@ function Game() {
               killsThisLevel: 0,
               giantsSpawnedThisLevel: 0,
             },
+            unlockedWeapons: unlockedWeaponsAtStart,
             adminLevelTestMode: shouldStartAdminLevelTest,
             adminTestStartLevel: shouldStartAdminLevelTest
               ? parsedAdminTestLevel
