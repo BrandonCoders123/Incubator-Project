@@ -254,9 +254,10 @@ interface Ramp {
 interface MapPickup {
   id: string;
   position: [number, number, number];
-  type: "supplyCrate";
+  type: "supplyCrate" | "ammoCrate";
   healthRestore: number;
   coinReward: number;
+  ammoReward: number;
 }
 
 // Simple game state
@@ -495,6 +496,9 @@ function getRampsForLevel(level: number): Ramp[] {
 
 const MAX_ACTIVE_SUPPLY_CRATES = 2;
 const SUPPLY_CRATE_SPAWN_INTERVAL_MS = 15_000;
+const MAX_ACTIVE_AMMO_CRATES = 2;
+const AMMO_CRATE_SPAWN_INTERVAL_MS = 10_000;
+const AMMO_CRATE_RESERVE_REWARD_RATIO = 0.35;
 
 function getPickupSpawnPositionsForLevel(
   level: number,
@@ -547,6 +551,18 @@ function createSupplyCrate(level: number, position: [number, number, number]): M
     type: "supplyCrate",
     healthRestore: 25,
     coinReward: 2,
+    ammoReward: 0,
+  };
+}
+
+function createAmmoCrate(level: number, position: [number, number, number]): MapPickup {
+  return {
+    id: `ammo_pickup_${level}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    position,
+    type: "ammoCrate",
+    healthRestore: 0,
+    coinReward: 0,
+    ammoReward: AMMO_CRATE_RESERVE_REWARD_RATIO,
   };
 }
 
@@ -697,7 +713,7 @@ function GameEnvironment({ gameState }: { gameState: GameState }) {
         <meshLambertMaterial map={asphaltTexture} />
       </mesh>
 
-      {/* Supply crates (health + coins) */}
+      {/* Pickups (health/coin supply crates + ammo crates) */}
       {gameState.pickups.map((pickup) => (
         <PickupCrate key={pickup.id} pickup={pickup} />
       ))}
@@ -707,6 +723,7 @@ function GameEnvironment({ gameState }: { gameState: GameState }) {
 
 function PickupCrate({ pickup }: { pickup: MapPickup }) {
   const crateRef = useRef<THREE.Group>(null);
+  const isAmmoCrate = pickup.type === "ammoCrate";
 
   useFrame((state) => {
     if (!crateRef.current) return;
@@ -719,16 +736,33 @@ function PickupCrate({ pickup }: { pickup: MapPickup }) {
     <group ref={crateRef} position={pickup.position}>
       <mesh>
         <boxGeometry args={[1.2, 1.2, 1.2]} />
-        <meshStandardMaterial color="#17d46a" emissive="#0a6833" emissiveIntensity={0.75} />
+        <meshStandardMaterial
+          color={isAmmoCrate ? "#2f95ff" : "#17d46a"}
+          emissive={isAmmoCrate ? "#11487d" : "#0a6833"}
+          emissiveIntensity={0.75}
+        />
       </mesh>
       <mesh position={[0, 0, 0.61]}>
-        <boxGeometry args={[0.7, 0.18, 0.08]} />
-        <meshStandardMaterial color="#ffffff" />
+        <boxGeometry args={[0.75, 0.16, 0.08]} />
+        <meshStandardMaterial color={isAmmoCrate ? "#ffd24a" : "#ffffff"} />
       </mesh>
-      <mesh position={[0, 0, 0.61]} rotation={[0, 0, Math.PI / 2]}>
-        <boxGeometry args={[0.7, 0.18, 0.08]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
+      {isAmmoCrate ? (
+        <>
+          <mesh position={[0, 0.18, 0.61]}>
+            <boxGeometry args={[0.2, 0.16, 0.08]} />
+            <meshStandardMaterial color="#ffd24a" />
+          </mesh>
+          <mesh position={[0, -0.18, 0.61]}>
+            <boxGeometry args={[0.2, 0.16, 0.08]} />
+            <meshStandardMaterial color="#ffd24a" />
+          </mesh>
+        </>
+      ) : (
+        <mesh position={[0, 0, 0.61]} rotation={[0, 0, Math.PI / 2]}>
+          <boxGeometry args={[0.7, 0.18, 0.08]} />
+          <meshStandardMaterial color="#ffffff" />
+        </mesh>
+      )}
     </group>
   );
 }
@@ -1130,14 +1164,33 @@ function Player({
             );
             if (collectedPickups.length === 0) return prev;
 
-            const totalHealthRestore = collectedPickups.reduce(
+            const totalHealthRestore = collectedPickups
+              .filter((pickup) => pickup.type === "supplyCrate")
+              .reduce(
               (sum, pickup) => sum + pickup.healthRestore,
               0,
             );
-            const totalCoinReward = collectedPickups.reduce(
+            const totalCoinReward = collectedPickups
+              .filter((pickup) => pickup.type === "supplyCrate")
+              .reduce(
               (sum, pickup) => sum + pickup.coinReward,
               0,
             );
+
+            const currentWeapon = prev.currentWeapon;
+            const currentReserveAmmo = weaponReserveAmmo.current[currentWeapon] ?? prev.reserveAmmo;
+            const reserveAmmoCap = weapons[currentWeapon].reserveAmmoCap;
+            const totalAmmoReward = collectedPickups
+              .filter((pickup) => pickup.type === "ammoCrate")
+              .reduce((sum, pickup) => {
+                const crateReward = Math.round(reserveAmmoCap * pickup.ammoReward);
+                return sum + Math.max(1, crateReward);
+              }, 0);
+            const newReserveAmmo = Math.min(
+              reserveAmmoCap,
+              currentReserveAmmo + totalAmmoReward,
+            );
+            weaponReserveAmmo.current[currentWeapon] = newReserveAmmo;
 
             return {
               ...prev,
@@ -1146,6 +1199,7 @@ function Player({
               ),
               health: Math.min(prev.maxHealth, prev.health + totalHealthRestore),
               coins: prev.coins + totalCoinReward,
+              reserveAmmo: newReserveAmmo,
             };
           });
         }
@@ -9215,7 +9269,10 @@ function Game() {
           return prev;
         }
 
-        if (prev.pickups.length >= MAX_ACTIVE_SUPPLY_CRATES) {
+        const activeSupplyCrates = prev.pickups.filter(
+          (pickup) => pickup.type === "supplyCrate",
+        ).length;
+        if (activeSupplyCrates >= MAX_ACTIVE_SUPPLY_CRATES) {
           return prev;
         }
 
@@ -9247,19 +9304,66 @@ function Game() {
       });
     };
 
+    const spawnAmmoCrate = () => {
+      setGameState((prev) => {
+        if (prev.gamePhase !== "playing") {
+          return prev;
+        }
+
+        const activeAmmoCrates = prev.pickups.filter(
+          (pickup) => pickup.type === "ammoCrate",
+        ).length;
+        if (activeAmmoCrates >= MAX_ACTIVE_AMMO_CRATES) {
+          return prev;
+        }
+
+        const spawnPositions = getPickupSpawnPositionsForLevel(
+          prev.level.currentLevel,
+        );
+
+        const occupiedPositions = new Set(
+          prev.pickups.map((pickup) => pickup.position.join(",")),
+        );
+        const availablePositions = spawnPositions.filter(
+          (position) => !occupiedPositions.has(position.join(",")),
+        );
+
+        if (availablePositions.length === 0) {
+          return prev;
+        }
+
+        const randomPosition =
+          availablePositions[Math.floor(Math.random() * availablePositions.length)];
+
+        return {
+          ...prev,
+          pickups: [
+            ...prev.pickups,
+            createAmmoCrate(prev.level.currentLevel, randomPosition),
+          ],
+        };
+      });
+    };
+
     setGameState((prev) => ({
       ...prev,
       pickups: [],
     }));
 
     spawnSupplyCrate();
+    spawnAmmoCrate();
     const spawnTimer = window.setInterval(
       spawnSupplyCrate,
       SUPPLY_CRATE_SPAWN_INTERVAL_MS,
     );
+    const ammoSpawnTimer = window.setInterval(
+      spawnAmmoCrate,
+      AMMO_CRATE_SPAWN_INTERVAL_MS,
+    );
 
     return () => {
       window.clearInterval(spawnTimer);
+      window.clearInterval(ammoSpawnTimer);
     };
   }, [gameState.gamePhase, gameState.level.currentLevel]);
 
