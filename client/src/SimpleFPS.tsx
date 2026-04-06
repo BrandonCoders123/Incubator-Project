@@ -538,14 +538,20 @@ function getRampsForLevel(level: number): Ramp[] {
     ];
   } else if (level === 6) {
     return [
-      { position: [-18, 1, -18], rotation: Math.PI / 4, width: 4, length: 10 },
-      { position: [18, 1, -18], rotation: -Math.PI / 4, width: 4, length: 10 },
-      { position: [-18, 1, 18], rotation: (3 * Math.PI) / 4, width: 4, length: 10 },
-      { position: [18, 1, 18], rotation: (-3 * Math.PI) / 4, width: 4, length: 10 },
-      { position: [0, 1, 0], rotation: Math.PI / 2, width: 5, length: 14 },
+      // Keep ramps in open lanes so they never clip through wall geometry
+      { position: [0, 1, -14], rotation: 0, width: 4, length: 10 },
+      { position: [0, 1, 14], rotation: Math.PI, width: 4, length: 10 },
+      { position: [-14, 1, 0], rotation: Math.PI / 2, width: 4, length: 10 },
+      { position: [14, 1, 0], rotation: -Math.PI / 2, width: 4, length: 10 },
     ];
   } else if (level === 7) {
-    return [];
+    return [
+      // Reactor access ramps from each cardinal side into the core lanes
+      { position: [0, 1, -22], rotation: 0, width: 5, length: 12 },
+      { position: [0, 1, 22], rotation: Math.PI, width: 5, length: 12 },
+      { position: [-22, 1, 0], rotation: Math.PI / 2, width: 5, length: 12 },
+      { position: [22, 1, 0], rotation: -Math.PI / 2, width: 5, length: 12 },
+    ];
   }
   return [];
 }
@@ -711,21 +717,30 @@ function getWallsForLevel(
       { position: [-30, 5, 0], size: [1, 10, 60] },
       { position: [0, 5, 30], size: [60, 10, 1] },
       { position: [0, 5, -30], size: [60, 10, 1] },
-      { position: [-20, 5, 0], size: [1, 10, 40] },
-      { position: [20, 5, 0], size: [1, 10, 40] },
-      { position: [0, 5, -20], size: [40, 10, 1] },
-      { position: [0, 5, 20], size: [40, 10, 1] },
-      { position: [-10, 5, -10], size: [16, 10, 1] },
-      { position: [10, 5, 10], size: [16, 10, 1] },
-      { position: [-10, 5, 10], size: [1, 10, 16] },
-      { position: [10, 5, -10], size: [1, 10, 16] },
+      // Central block + corner cover, leaving clear approach lanes for ramps
+      { position: [0, 5, 0], size: [10, 10, 10] },
+      { position: [-18, 5, -18], size: [8, 10, 1] },
+      { position: [18, 5, 18], size: [8, 10, 1] },
+      { position: [-18, 5, 18], size: [1, 10, 8] },
+      { position: [18, 5, -18], size: [1, 10, 8] },
     ];
   } else if (level === 7) {
     return [
+      // Large reactor perimeter
       { position: [85, 6, 0], size: [2, 12, 170] },
       { position: [-85, 6, 0], size: [2, 12, 170] },
       { position: [0, 6, 85], size: [170, 12, 2] },
       { position: [0, 6, -85], size: [170, 12, 2] },
+      // Inner ring with four wide openings so the player can always reach the center
+      { position: [0, 5, -30], size: [50, 10, 2] },
+      { position: [0, 5, 30], size: [50, 10, 2] },
+      { position: [-30, 5, 0], size: [2, 10, 50] },
+      { position: [30, 5, 0], size: [2, 10, 50] },
+      // Core hazard shell (not fully sealed)
+      { position: [0, 5, -10], size: [18, 10, 2] },
+      { position: [0, 5, 10], size: [18, 10, 2] },
+      { position: [-10, 5, 0], size: [2, 10, 18] },
+      { position: [10, 5, 0], size: [2, 10, 18] },
     ];
   }
   return [];
