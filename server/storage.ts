@@ -1,5 +1,6 @@
 import type { User, InsertUser } from "@shared/schema";
-import mysql from "mysql2/promise";
+import pg from "pg";
+const { Pool } = pg;
 import bcrypt from "bcrypt";
 
 // All storage operations the rest of the app expects
@@ -27,7 +28,7 @@ export interface IStorage {
   ): Promise<void>;
 
   verifyPassword(userId: number, password: string): Promise<boolean>;
-  
+
   getShopItems(): Promise<any[]>;
   getUserInventory(userId: number): Promise<any[]>;
   purchaseItem(userId: number, itemId: number, price: number): Promise<void>;
@@ -35,7 +36,7 @@ export interface IStorage {
   updateUserGold(userId: number, newGold: number): Promise<void>;
   getUserSettings(userId: number): Promise<any>;
   saveUserSettings(userId: number, settings: any): Promise<void>;
-  
+
   // Admin methods
   isUserAdmin(userId: number): Promise<boolean>;
   getAllUsers(): Promise<any[]>;
@@ -48,7 +49,7 @@ export interface IStorage {
   banUser(userId: number, reason: string | null): Promise<void>;
   unbanUser(userId: number): Promise<void>;
   warnUser(userId: number): Promise<void>;
-  
+
   // Leaderboard methods
   getLeaderboard(category: string, limit?: number): Promise<any[]>;
   saveLeaderboardEntry(userId: number, fastestRunTime: string | null, totalKills: number | null): Promise<void>;
@@ -68,101 +69,154 @@ export interface IStorage {
   getPlayerStats(userId: number): Promise<{ total_shots: number; shots_hit: number; deaths: number; minutes_played: number }>;
 }
 
-/**
- * MySQL-backed storage.
- *
- * This implementation is wired to your existing `accounts` table:
- *   user_id, username, password_hash, email, created_at, last_login, profile_pic
- */
-class MySQLStorage implements IStorage {
-  private pool: mysql.Pool;
+class PostgresStorage implements IStorage {
+  private pool: Pool;
 
   constructor() {
-    // Make sure required env vars are present
-    const requiredEnvVars = [
-      "MYSQL_HOST",
-      "MYSQL_USER",
-      "MYSQL_PASSWORD",
-      "MYSQL_DATABASE",
-    ];
-    const missing = requiredEnvVars.filter((v) => !process.env[v]);
-
-    if (missing.length > 0) {
-      throw new Error(
-        `Missing required MySQL environment variables: ${missing.join(", ")}`
-      );
+    if (!process.env.DATABASE_URL) {
+      throw new Error("Missing required DATABASE_URL environment variable");
     }
 
-    this.pool = mysql.createPool({
-      host: process.env.MYSQL_HOST,
-      user: process.env.MYSQL_USER,
-      password: process.env.MYSQL_PASSWORD,
-      database: process.env.MYSQL_DATABASE,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
+    this.pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
     });
+
+    this.initTables().catch((err) => {
+      console.error("Failed to initialize database tables:", err);
+    });
+  }
+
+  private async initTables(): Promise<void> {
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS accounts (
+        user_id SERIAL PRIMARY KEY,
+        username VARCHAR(255) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        profile_pic TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_login TIMESTAMPTZ,
+        is_banned INTEGER NOT NULL DEFAULT 0,
+        ban_reason TEXT,
+        banned_at TIMESTAMPTZ,
+        warning_count INTEGER NOT NULL DEFAULT 0,
+        "adminCheck" INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS items (
+        item_id SERIAL PRIMARY KEY,
+        item_name VARCHAR(255) NOT NULL,
+        item_type VARCHAR(255) NOT NULL,
+        store_price INTEGER NOT NULL DEFAULT 0,
+        is_cosmetic INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS inventory_items (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES accounts(user_id) ON DELETE CASCADE,
+        item_id INTEGER NOT NULL DEFAULT 0,
+        gold INTEGER NOT NULL DEFAULT 1000,
+        purchased_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS user_settings (
+        user_id INTEGER PRIMARY KEY REFERENCES accounts(user_id) ON DELETE CASCADE,
+        mouse_sensitivity REAL NOT NULL DEFAULT 1.0,
+        move_forward_key VARCHAR(50) NOT NULL DEFAULT 'KeyW',
+        move_backward_key VARCHAR(50) NOT NULL DEFAULT 'KeyS',
+        move_left_key VARCHAR(50) NOT NULL DEFAULT 'KeyA',
+        move_right_key VARCHAR(50) NOT NULL DEFAULT 'KeyD',
+        jump_key VARCHAR(50) NOT NULL DEFAULT 'Space'
+      )
+    `);
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS leaderboard_2 (
+        leaderboard_id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE REFERENCES accounts(user_id) ON DELETE CASCADE,
+        fastest_run_time VARCHAR(50),
+        total_kills INTEGER NOT NULL DEFAULT 0,
+        rank INTEGER,
+        date_recorded TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS transactions_v2 (
+        transaction_id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        amount_spent_usd DECIMAL(10,2) NOT NULL,
+        card_number VARCHAR(20),
+        currency_purchased INTEGER NOT NULL,
+        transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS player_stats (
+        user_id INTEGER PRIMARY KEY REFERENCES accounts(user_id) ON DELETE CASCADE,
+        total_shots INTEGER NOT NULL DEFAULT 0,
+        shots_hit INTEGER NOT NULL DEFAULT 0,
+        deaths INTEGER NOT NULL DEFAULT 0,
+        minutes_played INTEGER NOT NULL DEFAULT 0
+      )
+    `);
   }
 
   // ---------- User lookups ----------
 
   async getUser(id: number): Promise<User | undefined> {
-    const [rows] = await this.pool.execute(
-      "SELECT user_id AS id, username, password_hash AS password, email FROM accounts WHERE user_id = ?",
+    const result = await this.pool.query(
+      "SELECT user_id AS id, username, password_hash AS password, email FROM accounts WHERE user_id = $1",
       [id]
     );
-    const users = rows as any[];
-    return users[0];
+    return result.rows[0];
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [rows] = await this.pool.execute(
-      "SELECT user_id AS id, username, password_hash AS password, email, COALESCE(adminCheck, 0) as adminCheck, COALESCE(is_banned, 0) as is_banned, ban_reason FROM accounts WHERE username = ?",
+    const result = await this.pool.query(
+      `SELECT user_id AS id, username, password_hash AS password, email,
+              COALESCE("adminCheck", 0) as "adminCheck",
+              COALESCE(is_banned, 0) as is_banned, ban_reason
+       FROM accounts WHERE username = $1`,
       [username]
     );
-    const users = rows as any[];
-    return users[0];
+    return result.rows[0];
   }
 
   async isUserAdmin(userId: number): Promise<boolean> {
     try {
-      const [rows] = await this.pool.execute(
-        "SELECT COALESCE(adminCheck, 0) as adminCheck FROM accounts WHERE user_id = ?",
+      const result = await this.pool.query(
+        `SELECT COALESCE("adminCheck", 0) as "adminCheck" FROM accounts WHERE user_id = $1`,
         [userId]
       );
-      const users = rows as any[];
-      return users[0]?.adminCheck === 1;
+      return result.rows[0]?.adminCheck === 1;
     } catch (err) {
-      console.error('Error checking admin status:', err);
+      console.error("Error checking admin status:", err);
       return false;
     }
   }
 
-  // ---------- User creation (FIXED) ----------
+  // ---------- User creation ----------
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    // Hash password
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(insertUser.password, saltRounds);
 
-    // IMPORTANT FIX:
-    // Only insert into columns that actually exist in your `accounts` table.
-    //
-    // Table columns:
-    //   user_id, username, password_hash, email, created_at, last_login, profile_pic
-    //
-    // `created_at` has a default of CURRENT_TIMESTAMP,
-    // `last_login` and `profile_pic` have defaults as well,
-    // so we can omit them from the INSERT.
-    const [result] = await this.pool.execute(
-      "INSERT INTO accounts (username, password_hash, email) VALUES (?, ?, ?)",
+    const result = await this.pool.query(
+      "INSERT INTO accounts (username, password_hash, email) VALUES ($1, $2, $3) RETURNING user_id AS id, username, email",
       [insertUser.username, hashedPassword, insertUser.email]
     );
 
-    const insertResult = result as mysql.ResultSetHeader;
-
     return {
-      id: insertResult.insertId,
+      id: result.rows[0].id,
       username: insertUser.username,
       password: hashedPassword,
       email: insertUser.email,
@@ -170,46 +224,38 @@ class MySQLStorage implements IStorage {
   }
 
   // ---------- Currency / cosmetic data ----------
-  // (Currently stubbed to simple defaults since your MySQL schema
-  // doesn’t yet store per-user cosmetics/currency directly.)
 
   async updateUserCurrency(username: string, currency: number): Promise<void> {
     try {
-      // Get user_id from accounts table
-      const [userRows] = await this.pool.execute(
-        `SELECT user_id FROM accounts WHERE username = ?`,
+      const userResult = await this.pool.query(
+        "SELECT user_id FROM accounts WHERE username = $1",
         [username]
       );
-      const users = userRows as any[];
-      if (users.length === 0) {
+      if (userResult.rows.length === 0) {
         console.log(`[updateUserCurrency] User ${username} not found`);
         return;
       }
-      const userId = users[0].user_id;
+      const userId = userResult.rows[0].user_id;
 
-      // Check if user has any inventory_items entries
-      const [invRows] = await this.pool.execute(
-        `SELECT id FROM inventory_items WHERE user_id = ? LIMIT 1`,
+      const invResult = await this.pool.query(
+        "SELECT id FROM inventory_items WHERE user_id = $1 LIMIT 1",
         [userId]
       );
-      const invResult = invRows as any[];
 
-      if (invResult.length > 0) {
-        // Update gold for all user's inventory_items rows
-        await this.pool.execute(
-          `UPDATE inventory_items SET gold = ? WHERE user_id = ?`,
+      if (invResult.rows.length > 0) {
+        await this.pool.query(
+          "UPDATE inventory_items SET gold = $1 WHERE user_id = $2",
           [currency, userId]
         );
       } else {
-        // Create initial inventory_items entry with gold (item_id 0 means no item, just currency)
-        await this.pool.execute(
-          `INSERT INTO inventory_items (user_id, item_id, gold) VALUES (?, 0, ?)`,
+        await this.pool.query(
+          "INSERT INTO inventory_items (user_id, item_id, gold) VALUES ($1, 0, $2)",
           [userId, currency]
         );
       }
       console.log(`[updateUserCurrency] Set ${username} currency to ${currency}`);
     } catch (err) {
-      console.error('Error updating user currency:', err);
+      console.error("Error updating user currency:", err);
       throw err;
     }
   }
@@ -218,37 +264,32 @@ class MySQLStorage implements IStorage {
     username: string
   ): Promise<{ currency: number; cosmetics: string[] } | undefined> {
     try {
-      // Get user_id from accounts table
-      const [userRows] = await this.pool.execute(
-        `SELECT user_id FROM accounts WHERE username = ?`,
+      const userResult = await this.pool.query(
+        "SELECT user_id FROM accounts WHERE username = $1",
         [username]
       );
-      const users = userRows as any[];
-      if (users.length === 0) {
+      if (userResult.rows.length === 0) {
         return { currency: 500, cosmetics: [] };
       }
-      const userId = users[0].user_id;
+      const userId = userResult.rows[0].user_id;
 
-      // Get gold from inventory_items table only
-      const [goldRows] = await this.pool.execute(
-        `SELECT gold FROM inventory_items WHERE user_id = ? LIMIT 1`,
+      const goldResult = await this.pool.query(
+        "SELECT gold FROM inventory_items WHERE user_id = $1 LIMIT 1",
         [userId]
       );
-      const goldResult = goldRows as any[];
-      const currency = goldResult.length > 0 ? (goldResult[0].gold || 500) : 500;
+      const currency = goldResult.rows.length > 0 ? (goldResult.rows[0].gold || 500) : 500;
 
-      // Get owned cosmetics from inventory_items table
-      const [cosmeticRows] = await this.pool.execute(
-        `SELECT i.item_name FROM items i 
-         INNER JOIN inventory_items ii ON i.item_id = ii.item_id 
-         WHERE ii.user_id = ? AND i.is_cosmetic = 1`,
+      const cosmeticResult = await this.pool.query(
+        `SELECT i.item_name FROM items i
+         INNER JOIN inventory_items ii ON i.item_id = ii.item_id
+         WHERE ii.user_id = $1 AND i.is_cosmetic = 1`,
         [userId]
       );
-      const cosmetics = (cosmeticRows as any[]).map(row => row.item_name);
+      const cosmetics = cosmeticResult.rows.map((row: any) => row.item_name);
 
       return { currency, cosmetics };
     } catch (err) {
-      console.error('Error fetching user data:', err);
+      console.error("Error fetching user data:", err);
       return { currency: 500, cosmetics: [] };
     }
   }
@@ -257,53 +298,47 @@ class MySQLStorage implements IStorage {
 
   async getUserProfile(
     userId: number
-  ): Promise<
-    { username: string; email: string; profilePicture: string | null; warning_count: number; isAdmin: boolean } | undefined
-  > {
-    const [rows] = await this.pool.execute(
-      "SELECT username, email, profile_pic AS profilePicture, COALESCE(warning_count, 0) as warning_count, COALESCE(adminCheck, 0) as adminCheck FROM accounts WHERE user_id = ?",
+  ): Promise<{ username: string; email: string; profilePicture: string | null; warning_count: number; isAdmin: boolean } | undefined> {
+    const result = await this.pool.query(
+      `SELECT username, email, profile_pic AS "profilePicture",
+              COALESCE(warning_count, 0) as warning_count,
+              COALESCE("adminCheck", 0) as "adminCheck"
+       FROM accounts WHERE user_id = $1`,
       [userId]
     );
-    const profiles = rows as any[];
-    if (profiles[0]) {
+    if (result.rows[0]) {
       return {
-        ...profiles[0],
-        isAdmin: profiles[0].adminCheck === 1
+        ...result.rows[0],
+        isAdmin: result.rows[0].adminCheck === 1,
       };
     }
     return undefined;
   }
 
   async updateUsername(userId: number, newUsername: string): Promise<void> {
-    // Check if username already exists for someone else
-    const [existing] = await this.pool.execute(
-      "SELECT user_id FROM accounts WHERE username = ? AND user_id != ?",
+    const existing = await this.pool.query(
+      "SELECT user_id FROM accounts WHERE username = $1 AND user_id != $2",
       [newUsername, userId]
     );
-    const existingUsers = existing as any[];
-    if (existingUsers.length > 0) {
+    if (existing.rows.length > 0) {
       throw new Error("Username already taken");
     }
-
-    await this.pool.execute(
-      "UPDATE accounts SET username = ? WHERE user_id = ?",
+    await this.pool.query(
+      "UPDATE accounts SET username = $1 WHERE user_id = $2",
       [newUsername, userId]
     );
   }
 
   async updatePassword(userId: number, newPasswordHash: string): Promise<void> {
-    await this.pool.execute(
-      "UPDATE accounts SET password_hash = ? WHERE user_id = ?",
+    await this.pool.query(
+      "UPDATE accounts SET password_hash = $1 WHERE user_id = $2",
       [newPasswordHash, userId]
     );
   }
 
-  async updateProfilePicture(
-    userId: number,
-    profilePictureUrl: string
-  ): Promise<void> {
-    await this.pool.execute(
-      "UPDATE accounts SET profile_pic = ? WHERE user_id = ?",
+  async updateProfilePicture(userId: number, profilePictureUrl: string): Promise<void> {
+    await this.pool.query(
+      "UPDATE accounts SET profile_pic = $1 WHERE user_id = $2",
       [profilePictureUrl, userId]
     );
   }
@@ -311,43 +346,33 @@ class MySQLStorage implements IStorage {
   // ---------- Password verification ----------
 
   async verifyPassword(userId: number, password: string): Promise<boolean> {
-    const [rows] = await this.pool.execute(
-      "SELECT password_hash FROM accounts WHERE user_id = ?",
+    const result = await this.pool.query(
+      "SELECT password_hash FROM accounts WHERE user_id = $1",
       [userId]
     );
-    const users = rows as any[];
-    if (users.length === 0) return false;
-
-    return await bcrypt.compare(password, users[0].password_hash);
+    if (result.rows.length === 0) return false;
+    return await bcrypt.compare(password, result.rows[0].password_hash);
   }
 
   // ---------- Shop items ----------
 
   async getShopItems(): Promise<any[]> {
     try {
-      const [rows] = await this.pool.execute(
-        `SELECT 
-          item_id as id,
-          item_name as name,
-          item_type as type,
-          store_price as price,
-          is_cosmetic
-        FROM items
-        ORDER BY item_id ASC`
+      const result = await this.pool.query(
+        `SELECT item_id as id, item_name as name, item_type as type, store_price as price, is_cosmetic
+         FROM items ORDER BY item_id ASC`
       );
-
-      const items = rows as any[];
-      return items.map((item: any) => ({
+      return result.rows.map((item: any) => ({
         id: item.id,
         name: item.name,
         description: item.type,
         price: item.price,
         image_url: `https://via.placeholder.com/200?text=${encodeURIComponent(item.name)}`,
-        rarity: item.is_cosmetic ? 'uncommon' : 'common',
-        category: item.type
+        rarity: item.is_cosmetic ? "uncommon" : "common",
+        category: item.type,
       }));
     } catch (err) {
-      console.error('Error fetching shop items:', err);
+      console.error("Error fetching shop items:", err);
       return [];
     }
   }
@@ -356,110 +381,90 @@ class MySQLStorage implements IStorage {
 
   async getUserInventory(userId: number): Promise<any[]> {
     try {
-      // Get items directly from inventory_items table using user_id
-      const [rows] = await this.pool.execute(
-        `SELECT DISTINCT
-          i.item_id as id,
-          i.item_name as name,
-          i.item_type as type,
-          i.store_price as price,
-          i.is_cosmetic
-        FROM items i
-        INNER JOIN inventory_items ii ON i.item_id = ii.item_id
-        WHERE ii.user_id = ?
-        ORDER BY i.item_id ASC`,
+      const result = await this.pool.query(
+        `SELECT DISTINCT i.item_id as id, i.item_name as name, i.item_type as type,
+                i.store_price as price, i.is_cosmetic
+         FROM items i
+         INNER JOIN inventory_items ii ON i.item_id = ii.item_id
+         WHERE ii.user_id = $1
+         ORDER BY i.item_id ASC`,
         [userId]
       );
-
-      const items = rows as any[];
-      return items.map((item: any) => ({
+      return result.rows.map((item: any) => ({
         id: item.id,
         name: item.name,
         type: item.type,
         price: item.price,
-        isCosmeticItem: item.is_cosmetic === 1 || item.is_cosmetic === true
+        isCosmeticItem: item.is_cosmetic === 1 || item.is_cosmetic === true,
       }));
     } catch (err) {
-      console.error('Error fetching user inventory:', err);
+      console.error("Error fetching user inventory:", err);
       return [];
     }
   }
 
   async getUserCurrency(userId: number): Promise<number> {
     try {
-      // Get gold from inventory_items table only
-      const [rows] = await this.pool.execute(
-        `SELECT gold FROM inventory_items WHERE user_id = ? LIMIT 1`,
+      const result = await this.pool.query(
+        "SELECT gold FROM inventory_items WHERE user_id = $1 LIMIT 1",
         [userId]
       );
-      const result = rows as any[];
-      if (result.length > 0) {
-        return result[0].gold || 1000;
+      if (result.rows.length > 0) {
+        return result.rows[0].gold || 1000;
       }
-      // New user with no inventory - return default starting gold
       return 1000;
     } catch (err) {
-      console.error('Error fetching user currency:', err);
+      console.error("Error fetching user currency:", err);
       return 1000;
     }
   }
 
   async updateUserGold(userId: number, newGold: number): Promise<void> {
     try {
-      // Update gold in all inventory_items rows for this user
-      await this.pool.execute(
-        `UPDATE inventory_items SET gold = ? WHERE user_id = ?`,
+      await this.pool.query(
+        "UPDATE inventory_items SET gold = $1 WHERE user_id = $2",
         [newGold, userId]
       );
     } catch (err) {
-      console.error('Error updating user gold:', err);
+      console.error("Error updating user gold:", err);
       throw err;
     }
   }
 
   async purchaseItem(userId: number, itemId: number, price: number): Promise<void> {
     try {
-      // Get current gold from inventory_items only
-      const [goldRows] = await this.pool.execute(
-        `SELECT gold FROM inventory_items WHERE user_id = ? LIMIT 1`,
+      const goldResult = await this.pool.query(
+        "SELECT gold FROM inventory_items WHERE user_id = $1 LIMIT 1",
         [userId]
       );
-      const goldResult = goldRows as any[];
-      let currentGold = goldResult.length > 0 ? (goldResult[0].gold || 1000) : 1000;
-      
-      // Special case: gold value of 67 means unlimited purchases (no gold check, no deduction)
+      let currentGold = goldResult.rows.length > 0 ? (goldResult.rows[0].gold || 1000) : 1000;
       const hasUnlimitedGold = currentGold === 67;
-      
+
       if (!hasUnlimitedGold && currentGold < price) {
-        throw new Error('Insufficient gold');
+        throw new Error("Insufficient gold");
       }
 
-      // Check if user already owns this item
-      const [existing] = await this.pool.execute(
-        `SELECT id FROM inventory_items WHERE user_id = ? AND item_id = ?`,
+      const existingResult = await this.pool.query(
+        "SELECT id FROM inventory_items WHERE user_id = $1 AND item_id = $2",
         [userId, itemId]
       );
-      const existingItems = existing as any[];
-      if (existingItems.length > 0) {
-        throw new Error('Item already owned');
+      if (existingResult.rows.length > 0) {
+        throw new Error("Item already owned");
       }
 
-      // If unlimited gold, keep it at 67; otherwise deduct the price
       const newGold = hasUnlimitedGold ? 67 : currentGold - price;
 
-      // Add item to inventory_items table (new table structure: id, user_id, item_id, gold, purchased_at)
-      await this.pool.execute(
-        `INSERT INTO inventory_items (user_id, item_id, gold) VALUES (?, ?, ?)`,
+      await this.pool.query(
+        "INSERT INTO inventory_items (user_id, item_id, gold) VALUES ($1, $2, $3)",
         [userId, itemId, newGold]
       );
 
-      // Update gold for all user's existing inventory_items rows
-      await this.pool.execute(
-        `UPDATE inventory_items SET gold = ? WHERE user_id = ?`,
+      await this.pool.query(
+        "UPDATE inventory_items SET gold = $1 WHERE user_id = $2",
         [newGold, userId]
       );
     } catch (err) {
-      console.error('Error purchasing item:', err);
+      console.error("Error purchasing item:", err);
       throw err;
     }
   }
@@ -468,123 +473,70 @@ class MySQLStorage implements IStorage {
 
   async getUserSettings(userId: number): Promise<any> {
     try {
-      const [rows] = await this.pool.execute(
-        `SELECT mouse_sensitivity, move_forward_key, move_backward_key, 
-                move_left_key, move_right_key, jump_key 
-         FROM user_settings WHERE user_id = ?`,
+      const result = await this.pool.query(
+        `SELECT mouse_sensitivity, move_forward_key, move_backward_key,
+                move_left_key, move_right_key, jump_key
+         FROM user_settings WHERE user_id = $1`,
         [userId]
       );
-      const result = rows as any[];
-      if (result.length > 0) {
-        return result[0];
+      if (result.rows.length > 0) {
+        return result.rows[0];
       }
-      // Return defaults if no settings exist
       return {
         mouse_sensitivity: 1.0,
         move_forward_key: "KeyW",
         move_backward_key: "KeyS",
         move_left_key: "KeyA",
         move_right_key: "KeyD",
-        jump_key: "Space"
+        jump_key: "Space",
       };
     } catch (err) {
-      console.error('Error fetching user settings:', err);
-      // Return defaults on error
+      console.error("Error fetching user settings:", err);
       return {
         mouse_sensitivity: 1.0,
         move_forward_key: "KeyW",
         move_backward_key: "KeyS",
         move_left_key: "KeyA",
         move_right_key: "KeyD",
-        jump_key: "Space"
+        jump_key: "Space",
       };
     }
   }
 
   async saveUserSettings(userId: number, settings: any): Promise<void> {
     try {
-      // Check if settings exist
-      const [existing] = await this.pool.execute(
-        `SELECT user_id FROM user_settings WHERE user_id = ?`,
-        [userId]
+      await this.pool.query(
+        `INSERT INTO user_settings (user_id, mouse_sensitivity, move_forward_key,
+          move_backward_key, move_left_key, move_right_key, jump_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (user_id) DO UPDATE SET
+           mouse_sensitivity = EXCLUDED.mouse_sensitivity,
+           move_forward_key = EXCLUDED.move_forward_key,
+           move_backward_key = EXCLUDED.move_backward_key,
+           move_left_key = EXCLUDED.move_left_key,
+           move_right_key = EXCLUDED.move_right_key,
+           jump_key = EXCLUDED.jump_key`,
+        [
+          userId,
+          settings.mouse_sensitivity || 1.0,
+          settings.move_forward_key || "KeyW",
+          settings.move_backward_key || "KeyS",
+          settings.move_left_key || "KeyA",
+          settings.move_right_key || "KeyD",
+          settings.jump_key || "Space",
+        ]
       );
-      const existingRows = existing as any[];
-
-      if (existingRows.length > 0) {
-        // Update existing settings
-        await this.pool.execute(
-          `UPDATE user_settings SET 
-            mouse_sensitivity = ?,
-            move_forward_key = ?,
-            move_backward_key = ?,
-            move_left_key = ?,
-            move_right_key = ?,
-            jump_key = ?
-           WHERE user_id = ?`,
-          [
-            settings.mouse_sensitivity || 1.0,
-            settings.move_forward_key || "KeyW",
-            settings.move_backward_key || "KeyS",
-            settings.move_left_key || "KeyA",
-            settings.move_right_key || "KeyD",
-            settings.jump_key || "Space",
-            userId
-          ]
-        );
-      } else {
-        // Insert new settings
-        await this.pool.execute(
-          `INSERT INTO user_settings (user_id, mouse_sensitivity, move_forward_key, 
-            move_backward_key, move_left_key, move_right_key, jump_key)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [
-            userId,
-            settings.mouse_sensitivity || 1.0,
-            settings.move_forward_key || "KeyW",
-            settings.move_backward_key || "KeyS",
-            settings.move_left_key || "KeyA",
-            settings.move_right_key || "KeyD",
-            settings.jump_key || "Space"
-          ]
-        );
-      }
     } catch (err) {
-      console.error('Error saving user settings:', err);
+      console.error("Error saving user settings:", err);
       throw err;
     }
   }
 
   // ---------- Admin methods ----------
 
-  async getAdminByUsername(username: string): Promise<any | undefined> {
-    try {
-      const [rows] = await this.pool.execute(
-        `SELECT admin_id, admin_username, admin_password_hash, access_level, is_active 
-         FROM admin WHERE admin_username = ? AND is_active = 1`,
-        [username]
-      );
-      const admins = rows as any[];
-      return admins[0];
-    } catch (err) {
-      console.error('Error fetching admin:', err);
-      return undefined;
-    }
-  }
-
-  async updateAdminLastLogin(adminId: number): Promise<void> {
-    try {
-      await this.pool.execute(
-        `UPDATE admin SET last_login = NOW() WHERE admin_id = ?`,
-        [adminId]
-      );
-    } catch (err) {
-      console.error('Error updating admin last login:', err);
-    }
-  }
-
   async getAllUsers(): Promise<any[]> {
     try {
-      const [rows] = await this.pool.execute(
+      const result = await this.pool.query(
         `SELECT a.user_id, a.username, a.email, a.created_at, a.last_login,
                 COALESCE((SELECT gold FROM inventory_items WHERE user_id = a.user_id LIMIT 1), 1000) as gold,
                 COALESCE(a.is_banned, 0) as is_banned,
@@ -593,433 +545,344 @@ class MySQLStorage implements IStorage {
          FROM accounts a
          ORDER BY a.user_id ASC`
       );
-      return rows as any[];
+      return result.rows;
     } catch (err) {
-      console.error('Error fetching all users:', err);
+      console.error("Error fetching all users:", err);
       return [];
     }
   }
 
   async getAllItems(): Promise<any[]> {
     try {
-      const [rows] = await this.pool.execute(
-        `SELECT item_id, item_name, item_type, store_price, is_cosmetic
-         FROM items
-         ORDER BY item_id ASC`
+      const result = await this.pool.query(
+        "SELECT item_id, item_name, item_type, store_price, is_cosmetic FROM items ORDER BY item_id ASC"
       );
-      return rows as any[];
+      return result.rows;
     } catch (err) {
-      console.error('Error fetching all items:', err);
+      console.error("Error fetching all items:", err);
       return [];
     }
   }
 
   async addItem(name: string, type: string, price: number, isCosmetic: boolean): Promise<any> {
     try {
-      const [result] = await this.pool.execute(
-        `INSERT INTO items (item_name, item_type, store_price, is_cosmetic) VALUES (?, ?, ?, ?)`,
+      const result = await this.pool.query(
+        "INSERT INTO items (item_name, item_type, store_price, is_cosmetic) VALUES ($1, $2, $3, $4) RETURNING *",
         [name, type, price, isCosmetic ? 1 : 0]
       );
-      const insertResult = result as any;
-      return { item_id: insertResult.insertId, item_name: name, item_type: type, store_price: price, is_cosmetic: isCosmetic };
+      return result.rows[0];
     } catch (err) {
-      console.error('Error adding item:', err);
+      console.error("Error adding item:", err);
       throw err;
     }
   }
 
   async updateItem(itemId: number, name: string, type: string, price: number, isCosmetic: boolean): Promise<void> {
     try {
-      await this.pool.execute(
-        `UPDATE items SET item_name = ?, item_type = ?, store_price = ?, is_cosmetic = ? WHERE item_id = ?`,
+      await this.pool.query(
+        "UPDATE items SET item_name = $1, item_type = $2, store_price = $3, is_cosmetic = $4 WHERE item_id = $5",
         [name, type, price, isCosmetic ? 1 : 0, itemId]
       );
     } catch (err) {
-      console.error('Error updating item:', err);
+      console.error("Error updating item:", err);
       throw err;
     }
   }
 
   async deleteItem(itemId: number): Promise<void> {
     try {
-      await this.pool.execute(`DELETE FROM items WHERE item_id = ?`, [itemId]);
+      await this.pool.query("DELETE FROM items WHERE item_id = $1", [itemId]);
     } catch (err) {
-      console.error('Error deleting item:', err);
+      console.error("Error deleting item:", err);
       throw err;
     }
   }
 
   async setUserGold(userId: number, gold: number): Promise<void> {
     try {
-      await this.pool.execute(
-        `UPDATE inventory_items SET gold = ? WHERE user_id = ?`,
+      await this.pool.query(
+        "UPDATE inventory_items SET gold = $1 WHERE user_id = $2",
         [gold, userId]
       );
     } catch (err) {
-      console.error('Error setting user gold:', err);
+      console.error("Error setting user gold:", err);
       throw err;
     }
   }
 
   async deleteUser(userId: number): Promise<void> {
     try {
-      // Delete related records first (inventory, settings, etc.) - ignore errors for optional tables
-      try {
-        await this.pool.execute(`DELETE FROM inventory_items WHERE user_id = ?`, [userId]);
-      } catch (e) {
-        console.log('No inventory_items to delete or table does not exist');
-      }
-      try {
-        await this.pool.execute(`DELETE FROM user_settings WHERE user_id = ?`, [userId]);
-      } catch (e) {
-        console.log('No user_settings to delete or table does not exist');
-      }
-      // Delete the user account
-      await this.pool.execute(`DELETE FROM accounts WHERE user_id = ?`, [userId]);
+      await this.pool.query("DELETE FROM inventory_items WHERE user_id = $1", [userId]);
+      await this.pool.query("DELETE FROM user_settings WHERE user_id = $1", [userId]);
+      await this.pool.query("DELETE FROM accounts WHERE user_id = $1", [userId]);
     } catch (err) {
-      console.error('Error deleting user:', err);
+      console.error("Error deleting user:", err);
       throw err;
     }
   }
 
   async banUser(userId: number, reason: string | null): Promise<void> {
     try {
-      await this.pool.execute(
-        `UPDATE accounts SET is_banned = 1, ban_reason = ?, banned_at = NOW() WHERE user_id = ?`,
+      await this.pool.query(
+        "UPDATE accounts SET is_banned = 1, ban_reason = $1, banned_at = NOW() WHERE user_id = $2",
         [reason, userId]
       );
     } catch (err) {
-      console.error('Error banning user:', err);
+      console.error("Error banning user:", err);
       throw err;
     }
   }
 
   async unbanUser(userId: number): Promise<void> {
     try {
-      await this.pool.execute(
-        `UPDATE accounts SET is_banned = 0, ban_reason = NULL, banned_at = NULL WHERE user_id = ?`,
+      await this.pool.query(
+        "UPDATE accounts SET is_banned = 0, ban_reason = NULL, banned_at = NULL WHERE user_id = $1",
         [userId]
       );
     } catch (err) {
-      console.error('Error unbanning user:', err);
+      console.error("Error unbanning user:", err);
       throw err;
     }
   }
 
   async warnUser(userId: number): Promise<void> {
     try {
-      await this.pool.execute(
-        `UPDATE accounts SET warning_count = COALESCE(warning_count, 0) + 1 WHERE user_id = ?`,
+      await this.pool.query(
+        "UPDATE accounts SET warning_count = COALESCE(warning_count, 0) + 1 WHERE user_id = $1",
         [userId]
       );
     } catch (err) {
-      console.error('Error warning user:', err);
+      console.error("Error warning user:", err);
       throw err;
     }
   }
 
+  // ---------- Leaderboard ----------
+
   async getLeaderboard(category: string, limit: number = 50): Promise<any[]> {
     try {
-      // First check which columns exist in leaderboard_2
-      const [columns] = await this.pool.execute(
-        `SHOW COLUMNS FROM leaderboard_2`
-      );
-      const columnNames = (columns as any[]).map(c => c.Field);
-      
-      const hasFastestRunTime = columnNames.includes('fastest_run_time');
-      const hasTotalKills = columnNames.includes('total_kills');
-      
-      // Build dynamic query - include fastest_run_time and total_kills
-      let selectFields = `lb.leaderboard_id, lb.user_id, a.username, lb.rank, lb.date_recorded`;
-      
-      if (hasFastestRunTime) {
-        selectFields += `, lb.fastest_run_time`;
-      } else {
-        selectFields += `, NULL as fastest_run_time`;
-      }
-      
-      if (hasTotalKills) {
-        selectFields += `, COALESCE(lb.total_kills, 0) as total_kills`;
-      } else {
-        selectFields += `, 0 as total_kills`;
-      }
-      
-      // Determine order by clause based on category
       let orderBy: string;
       let whereClause = "";
+
       switch (category) {
         case "kills":
-          orderBy = hasTotalKills ? "total_kills DESC" : "lb.leaderboard_id DESC";
+          orderBy = "total_kills DESC";
           break;
         case "fastest_time":
-          // For fastest time, order ASC (lower is better) and only show entries with a time
-          orderBy = hasFastestRunTime ? "lb.fastest_run_time ASC" : "lb.leaderboard_id DESC";
-          if (hasFastestRunTime) {
-            whereClause = "WHERE lb.fastest_run_time IS NOT NULL";
-          }
+          orderBy = "lb.fastest_run_time ASC";
+          whereClause = "WHERE lb.fastest_run_time IS NOT NULL";
           break;
         default:
-          orderBy = hasTotalKills ? "total_kills DESC" : "lb.leaderboard_id DESC";
+          orderBy = "total_kills DESC";
           break;
       }
-      
-      const [rows] = await this.pool.execute(
-        `SELECT ${selectFields}
-        FROM leaderboard_2 lb
-        LEFT JOIN accounts a ON lb.user_id = a.user_id
-        ${whereClause}
-        ORDER BY ${orderBy}
-        LIMIT ?`,
+
+      const result = await this.pool.query(
+        `SELECT lb.leaderboard_id, lb.user_id, a.username, lb.rank, lb.date_recorded,
+                lb.fastest_run_time, COALESCE(lb.total_kills, 0) as total_kills
+         FROM leaderboard_2 lb
+         LEFT JOIN accounts a ON lb.user_id = a.user_id
+         ${whereClause}
+         ORDER BY ${orderBy}
+         LIMIT $1`,
         [limit]
       );
-      return rows as any[];
+      return result.rows;
     } catch (err) {
-      console.error('Error fetching leaderboard:', err);
+      console.error("Error fetching leaderboard:", err);
       return [];
     }
   }
 
   async saveLeaderboardEntry(userId: number, fastestRunTime: string | null, totalKills: number | null): Promise<void> {
     try {
-      // Check if user already has a leaderboard entry
-      const [existing] = await this.pool.execute(
-        `SELECT leaderboard_id, fastest_run_time, total_kills FROM leaderboard_2 WHERE user_id = ?`,
+      const existing = await this.pool.query(
+        "SELECT leaderboard_id, fastest_run_time, total_kills FROM leaderboard_2 WHERE user_id = $1",
         [userId]
       );
-      
-      const existingRows = existing as any[];
-      
-      if (existingRows.length > 0) {
-        const currentTime = existingRows[0].fastest_run_time;
-        const currentKills = existingRows[0].total_kills || 0;
-        
-        // Build dynamic update query
+
+      if (existing.rows.length > 0) {
+        const currentTime = existing.rows[0].fastest_run_time;
+        const currentKills = existing.rows[0].total_kills || 0;
+
         const updates: string[] = [];
         const params: any[] = [];
-        
-        // Update fastest_run_time only if new time is faster
+        let paramIdx = 1;
+
         if (fastestRunTime && (!currentTime || fastestRunTime < currentTime)) {
-          updates.push('fastest_run_time = ?');
+          updates.push(`fastest_run_time = $${paramIdx++}`);
           params.push(fastestRunTime);
-          console.log(`Updated fastest time for user ${userId}: ${fastestRunTime}`);
         }
-        
-        // Update total_kills - use max value (best run, not accumulated)
+
         if (totalKills !== null && totalKills > currentKills) {
-          updates.push('total_kills = ?');
+          updates.push(`total_kills = $${paramIdx++}`);
           params.push(totalKills);
-          console.log(`Updated total kills for user ${userId}: ${currentKills} -> ${totalKills}`);
         }
-        
+
         if (updates.length > 0) {
-          updates.push('date_recorded = NOW()');
+          updates.push(`date_recorded = NOW()`);
           params.push(userId);
-          await this.pool.execute(
-            `UPDATE leaderboard_2 SET ${updates.join(', ')} WHERE user_id = ?`,
+          await this.pool.query(
+            `UPDATE leaderboard_2 SET ${updates.join(", ")} WHERE user_id = $${paramIdx}`,
             params
           );
         }
       } else {
-        // Create new entry
-        await this.pool.execute(
-          `INSERT INTO leaderboard_2 (user_id, fastest_run_time, total_kills, date_recorded) VALUES (?, ?, ?, NOW())`,
+        await this.pool.query(
+          "INSERT INTO leaderboard_2 (user_id, fastest_run_time, total_kills, date_recorded) VALUES ($1, $2, $3, NOW())",
           [userId, fastestRunTime, totalKills || 0]
         );
-        console.log(`Created new leaderboard entry for user ${userId}: time=${fastestRunTime}, kills=${totalKills}`);
       }
     } catch (err) {
-      console.error('Error saving leaderboard entry:', err);
+      console.error("Error saving leaderboard entry:", err);
       throw err;
     }
   }
 
-  private async ensureTransactionsTable(): Promise<void> {
-    // Create the table with the correct schema if it doesn't exist
-    await this.pool.execute(`
-      CREATE TABLE IF NOT EXISTS transactions_v2 (
-        transaction_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NOT NULL,
-        amount_spent_usd DECIMAL(10,2) NOT NULL,
-        card_number VARCHAR(20) NULL,
-        currency_purchased INT NOT NULL,
-        transaction_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Migrate existing rows from the old table if it exists and has rows
-    try {
-      const [oldRows]: any = await this.pool.execute(
-        `SELECT user_id, amount_spent_usd, card_number, currency_purchased, transaction_date FROM transactions`
-      );
-      if (oldRows.length > 0) {
-        const [newRows]: any = await this.pool.execute(`SELECT COUNT(*) AS cnt FROM transactions_v2`);
-        if (newRows[0].cnt === 0) {
-          for (const row of oldRows) {
-            await this.pool.execute(
-              `INSERT INTO transactions_v2 (user_id, amount_spent_usd, card_number, currency_purchased, transaction_date) VALUES (?, ?, ?, ?, ?)`,
-              [row.user_id, row.amount_spent_usd, row.card_number, row.currency_purchased, row.transaction_date]
-            );
-          }
-          console.log(`Migrated ${oldRows.length} rows from old transactions table`);
-        }
-      }
-    } catch {
-      // Old table doesn't exist or migration already done — fine
-    }
-  }
+  // ---------- Transactions ----------
 
   async saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void> {
     try {
-      await this.ensureTransactionsTable();
-      await this.pool.execute(
+      await this.pool.query(
         `INSERT INTO transactions_v2 (user_id, amount_spent_usd, card_number, currency_purchased, transaction_date)
-         VALUES (?, ?, ?, ?, NOW())`,
+         VALUES ($1, $2, $3, $4, NOW())`,
         [userId, amountUSD, cardNumber, goldAmount]
       );
-      console.log(`Transaction saved: user=${userId}, spent=$${amountUSD}, gold=${goldAmount}`);
     } catch (err) {
-      console.error('Error saving currency transaction:', err);
+      console.error("Error saving currency transaction:", err);
       throw err;
     }
   }
 
-  async getAllTransactions(): Promise<{ transactions: any[]; summary: { totalRevenue: number; transactionCount: number; mostPurchasedTier: { goldAmount: number; count: number } | null } }> {
+  async getAllTransactions(): Promise<{
+    transactions: any[];
+    summary: { totalRevenue: number; transactionCount: number; mostPurchasedTier: { goldAmount: number; count: number } | null };
+    earningsByDay: { day: string; revenue: number; purchases: number }[];
+    tierBreakdown: { gold: number; purchases: number; revenue: number }[];
+  }> {
     try {
-      await this.ensureTransactionsTable();
-
-      const [rows]: any = await this.pool.execute(
-        `SELECT t.transaction_id, t.user_id, a.username, t.amount_spent_usd, t.card_number, t.currency_purchased, t.transaction_date
+      const txResult = await this.pool.query(
+        `SELECT t.transaction_id, t.user_id, a.username, t.amount_spent_usd,
+                t.card_number, t.currency_purchased, t.transaction_date
          FROM transactions_v2 t
          LEFT JOIN accounts a ON t.user_id = a.user_id
          ORDER BY t.transaction_date DESC`
       );
 
-      const [aggRows]: any = await this.pool.execute(
-        `SELECT
-           currency_purchased AS mostPurchasedGold,
-           COUNT(*) AS tierCount
+      const aggResult = await this.pool.query(
+        `SELECT currency_purchased AS "mostPurchasedGold", COUNT(*) AS "tierCount"
          FROM transactions_v2
          GROUP BY currency_purchased
-         ORDER BY tierCount DESC
+         ORDER BY "tierCount" DESC
          LIMIT 1`
       );
 
-      const [totalRow]: any = await this.pool.execute(
-        `SELECT COUNT(*) AS transactionCount, COALESCE(SUM(amount_spent_usd), 0) AS totalRevenue FROM transactions_v2`
+      const totalResult = await this.pool.query(
+        `SELECT COUNT(*) AS "transactionCount", COALESCE(SUM(amount_spent_usd), 0) AS "totalRevenue"
+         FROM transactions_v2`
       );
 
-      const [dailyRows]: any = await this.pool.execute(
-        `SELECT
-           DATE(transaction_date) AS day,
-           COALESCE(SUM(amount_spent_usd), 0) AS revenue,
-           COUNT(*) AS purchases
+      const dailyResult = await this.pool.query(
+        `SELECT DATE(transaction_date) AS day,
+                COALESCE(SUM(amount_spent_usd), 0) AS revenue,
+                COUNT(*) AS purchases
          FROM transactions_v2
-         WHERE transaction_date >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
+         WHERE transaction_date >= NOW() - INTERVAL '29 days'
          GROUP BY DATE(transaction_date)
          ORDER BY day ASC`
       );
 
-      const [tierRows]: any = await this.pool.execute(
-        `SELECT
-           currency_purchased AS gold,
-           COUNT(*) AS purchases,
-           COALESCE(SUM(amount_spent_usd), 0) AS revenue
+      const tierResult = await this.pool.query(
+        `SELECT currency_purchased AS gold, COUNT(*) AS purchases,
+                COALESCE(SUM(amount_spent_usd), 0) AS revenue
          FROM transactions_v2
          GROUP BY currency_purchased
          ORDER BY purchases DESC`
       );
 
-      const total = totalRow[0] || { transactionCount: 0, totalRevenue: 0 };
-      const topTier = aggRows[0] || null;
+      const total = totalResult.rows[0] || { transactionCount: 0, totalRevenue: 0 };
+      const topTier = aggResult.rows[0] || null;
 
       return {
-        transactions: rows,
+        transactions: txResult.rows,
         summary: {
           totalRevenue: parseFloat(total.totalRevenue) || 0,
           transactionCount: parseInt(total.transactionCount) || 0,
-          mostPurchasedTier: topTier ? { goldAmount: topTier.mostPurchasedGold, count: parseInt(topTier.tierCount) } : null,
+          mostPurchasedTier: topTier
+            ? { goldAmount: topTier.mostPurchasedGold, count: parseInt(topTier.tierCount) }
+            : null,
         },
-        earningsByDay: dailyRows.map((r: any) => ({
+        earningsByDay: dailyResult.rows.map((r: any) => ({
           day: String(r.day).slice(0, 10),
           revenue: parseFloat(r.revenue) || 0,
           purchases: parseInt(r.purchases) || 0,
         })),
-        tierBreakdown: tierRows.map((r: any) => ({
+        tierBreakdown: tierResult.rows.map((r: any) => ({
           gold: parseInt(r.gold) || 0,
           purchases: parseInt(r.purchases) || 0,
           revenue: parseFloat(r.revenue) || 0,
         })),
       };
     } catch (err) {
-      console.error('Error fetching all transactions:', err);
-      return { transactions: [], summary: { totalRevenue: 0, transactionCount: 0, mostPurchasedTier: null }, earningsByDay: [], tierBreakdown: [] };
+      console.error("Error fetching all transactions:", err);
+      return {
+        transactions: [],
+        summary: { totalRevenue: 0, transactionCount: 0, mostPurchasedTier: null },
+        earningsByDay: [],
+        tierBreakdown: [],
+      };
     }
   }
 
   // ---------- Player stat tracking ----------
 
-  private async ensurePlayerStatsTable(): Promise<void> {
-    await this.pool.execute(`
-      CREATE TABLE IF NOT EXISTS player_stats (
-        user_id INT PRIMARY KEY,
-        total_shots INT NOT NULL DEFAULT 0,
-        shots_hit INT NOT NULL DEFAULT 0,
-        deaths INT NOT NULL DEFAULT 0,
-        minutes_played INT NOT NULL DEFAULT 0
-      )
-    `);
-  }
-
   async incrementPlayerStats(userId: number, shots: number, hits: number, deaths: number): Promise<void> {
     try {
-      await this.ensurePlayerStatsTable();
-      await this.pool.execute(`
-        INSERT INTO player_stats (user_id, total_shots, shots_hit, deaths, minutes_played)
-        VALUES (?, ?, ?, ?, 0)
-        ON DUPLICATE KEY UPDATE
-          total_shots = total_shots + VALUES(total_shots),
-          shots_hit   = shots_hit   + VALUES(shots_hit),
-          deaths      = deaths      + VALUES(deaths)
-      `, [userId, shots, hits, deaths]);
+      await this.pool.query(
+        `INSERT INTO player_stats (user_id, total_shots, shots_hit, deaths, minutes_played)
+         VALUES ($1, $2, $3, $4, 0)
+         ON CONFLICT (user_id) DO UPDATE SET
+           total_shots = player_stats.total_shots + EXCLUDED.total_shots,
+           shots_hit = player_stats.shots_hit + EXCLUDED.shots_hit,
+           deaths = player_stats.deaths + EXCLUDED.deaths`,
+        [userId, shots, hits, deaths]
+      );
     } catch (err) {
-      console.error('Error incrementing player stats:', err);
+      console.error("Error incrementing player stats:", err);
       throw err;
     }
   }
 
   async addMinutesPlayed(userId: number, minutes: number): Promise<void> {
     try {
-      await this.ensurePlayerStatsTable();
-      await this.pool.execute(`
-        INSERT INTO player_stats (user_id, total_shots, shots_hit, deaths, minutes_played)
-        VALUES (?, 0, 0, 0, ?)
-        ON DUPLICATE KEY UPDATE
-          minutes_played = minutes_played + VALUES(minutes_played)
-      `, [userId, minutes]);
+      await this.pool.query(
+        `INSERT INTO player_stats (user_id, total_shots, shots_hit, deaths, minutes_played)
+         VALUES ($1, 0, 0, 0, $2)
+         ON CONFLICT (user_id) DO UPDATE SET
+           minutes_played = player_stats.minutes_played + EXCLUDED.minutes_played`,
+        [userId, minutes]
+      );
     } catch (err) {
-      console.error('Error adding minutes played:', err);
+      console.error("Error adding minutes played:", err);
       throw err;
     }
   }
 
   async getPlayerStats(userId: number): Promise<{ total_shots: number; shots_hit: number; deaths: number; minutes_played: number }> {
     try {
-      await this.ensurePlayerStatsTable();
-      const [rows] = await this.pool.execute(
-        `SELECT total_shots, shots_hit, deaths, minutes_played FROM player_stats WHERE user_id = ?`,
+      const result = await this.pool.query(
+        "SELECT total_shots, shots_hit, deaths, minutes_played FROM player_stats WHERE user_id = $1",
         [userId]
       );
-      const result = rows as any[];
-      if (result.length > 0) {
-        return result[0];
+      if (result.rows.length > 0) {
+        return result.rows[0];
       }
       return { total_shots: 0, shots_hit: 0, deaths: 0, minutes_played: 0 };
     } catch (err) {
-      console.error('Error fetching player stats:', err);
+      console.error("Error fetching player stats:", err);
       return { total_shots: 0, shots_hit: 0, deaths: 0, minutes_played: 0 };
     }
   }
 }
 
-// The single storage instance used everywhere else
-export const storage: IStorage = new MySQLStorage();
+export const storage: IStorage = new PostgresStorage();
