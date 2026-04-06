@@ -229,6 +229,14 @@ interface Ramp {
   length: number;
 }
 
+interface MapPickup {
+  id: string;
+  position: [number, number, number];
+  type: "supplyCrate";
+  healthRestore: number;
+  coinReward: number;
+}
+
 // Simple game state
 interface GameState {
   health: number;
@@ -263,6 +271,7 @@ interface GameState {
     direction: [number, number, number];
     damage: number;
   }>;
+  pickups: MapPickup[];
   walls: Wall[];
   ramps: Ramp[];
   user: {
@@ -461,6 +470,55 @@ function getRampsForLevel(level: number): Ramp[] {
   return [];
 }
 
+function createPickupsForLevel(level: number): MapPickup[] {
+  const byLevel: Record<number, Array<[number, number, number]>> = {
+    0: [
+      [-18, 1, -18],
+      [18, 1, 18],
+      [0, 1, 20],
+    ],
+    1: [
+      [-20, 1, 22],
+      [20, 1, -22],
+      [0, 1, -24],
+    ],
+    2: [
+      [-22, 1, 0],
+      [22, 1, 0],
+      [0, 1, 24],
+    ],
+    3: [
+      [-24, 1, -24],
+      [24, 1, 24],
+      [0, 1, 0],
+    ],
+    4: [
+      [-24, 1, 24],
+      [24, 1, -24],
+      [0, 1, -24],
+    ],
+    5: [
+      [-22, 1, 22],
+      [22, 1, 22],
+      [0, 1, -22],
+    ],
+    6: [
+      [-20, 1, -20],
+      [20, 1, 20],
+      [0, 1, 24],
+    ],
+  };
+
+  const positions = byLevel[level] ?? byLevel[0];
+  return positions.map((position, index) => ({
+    id: `pickup_${level}_${index}`,
+    position,
+    type: "supplyCrate",
+    healthRestore: 25,
+    coinReward: 2,
+  }));
+}
+
 // Get walls for current level
 function getWallsForLevel(
   level: number,
@@ -607,7 +665,40 @@ function GameEnvironment({ gameState }: { gameState: GameState }) {
         <boxGeometry args={[8, 1, 8]} />
         <meshLambertMaterial map={asphaltTexture} />
       </mesh>
+
+      {/* Supply crates (health + coins) */}
+      {gameState.pickups.map((pickup) => (
+        <PickupCrate key={pickup.id} pickup={pickup} />
+      ))}
     </>
+  );
+}
+
+function PickupCrate({ pickup }: { pickup: MapPickup }) {
+  const crateRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (!crateRef.current) return;
+    crateRef.current.rotation.y += 0.02;
+    crateRef.current.position.y =
+      pickup.position[1] + Math.sin(state.clock.elapsedTime * 2.2) * 0.2;
+  });
+
+  return (
+    <group ref={crateRef} position={pickup.position}>
+      <mesh>
+        <boxGeometry args={[1.2, 1.2, 1.2]} />
+        <meshStandardMaterial color="#17d46a" emissive="#0a6833" emissiveIntensity={0.75} />
+      </mesh>
+      <mesh position={[0, 0, 0.61]}>
+        <boxGeometry args={[0.7, 0.18, 0.08]} />
+        <meshStandardMaterial color="#ffffff" />
+      </mesh>
+      <mesh position={[0, 0, 0.61]} rotation={[0, 0, Math.PI / 2]}>
+        <boxGeometry args={[0.7, 0.18, 0.08]} />
+        <meshStandardMaterial color="#ffffff" />
+      </mesh>
+    </group>
   );
 }
 
@@ -994,6 +1085,42 @@ function Player({
       }
 
       playerRef.current.position.copy(newPos);
+
+      if (gameState.pickups.length > 0) {
+        const collectedPickupIds = gameState.pickups
+          .filter((pickup) => {
+            const pickupPos = new THREE.Vector3(...pickup.position);
+            return pickupPos.distanceTo(newPos) < 1.6;
+          })
+          .map((pickup) => pickup.id);
+
+        if (collectedPickupIds.length > 0) {
+          setGameState((prev) => {
+            const collectedPickups = prev.pickups.filter((pickup) =>
+              collectedPickupIds.includes(pickup.id),
+            );
+            if (collectedPickups.length === 0) return prev;
+
+            const totalHealthRestore = collectedPickups.reduce(
+              (sum, pickup) => sum + pickup.healthRestore,
+              0,
+            );
+            const totalCoinReward = collectedPickups.reduce(
+              (sum, pickup) => sum + pickup.coinReward,
+              0,
+            );
+
+            return {
+              ...prev,
+              pickups: prev.pickups.filter(
+                (pickup) => !collectedPickupIds.includes(pickup.id),
+              ),
+              health: Math.min(prev.maxHealth, prev.health + totalHealthRestore),
+              coins: prev.coins + totalCoinReward,
+            };
+          });
+        }
+      }
     }
 
     // Weapon switching via loadout (keys 1-4 select tier, loadout determines weapon)
@@ -8849,6 +8976,7 @@ function Game() {
     enemies: [],
     bullets: [],
     enemyProjectiles: [],
+    pickups: createPickupsForLevel(0),
     walls: [],
     ramps: [],
     user: {
@@ -9021,6 +9149,32 @@ function Game() {
       document.exitPointerLock();
     }
   }, [gameState.gamePhase]);
+
+  useEffect(() => {
+    if (
+      gameState.gamePhase !== "playing" &&
+      gameState.gamePhase !== "paused" &&
+      gameState.gamePhase !== "levelTransition"
+    ) {
+      return;
+    }
+
+    setGameState((prev) => ({
+      ...prev,
+      pickups: createPickupsForLevel(prev.level.currentLevel),
+    }));
+  }, [gameState.level.currentLevel]);
+
+  useEffect(() => {
+    if (gameState.gamePhase !== "playing" || gameState.pickups.length > 0) {
+      return;
+    }
+
+    setGameState((prev) => ({
+      ...prev,
+      pickups: createPickupsForLevel(prev.level.currentLevel),
+    }));
+  }, [gameState.gamePhase, gameState.pickups.length, gameState.level.currentLevel]);
 
   // Show a brief loading screen while checking session to avoid login flash
   if (sessionChecking) {
