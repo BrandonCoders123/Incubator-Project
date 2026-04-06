@@ -470,7 +470,12 @@ function getRampsForLevel(level: number): Ramp[] {
   return [];
 }
 
-function createPickupsForLevel(level: number): MapPickup[] {
+const MAX_ACTIVE_SUPPLY_CRATES = 2;
+const SUPPLY_CRATE_SPAWN_INTERVAL_MS = 15_000;
+
+function getPickupSpawnPositionsForLevel(
+  level: number,
+): Array<[number, number, number]> {
   const byLevel: Record<number, Array<[number, number, number]>> = {
     0: [
       [-18, 1, -18],
@@ -509,14 +514,17 @@ function createPickupsForLevel(level: number): MapPickup[] {
     ],
   };
 
-  const positions = byLevel[level] ?? byLevel[0];
-  return positions.map((position, index) => ({
-    id: `pickup_${level}_${index}`,
+  return byLevel[level] ?? byLevel[0];
+}
+
+function createSupplyCrate(level: number, position: [number, number, number]): MapPickup {
+  return {
+    id: `pickup_${level}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     position,
     type: "supplyCrate",
     healthRestore: 25,
     coinReward: 2,
-  }));
+  };
 }
 
 // Get walls for current level
@@ -8976,7 +8984,7 @@ function Game() {
     enemies: [],
     bullets: [],
     enemyProjectiles: [],
-    pickups: createPickupsForLevel(0),
+    pickups: [],
     walls: [],
     ramps: [],
     user: {
@@ -9151,30 +9159,63 @@ function Game() {
   }, [gameState.gamePhase]);
 
   useEffect(() => {
-    if (
-      gameState.gamePhase !== "playing" &&
-      gameState.gamePhase !== "paused" &&
-      gameState.gamePhase !== "levelTransition"
-    ) {
+    if (gameState.gamePhase !== "playing") {
       return;
     }
 
+    const spawnSupplyCrate = () => {
+      setGameState((prev) => {
+        if (prev.gamePhase !== "playing") {
+          return prev;
+        }
+
+        if (prev.pickups.length >= MAX_ACTIVE_SUPPLY_CRATES) {
+          return prev;
+        }
+
+        const spawnPositions = getPickupSpawnPositionsForLevel(
+          prev.level.currentLevel,
+        );
+
+        const occupiedPositions = new Set(
+          prev.pickups.map((pickup) => pickup.position.join(",")),
+        );
+        const availablePositions = spawnPositions.filter(
+          (position) => !occupiedPositions.has(position.join(",")),
+        );
+
+        if (availablePositions.length === 0) {
+          return prev;
+        }
+
+        const randomPosition =
+          availablePositions[Math.floor(Math.random() * availablePositions.length)];
+
+        return {
+          ...prev,
+          pickups: [
+            ...prev.pickups,
+            createSupplyCrate(prev.level.currentLevel, randomPosition),
+          ],
+        };
+      });
+    };
+
     setGameState((prev) => ({
       ...prev,
-      pickups: createPickupsForLevel(prev.level.currentLevel),
+      pickups: [],
     }));
-  }, [gameState.level.currentLevel]);
 
-  useEffect(() => {
-    if (gameState.gamePhase !== "playing" || gameState.pickups.length > 0) {
-      return;
-    }
+    spawnSupplyCrate();
+    const spawnTimer = window.setInterval(
+      spawnSupplyCrate,
+      SUPPLY_CRATE_SPAWN_INTERVAL_MS,
+    );
 
-    setGameState((prev) => ({
-      ...prev,
-      pickups: createPickupsForLevel(prev.level.currentLevel),
-    }));
-  }, [gameState.gamePhase, gameState.pickups.length, gameState.level.currentLevel]);
+    return () => {
+      window.clearInterval(spawnTimer);
+    };
+  }, [gameState.gamePhase, gameState.level.currentLevel]);
 
   // Show a brief loading screen while checking session to avoid login flash
   if (sessionChecking) {
