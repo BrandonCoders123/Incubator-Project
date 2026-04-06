@@ -184,6 +184,7 @@ const LEVELS = [
 
 // Enemy types and archetypes
 type EnemyType = "melee" | "ranged" | "giant" | "rat";
+type Difficulty = "normal" | "hard" | "extreme";
 
 interface Enemy {
   id: string;
@@ -239,6 +240,39 @@ const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
   },
 };
 
+const DIFFICULTY_SETTINGS: Record<
+  Difficulty,
+  {
+    label: string;
+    enemyHealthMultiplier: number;
+    enemyDamageMultiplier: number;
+    enemyMoveSpeedMultiplier: number;
+    enemyAttackSpeedMultiplier: number;
+  }
+> = {
+  normal: {
+    label: "Normal",
+    enemyHealthMultiplier: 1,
+    enemyDamageMultiplier: 1,
+    enemyMoveSpeedMultiplier: 1,
+    enemyAttackSpeedMultiplier: 1,
+  },
+  hard: {
+    label: "Hard",
+    enemyHealthMultiplier: 1.4,
+    enemyDamageMultiplier: 1.3,
+    enemyMoveSpeedMultiplier: 1,
+    enemyAttackSpeedMultiplier: 1,
+  },
+  extreme: {
+    label: "Extreme",
+    enemyHealthMultiplier: 1.8,
+    enemyDamageMultiplier: 1.6,
+    enemyMoveSpeedMultiplier: 1.25,
+    enemyAttackSpeedMultiplier: 1.35,
+  },
+};
+
 interface Wall {
   position: [number, number, number];
   size: [number, number, number];
@@ -271,6 +305,7 @@ interface GameState {
     | "login"
     | "register"
     | "menu"
+    | "difficultySelect"
     | "leaderboard"
     | "settings"
     | "profile"
@@ -341,6 +376,7 @@ interface GameState {
   isAdmin: boolean; // Whether user has admin privileges
   gameStartTime: number | null; // Timestamp when game started (for leaderboard run time)
   gameMode: "story" | "endless"; // Game mode: story (with levels) or endless (wave survival)
+  difficulty: Difficulty;
   sessionShotsFired: number; // Shots fired this session (saved to DB on death)
   sessionShotsHit: number; // Bullet hits on enemies this session
   adminLevelTestMode: boolean;
@@ -1494,6 +1530,14 @@ function Enemy({
   const [isAttacking, setIsAttacking] = useState(false);
 
   const archetype = ENEMY_ARCHETYPES[enemy.type];
+  const difficulty = DIFFICULTY_SETTINGS[gameState.difficulty];
+  const enemyMoveSpeed =
+    archetype.moveSpeed * difficulty.enemyMoveSpeedMultiplier;
+  const enemyDamage = archetype.damage * difficulty.enemyDamageMultiplier;
+  const enemyAttackInterval = Math.max(
+    120,
+    archetype.attackInterval / difficulty.enemyAttackSpeedMultiplier,
+  );
 
   useFrame((state, deltaTime) => {
     // Only update during gameplay
@@ -1523,7 +1567,7 @@ function Enemy({
         behavior,
         normalizedDirection,
         distanceToPlayer,
-        archetype.moveSpeed,
+        enemyMoveSpeed,
         deltaTime,
       );
 
@@ -1578,14 +1622,14 @@ function Enemy({
           const currentTime = Date.now();
           setGameState((prev) => {
             if (
-              currentTime - prev.lastDamageTime > archetype.attackInterval &&
+              currentTime - prev.lastDamageTime > enemyAttackInterval &&
               prev.gamePhase === "playing"
             ) {
               const damageReduction = Math.min(
                 MAX_DAMAGE_RESISTANCE,
                 prev.augmentLevels.userDamageResist * 0.06,
               );
-              const reducedDamage = archetype.damage * (1 - damageReduction);
+              const reducedDamage = enemyDamage * (1 - damageReduction);
               const newHealth = Math.max(0, prev.health - reducedDamage);
               return {
                 ...prev,
@@ -1607,7 +1651,7 @@ function Enemy({
             ...prev,
             enemies: prev.enemies.map((e) =>
               e.id === enemy.id
-                ? { ...e, nextAttackAt: currentTime + archetype.attackInterval }
+                ? { ...e, nextAttackAt: currentTime + enemyAttackInterval }
                 : e,
             ),
             enemyProjectiles: [
@@ -1616,7 +1660,7 @@ function Enemy({
                 id: `enemyproj_${Date.now()}_${Math.random()}`,
                 position: [enemyPos.x, enemyPos.y + 1, enemyPos.z],
                 direction: [projectileDir.x, projectileDir.y, projectileDir.z],
-                damage: archetype.damage,
+                damage: enemyDamage,
               },
             ],
           }));
@@ -6306,31 +6350,7 @@ function HUD({
           playClick();
           setGameState((prev) => ({
             ...prev,
-            gamePhase: "introCutscene",
-            gameMode: "story",
-            gameStartTime: null,
-            health: prev.maxHealth,
-            ammo: weapons[1].maxAmmo,
-            reserveAmmo: getStartingReserveAmmo(1),
-            coins: 0,
-            enemies: [],
-            bullets: [],
-            enemyProjectiles: [],
-            story: {
-              currentSettlement: 0,
-              alliesRescued: 0,
-              settlementsConquered: [],
-              totalKills: 0,
-            },
-            sessionShotsFired: 0,
-            sessionShotsHit: 0,
-            level: {
-              currentLevel: 0,
-              killsThisLevel: 0,
-              giantsSpawnedThisLevel: 0,
-            },
-            adminLevelTestMode: false,
-            adminTestStartLevel: null,
+            gamePhase: "difficultySelect",
           }));
         },
       },
@@ -6503,6 +6523,171 @@ function HUD({
               />
             ))}
           </nav>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState.gamePhase === "difficultySelect") {
+    const startStoryModeAtDifficulty = (difficulty: Difficulty) => {
+      setGameState((prev) => ({
+        ...prev,
+        difficulty,
+        gamePhase: "introCutscene",
+        gameMode: "story",
+        gameStartTime: null,
+        health: prev.maxHealth,
+        ammo: weapons[1].maxAmmo,
+        reserveAmmo: getStartingReserveAmmo(1),
+        coins: 0,
+        enemies: [],
+        bullets: [],
+        enemyProjectiles: [],
+        story: {
+          currentSettlement: 0,
+          alliesRescued: 0,
+          settlementsConquered: [],
+          totalKills: 0,
+        },
+        sessionShotsFired: 0,
+        sessionShotsHit: 0,
+        level: {
+          currentLevel: 0,
+          killsThisLevel: 0,
+          giantsSpawnedThisLevel: 0,
+        },
+        adminLevelTestMode: false,
+        adminTestStartLevel: null,
+      }));
+    };
+
+    const difficultyCards: Array<{
+      key: Difficulty;
+      subtitle: string;
+      details: string;
+    }> = [
+      {
+        key: "normal",
+        subtitle: "Balanced baseline experience",
+        details: "Standard enemy damage and health.",
+      },
+      {
+        key: "hard",
+        subtitle: "Enemies hit harder and survive longer",
+        details: "Higher enemy damage and health.",
+      },
+      {
+        key: "extreme",
+        subtitle: "Maximum pressure combat",
+        details:
+          "Hard bonuses plus faster enemy movement and faster attacks.",
+      },
+    ];
+
+    return (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          backgroundImage: 'url("/HomeScreen.png")',
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+          zIndex: 1000,
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(0,0,0,0.68)",
+          }}
+        />
+        <div
+          style={{
+            position: "relative",
+            width: "min(960px, 92vw)",
+            padding: "28px",
+            border: "1px solid rgba(232,160,32,0.35)",
+            background: "rgba(14,9,4,0.92)",
+          }}
+        >
+          <div
+            style={{
+              color: "#e8c96a",
+              letterSpacing: "3px",
+              textTransform: "uppercase",
+              fontSize: "30px",
+              marginBottom: "8px",
+            }}
+          >
+            Select Difficulty
+          </div>
+          <div style={{ color: "rgba(255,255,255,0.85)", marginBottom: "20px" }}>
+            Pick how dangerous story mode enemies should be.
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "12px",
+              marginBottom: "16px",
+            }}
+          >
+            {difficultyCards.map((difficultyCard) => {
+              const config = DIFFICULTY_SETTINGS[difficultyCard.key];
+              return (
+                <button
+                  key={difficultyCard.key}
+                  onClick={() => startStoryModeAtDifficulty(difficultyCard.key)}
+                  style={{
+                    textAlign: "left",
+                    padding: "16px",
+                    border: "1px solid rgba(232,160,32,0.4)",
+                    background: "rgba(35,20,8,0.95)",
+                    color: "white",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "24px",
+                      color: "#f0d28a",
+                      letterSpacing: "1px",
+                      textTransform: "uppercase",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    {config.label}
+                  </div>
+                  <div style={{ fontSize: "14px", opacity: 0.95, marginBottom: "6px" }}>
+                    {difficultyCard.subtitle}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.72)" }}>
+                    {difficultyCard.details}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))}
+            style={{
+              padding: "10px 16px",
+              background: "rgba(45,28,11,0.95)",
+              color: "#f3dca2",
+              border: "1px solid rgba(232,160,32,0.35)",
+              cursor: "pointer",
+              textTransform: "uppercase",
+            }}
+          >
+            Back
+          </button>
         </div>
       </div>
     );
@@ -9043,6 +9228,7 @@ function GameLogic({
       }
 
       const archetype = ENEMY_ARCHETYPES[enemyType];
+      const difficulty = DIFFICULTY_SETTINGS[gameState.difficulty];
 
       setGameState((prev) => ({
         ...prev,
@@ -9056,7 +9242,7 @@ function GameLogic({
             velocity: [0, 0, 0],
             movementDirection: [0, 0, 1],
             isMoving: false,
-            health: archetype.health,
+            health: archetype.health * difficulty.enemyHealthMultiplier,
             nextAttackAt: 0,
           },
         ],
@@ -9140,6 +9326,7 @@ function Game() {
     isAdmin: false,
     gameStartTime: null,
     gameMode: "story",
+    difficulty: "normal",
     sessionShotsFired: 0,
     sessionShotsHit: 0,
     adminLevelTestMode: false,
