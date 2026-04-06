@@ -11,6 +11,7 @@ import {
   KeyboardControls,
   useKeyboardControls,
   useTexture,
+  Line,
 } from "@react-three/drei";
 import * as THREE from "three";
 import "@fontsource/inter";
@@ -310,6 +311,7 @@ interface MapPickup {
   healthRestore: number;
   coinReward: number;
   ammoReward: number;
+  grenadeReward: number;
 }
 
 // Simple game state
@@ -318,6 +320,8 @@ interface GameState {
   maxHealth: number; // Added for token health buffs
   ammo: number;
   reserveAmmo: number;
+  grenades: number;
+  maxGrenades: number;
   coins: number; // Changed from score to coins
   gamePhase:
     | "login"
@@ -341,6 +345,18 @@ interface GameState {
     position: [number, number, number];
     direction: [number, number, number];
     damage: number;
+  }>;
+  grenadeProjectiles: Array<{
+    id: string;
+    position: [number, number, number];
+    velocity: [number, number, number];
+  }>;
+  explosions: Array<{
+    id: string;
+    position: [number, number, number];
+    startTime: number;
+    duration: number;
+    radius: number;
   }>;
   enemyProjectiles: Array<{
     id: string;
@@ -445,6 +461,11 @@ const RAMP_HEIGHT_GAIN = 2;
 const MIN_RELOAD_MULTIPLIER = 0.4;
 const MIN_SPREAD_MULTIPLIER = 0.35;
 const MAX_DAMAGE_RESISTANCE = 0.6;
+const GRENADE_MAX_CHARGE_MS = 1000;
+const GRENADE_MIN_THROW_SPEED = 14;
+const GRENADE_MAX_THROW_SPEED = 26;
+const GRENADE_BASE_DAMAGE = 220;
+const GRENADE_SPLASH_RADIUS = 7;
 
 function getRampLocalPosition(position: THREE.Vector3, ramp: Ramp) {
   const [rx, , rz] = ramp.position;
@@ -456,6 +477,59 @@ function getRampLocalPosition(position: THREE.Vector3, ramp: Ramp) {
   return {
     x: dx * cos - dz * sin,
     z: dx * sin + dz * cos,
+  };
+}
+
+function applyKillProgress(prev: GameState, additionalKills: number) {
+  if (additionalKills <= 0) return prev;
+
+  const newCoins = prev.coins + additionalKills;
+  const newKills = prev.story.totalKills + additionalKills;
+  const newLevelKills = prev.level.killsThisLevel + additionalKills;
+  const newSettlementIndex = Math.floor(newKills / 10);
+  const newAlliesRescued = Math.floor(newKills / 3);
+
+  let newSettlementsConquered = prev.story.settlementsConquered;
+  if (
+    newSettlementIndex > prev.story.currentSettlement &&
+    newSettlementIndex <= SETTLEMENTS.length
+  ) {
+    const settlementName = SETTLEMENTS[newSettlementIndex - 1];
+    if (!prev.story.settlementsConquered.includes(settlementName)) {
+      newSettlementsConquered = [...prev.story.settlementsConquered, settlementName];
+    }
+  }
+
+  const currentLevelData = LEVELS[prev.level.currentLevel];
+  const shouldLevelUp =
+    currentLevelData && newLevelKills >= currentLevelData.killsRequired;
+  const nextLevel = prev.level.currentLevel + 1;
+  const hasNextLevel = nextLevel < LEVELS.length;
+  const completedFinalLevel = shouldLevelUp && !hasNextLevel;
+  const isEndless = prev.gameMode === "endless";
+
+  let nextPhase = prev.gamePhase;
+  if (completedFinalLevel && !isEndless) {
+    nextPhase = "victory";
+  } else if (shouldLevelUp && hasNextLevel) {
+    nextPhase = "levelTransition";
+  }
+
+  return {
+    ...prev,
+    coins: newCoins,
+    story: {
+      currentSettlement: Math.min(newSettlementIndex, SETTLEMENTS.length - 1),
+      alliesRescued: newAlliesRescued,
+      settlementsConquered: newSettlementsConquered,
+      totalKills: newKills,
+    },
+    level: {
+      currentLevel: prev.level.currentLevel,
+      killsThisLevel: completedFinalLevel && isEndless ? 0 : newLevelKills,
+      giantsSpawnedThisLevel: prev.level.giantsSpawnedThisLevel,
+    },
+    gamePhase: nextPhase,
   };
 }
 
@@ -619,6 +693,7 @@ function createSupplyCrate(level: number, position: [number, number, number]): M
     healthRestore: 25,
     coinReward: 2,
     ammoReward: 0,
+    grenadeReward: 1,
   };
 }
 
@@ -630,6 +705,7 @@ function createAmmoCrate(level: number, position: [number, number, number]): Map
     healthRestore: 0,
     coinReward: 0,
     ammoReward: AMMO_CRATE_RESERVE_REWARD_RATIO,
+    grenadeReward: 0,
   };
 }
 
@@ -875,6 +951,9 @@ function Player({
   const weaponAmmo = useRef<Record<number, number>>(getFullMagazineByWeapon());
   const weaponReserveAmmo = useRef<Record<number, number>>(getFullReserveByWeapon());
   const gameStateRef = useRef(gameState);
+  const grenadeChargeStartRef = useRef<number | null>(null);
+  const grenadeKeyHeldRef = useRef(false);
+  const [grenadeTrajectory, setGrenadeTrajectory] = useState<[number, number, number][]>([]);
 
   // Keep gameStateRef in sync
   useEffect(() => {
@@ -1049,6 +1128,68 @@ function Player({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mousedown", handleMouseDown);
       window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [camera, setGameState]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || gameStateRef.current.gamePhase !== "playing") return;
+      const grenadeBinding = useSettings.getState().keybindings.grenade?.[0] || "KeyQ";
+      if (event.code !== grenadeBinding) return;
+      if (gameStateRef.current.grenades <= 0) return;
+      grenadeKeyHeldRef.current = true;
+      grenadeChargeStartRef.current = performance.now();
+      event.preventDefault();
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      const grenadeBinding = useSettings.getState().keybindings.grenade?.[0] || "KeyQ";
+      if (event.code !== grenadeBinding) return;
+
+      const chargeStart = grenadeChargeStartRef.current;
+      grenadeKeyHeldRef.current = false;
+      grenadeChargeStartRef.current = null;
+      setGrenadeTrajectory([]);
+
+      if (chargeStart === null || gameStateRef.current.gamePhase !== "playing") return;
+      if (gameStateRef.current.grenades <= 0) return;
+
+      const heldMs = performance.now() - chargeStart;
+      const charge = Math.min(1, heldMs / GRENADE_MAX_CHARGE_MS);
+      const throwSpeed =
+        GRENADE_MIN_THROW_SPEED + (GRENADE_MAX_THROW_SPEED - GRENADE_MIN_THROW_SPEED) * charge;
+
+      const aimDirection = new THREE.Vector3(
+        -Math.sin(rotationRef.current.y) * Math.cos(rotationRef.current.x),
+        Math.sin(rotationRef.current.x),
+        -Math.cos(rotationRef.current.y) * Math.cos(rotationRef.current.x),
+      ).normalize();
+      const grenadeSpawnPos = camera.position.clone().add(aimDirection.clone().multiplyScalar(1.1));
+      const grenadeVelocity = aimDirection.multiplyScalar(throwSpeed).add(new THREE.Vector3(0, 4, 0));
+
+      setGameState((prev) => {
+        if (prev.grenades <= 0 || prev.gamePhase !== "playing") return prev;
+        return {
+          ...prev,
+          grenades: prev.grenades - 1,
+          grenadeProjectiles: [
+            ...prev.grenadeProjectiles,
+            {
+              id: `grenade_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+              position: [grenadeSpawnPos.x, grenadeSpawnPos.y, grenadeSpawnPos.z],
+              velocity: [grenadeVelocity.x, grenadeVelocity.y, grenadeVelocity.z],
+            },
+          ],
+        };
+      });
+      event.preventDefault();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
     };
   }, [camera, setGameState]);
 
@@ -1266,6 +1407,9 @@ function Player({
               (sum, pickup) => sum + pickup.coinReward,
               0,
             );
+            const totalGrenadeReward = collectedPickups
+              .filter((pickup) => pickup.type === "supplyCrate")
+              .reduce((sum, pickup) => sum + pickup.grenadeReward, 0);
 
             const currentWeapon = prev.currentWeapon;
             const currentReserveAmmo = weaponReserveAmmo.current[currentWeapon] ?? prev.reserveAmmo;
@@ -1290,10 +1434,40 @@ function Player({
               health: Math.min(prev.maxHealth, prev.health + totalHealthRestore),
               coins: prev.coins + totalCoinReward,
               reserveAmmo: newReserveAmmo,
+              grenades: Math.min(prev.maxGrenades, prev.grenades + totalGrenadeReward),
             };
           });
         }
       }
+    }
+
+    if (grenadeKeyHeldRef.current && grenadeChargeStartRef.current !== null) {
+      const heldMs = performance.now() - grenadeChargeStartRef.current;
+      const charge = Math.min(1, heldMs / GRENADE_MAX_CHARGE_MS);
+      const throwSpeed =
+        GRENADE_MIN_THROW_SPEED + (GRENADE_MAX_THROW_SPEED - GRENADE_MIN_THROW_SPEED) * charge;
+      const direction = new THREE.Vector3(
+        -Math.sin(rotationRef.current.y) * Math.cos(rotationRef.current.x),
+        Math.sin(rotationRef.current.x),
+        -Math.cos(rotationRef.current.y) * Math.cos(rotationRef.current.x),
+      ).normalize();
+      const origin = camera.position.clone().add(direction.clone().multiplyScalar(1.1));
+      const velocity = direction.multiplyScalar(throwSpeed).add(new THREE.Vector3(0, 4, 0));
+
+      const points: [number, number, number][] = [];
+      const gravity = 24;
+      const steps = 20;
+      const stepSize = 0.08;
+      for (let i = 0; i <= steps; i++) {
+        const t = i * stepSize;
+        const point = origin
+          .clone()
+          .add(velocity.clone().multiplyScalar(t))
+          .add(new THREE.Vector3(0, -0.5 * gravity * t * t, 0));
+        points.push([point.x, Math.max(0.2, point.y), point.z]);
+        if (point.y <= 0.2) break;
+      }
+      setGrenadeTrajectory(points);
     }
 
     // Weapon switching via loadout (keys 1-4 select tier, loadout determines weapon)
@@ -1405,6 +1579,78 @@ function Player({
             bullet.position[1] < 20,
         ),
     }));
+
+    if (gameState.grenadeProjectiles.length > 0 || gameState.explosions.length > 0) {
+      setGameState((prev) => {
+        const gravity = 24;
+        const impactDetonations: Array<{ position: [number, number, number] }> = [];
+
+        const updatedGrenades = prev.grenadeProjectiles
+          .map((grenade) => {
+            const velocity = new THREE.Vector3(...grenade.velocity);
+            velocity.y -= gravity * deltaTime;
+            const position = new THREE.Vector3(...grenade.position).add(
+              velocity.clone().multiplyScalar(deltaTime),
+            );
+            if (position.y <= 0.5) {
+              impactDetonations.push({ position: [position.x, 0.5, position.z] });
+              return null;
+            }
+            return {
+              ...grenade,
+              position: [position.x, position.y, position.z] as [number, number, number],
+              velocity: [velocity.x, velocity.y, velocity.z] as [number, number, number],
+            };
+          })
+          .filter((grenade): grenade is NonNullable<typeof grenade> => grenade !== null);
+
+        const activeExplosions = prev.explosions.filter(
+          (exp) => Date.now() - exp.startTime < exp.duration,
+        );
+        const spawnedExplosions = impactDetonations.map((det) => ({
+          id: `explosion_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          position: det.position,
+          startTime: Date.now(),
+          duration: 450,
+          radius: GRENADE_SPLASH_RADIUS,
+        }));
+
+        let nextState: GameState = {
+          ...prev,
+          grenadeProjectiles: updatedGrenades,
+          explosions: [...activeExplosions, ...spawnedExplosions],
+        };
+
+        if (spawnedExplosions.length > 0 && prev.enemies.length > 0) {
+          const enemies = prev.enemies.map((enemy) => ({ ...enemy }));
+          let killsFromGrenade = 0;
+
+          spawnedExplosions.forEach((exp) => {
+            const center = new THREE.Vector3(...exp.position);
+            enemies.forEach((enemy) => {
+              if (enemy.health <= 0) return;
+              const distance = new THREE.Vector3(...enemy.position).distanceTo(center);
+              if (distance > exp.radius) return;
+              const damageFalloff = 1 - distance / exp.radius;
+              const damage = GRENADE_BASE_DAMAGE * Math.max(0.35, damageFalloff);
+              const newHealth = enemy.health - damage;
+              if (enemy.health > 0 && newHealth <= 0) {
+                killsFromGrenade += 1;
+              }
+              enemy.health = newHealth;
+            });
+          });
+
+          nextState = {
+            ...nextState,
+            enemies: enemies.filter((enemy) => enemy.health > 0),
+          };
+          nextState = applyKillProgress(nextState, killsFromGrenade);
+        }
+
+        return nextState;
+      });
+    }
   });
 
   return (
@@ -1418,6 +1664,15 @@ function Player({
           opacity={0}
         />
       </mesh>
+      {grenadeTrajectory.length > 1 && (
+        <Line
+          points={grenadeTrajectory}
+          color="#f9c74f"
+          lineWidth={2}
+          transparent
+          opacity={0.9}
+        />
+      )}
     </group>
   );
 }
@@ -2011,6 +2266,58 @@ function Bullet({
           />
         </mesh>
       ))}
+    </group>
+  );
+}
+
+function GrenadeProjectile({
+  grenade,
+}: {
+  grenade: {
+    id: string;
+    position: [number, number, number];
+  };
+}) {
+  return (
+    <group position={grenade.position}>
+      <mesh>
+        <boxGeometry args={[0.34, 0.34, 0.34]} />
+        <meshStandardMaterial color="#4e6a77" metalness={0.2} roughness={0.7} />
+      </mesh>
+      <mesh position={[0, 0.25, 0]}>
+        <boxGeometry args={[0.14, 0.12, 0.14]} />
+        <meshStandardMaterial color="#d9b74f" />
+      </mesh>
+    </group>
+  );
+}
+
+function ExplosionEffect({
+  explosion,
+}: {
+  explosion: {
+    id: string;
+    position: [number, number, number];
+    startTime: number;
+    duration: number;
+    radius: number;
+  };
+}) {
+  const elapsed = Date.now() - explosion.startTime;
+  const progress = Math.min(1, elapsed / explosion.duration);
+  const visualRadius = explosion.radius * (0.2 + progress * 0.8);
+  const opacity = 1 - progress;
+
+  return (
+    <group position={explosion.position}>
+      <mesh>
+        <sphereGeometry args={[visualRadius, 20, 20]} />
+        <meshBasicMaterial color="#ffb347" transparent opacity={opacity * 0.35} />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[visualRadius * 0.55, 16, 16]} />
+        <meshBasicMaterial color="#ff6f3c" transparent opacity={opacity * 0.45} />
+      </mesh>
     </group>
   );
 }
@@ -3809,6 +4116,7 @@ function SettingsPage({
     move_left_key: "KeyA",
     move_right_key: "KeyD",
     jump_key: "Space",
+    grenade_key: localStorage.getItem("grenade_key") || "KeyQ",
   });
 
   const [loading, setLoading] = useState(true);
@@ -3849,6 +4157,7 @@ function SettingsPage({
     move_left_key: "Move Left",
     move_right_key: "Move Right",
     jump_key: "Jump",
+    grenade_key: "Throw Grenade",
   };
 
   // Convert key code to display name
@@ -3879,6 +4188,7 @@ function SettingsPage({
             move_left_key: s.move_left_key || "KeyA",
             move_right_key: s.move_right_key || "KeyD",
             jump_key: s.jump_key || "Space",
+            grenade_key: localStorage.getItem("grenade_key") || "KeyQ",
           });
           // Also apply to global store immediately
           setKeybinding("forward", s.move_forward_key || "KeyW");
@@ -3886,6 +4196,7 @@ function SettingsPage({
           setKeybinding("leftward", s.move_left_key || "KeyA");
           setKeybinding("rightward", s.move_right_key || "KeyD");
           setKeybinding("jump", s.jump_key || "Space");
+          setKeybinding("grenade", localStorage.getItem("grenade_key") || "KeyQ");
           const sens = parseFloat(s.mouse_sensitivity);
           setNormalSensitivity(isNaN(sens) ? 1 : sens);
         }
@@ -3933,6 +4244,8 @@ function SettingsPage({
         setKeybinding("leftward", settings.move_left_key);
         setKeybinding("rightward", settings.move_right_key);
         setKeybinding("jump", settings.jump_key);
+        setKeybinding("grenade", settings.grenade_key);
+        localStorage.setItem("grenade_key", settings.grenade_key);
         setNormalSensitivity(settings.mouse_sensitivity);
       } else {
         setMessage(data.error || "Failed to save settings");
@@ -6192,6 +6505,10 @@ function HUD({
                         setKeybinding("leftward", s.move_left_key);
                         setKeybinding("rightward", s.move_right_key);
                         setKeybinding("jump", s.jump_key);
+                        setKeybinding(
+                          "grenade",
+                          localStorage.getItem("grenade_key") || "KeyQ",
+                        );
                         const sens = parseFloat(s.mouse_sensitivity);
                         setNormalSensitivity(isNaN(sens) ? 1 : sens);
                       }
@@ -6519,9 +6836,13 @@ function HUD({
             health: prev.maxHealth,
             ammo: weapons[1].maxAmmo,
             reserveAmmo: getStartingReserveAmmo(1),
+            grenades: 3,
+            maxGrenades: 6,
             coins: 0,
             enemies: [],
             bullets: [],
+            grenadeProjectiles: [],
+            explosions: [],
             enemyProjectiles: [],
             story: {
               currentSettlement: 0,
@@ -6692,9 +7013,13 @@ function HUD({
         health: prev.maxHealth,
         ammo: weapons[1].maxAmmo,
         reserveAmmo: getStartingReserveAmmo(1),
+        grenades: 3,
+        maxGrenades: 6,
         coins: 0,
         enemies: [],
         bullets: [],
+        grenadeProjectiles: [],
+        explosions: [],
         enemyProjectiles: [],
         story: {
           currentSettlement: 0,
@@ -8371,8 +8696,12 @@ function HUD({
                   health: prev.maxHealth,
                   ammo: weapons[prev.currentWeapon].maxAmmo,
                   reserveAmmo: getStartingReserveAmmo(prev.currentWeapon),
+                  grenades: 3,
+                  maxGrenades: 6,
                   enemies: [],
                   bullets: [],
+                  grenadeProjectiles: [],
+                  explosions: [],
                   enemyProjectiles: [],
                   level: {
                     currentLevel: prev.level.currentLevel + 1,
@@ -8554,10 +8883,15 @@ function HUD({
                   health: 100,
                   ammo: weapons[1].maxAmmo,
                   reserveAmmo: getStartingReserveAmmo(1),
+                  grenades: 3,
+                  maxGrenades: 6,
                   coins: 0,
                   gamePhase: "playing",
                   enemies: [],
                   bullets: [],
+                  grenadeProjectiles: [],
+                  explosions: [],
+                  enemyProjectiles: [],
                   lastDamageTime: 0,
                   story: {
                     currentSettlement: 0,
@@ -8658,10 +8992,14 @@ function HUD({
                   health: 100,
                   ammo: weapons[1].maxAmmo,
                   reserveAmmo: getStartingReserveAmmo(1),
+                  grenades: 3,
+                  maxGrenades: 6,
                   coins: 0,
                   gamePhase: "menu",
                   enemies: [],
                   bullets: [],
+                  grenadeProjectiles: [],
+                  explosions: [],
                   enemyProjectiles: [],
                   lastDamageTime: 0,
                   gameStartTime: null,
@@ -8805,11 +9143,16 @@ function HUD({
                   health: prev.maxHealth,
                   ammo: weapons[1].maxAmmo,
                   reserveAmmo: getStartingReserveAmmo(1),
+                  grenades: 3,
+                  maxGrenades: 6,
                   coins: 0,
                   gamePhase: "playing",
                   gameStartTime: Date.now(),
                   enemies: [],
                   bullets: [],
+                  grenadeProjectiles: [],
+                  explosions: [],
+                  enemyProjectiles: [],
                   lastDamageTime: 0,
                   story: {
                     currentSettlement: 0,
@@ -8878,10 +9221,14 @@ function HUD({
                   health: 100,
                   ammo: weapons[1].maxAmmo,
                   reserveAmmo: getStartingReserveAmmo(1),
+                  grenades: 3,
+                  maxGrenades: 6,
                   coins: 0,
                   gamePhase: "menu",
                   enemies: [],
                   bullets: [],
+                  grenadeProjectiles: [],
+                  explosions: [],
                   enemyProjectiles: [],
                   lastDamageTime: 0,
                   story: {
@@ -9030,9 +9377,13 @@ function HUD({
                   health: 100,
                   ammo: weapons[1].maxAmmo,
                   reserveAmmo: getStartingReserveAmmo(1),
+                  grenades: 3,
+                  maxGrenades: 6,
                   coins: 0,
                   enemies: [],
                   bullets: [],
+                  grenadeProjectiles: [],
+                  explosions: [],
                   enemyProjectiles: [],
                   lastDamageTime: 0,
                   gameStartTime: null,
@@ -9152,6 +9503,16 @@ function HUD({
           <div style={{ marginTop: "4px", fontSize: "12px" }}>
             {gameState.health} / {gameState.maxHealth}
           </div>
+          <div
+            style={{
+              marginTop: "6px",
+              fontSize: "12px",
+              color: "#ffcc80",
+              fontWeight: "bold",
+            }}
+          >
+            💣 Grenades: {gameState.grenades}/{gameState.maxGrenades}
+          </div>
         </div>
 
         {/* Weapon & Ammo */}
@@ -9197,7 +9558,7 @@ function HUD({
             AMMO
           </div>
           <div style={{ fontSize: "8px", marginTop: "4px", opacity: 0.5 }}>
-            Keys: 1-4 to switch | R to reload
+            Keys: 1-4 switch | R reload | Q hold/throw grenade
           </div>
         </div>
 
@@ -9512,10 +9873,14 @@ function Game() {
     maxHealth: 100, // Start with 100 max health
     ammo: weapons[1].maxAmmo,
     reserveAmmo: getStartingReserveAmmo(1),
+    grenades: 3,
+    maxGrenades: 6,
     coins: 0, // Changed from score to coins
     gamePhase: "login",
     enemies: [],
     bullets: [],
+    grenadeProjectiles: [],
+    explosions: [],
     enemyProjectiles: [],
     pickups: [],
     walls: [],
@@ -9619,9 +9984,13 @@ function Game() {
             health: prev.maxHealth,
             ammo: weapons[1].maxAmmo,
             reserveAmmo: getStartingReserveAmmo(1),
+            grenades: 3,
+            maxGrenades: 6,
             coins: 0,
             enemies: [],
             bullets: [],
+            grenadeProjectiles: [],
+            explosions: [],
             enemyProjectiles: [],
             story: {
               currentSettlement: 0,
@@ -9660,6 +10029,10 @@ function Game() {
               setKeybinding("leftward", s.move_left_key);
               setKeybinding("rightward", s.move_right_key);
               setKeybinding("jump", s.jump_key);
+              setKeybinding(
+                "grenade",
+                localStorage.getItem("grenade_key") || "KeyQ",
+              );
               const sens = parseFloat(s.mouse_sensitivity);
               setNormalSensitivity(isNaN(sens) ? 1 : sens);
             }
@@ -9878,6 +10251,14 @@ function Game() {
 
           {gameState.bullets.map((bullet) => (
             <Bullet key={bullet.id} bullet={bullet} />
+          ))}
+
+          {gameState.grenadeProjectiles.map((grenade) => (
+            <GrenadeProjectile key={grenade.id} grenade={grenade} />
+          ))}
+
+          {gameState.explosions.map((explosion) => (
+            <ExplosionEffect key={explosion.id} explosion={explosion} />
           ))}
 
           {gameState.enemyProjectiles.map((projectile) => (
