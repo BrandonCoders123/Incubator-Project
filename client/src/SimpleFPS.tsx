@@ -33,6 +33,7 @@ import { useGame } from "./lib/stores/useGame";
 interface Weapon {
   name: string;
   maxAmmo: number;
+  reserveAmmoCap: number;
   damage: number;
   reloadTime: number;
   fireRate: number; // shots per second, 0 for semi-auto
@@ -46,6 +47,7 @@ const weapons: Record<number, Weapon> = {
   1: {
     name: "Ketchup Squirter",
     maxAmmo: 12,
+    reserveAmmoCap: 48,
     damage: 34,
     reloadTime: 2000,
     fireRate: 0, // semi-auto
@@ -55,6 +57,7 @@ const weapons: Record<number, Weapon> = {
   2: {
     name: "Mustard Launcher",
     maxAmmo: 6,
+    reserveAmmoCap: 24,
     damage: 150,
     reloadTime: 3000,
     fireRate: 0, // semi-auto
@@ -64,6 +67,7 @@ const weapons: Record<number, Weapon> = {
   3: {
     name: "Topping Shooter",
     maxAmmo: 36,
+    reserveAmmoCap: 108,
     damage: 25,
     reloadTime: 2000,
     fireRate: 15, // 18 shots per second
@@ -73,6 +77,7 @@ const weapons: Record<number, Weapon> = {
   4: {
     name: "Lacerating Muffin Generator",
     maxAmmo: 200,
+    reserveAmmoCap: 400,
     damage: 12.5,
     reloadTime: 5000,
     fireRate: 14, // 12 shots per second
@@ -82,6 +87,7 @@ const weapons: Record<number, Weapon> = {
   5: {
     name: "Spreadshot",
     maxAmmo: 8, // 6 shells
+    reserveAmmoCap: 32,
     damage: 34, // per pellet, 3 pellets = kill
     reloadTime: 2000,
     fireRate: 0, // semi-auto
@@ -91,6 +97,22 @@ const weapons: Record<number, Weapon> = {
     spreadAngle: 20, // 20 degree cone
   },
 };
+
+function getStartingReserveAmmo(weaponId: number): number {
+  return weapons[weaponId].reserveAmmoCap;
+}
+
+function getFullMagazineByWeapon(): Record<number, number> {
+  return Object.fromEntries(
+    Object.entries(weapons).map(([id, weapon]) => [Number(id), weapon.maxAmmo]),
+  ) as Record<number, number>;
+}
+
+function getFullReserveByWeapon(): Record<number, number> {
+  return Object.fromEntries(
+    Object.entries(weapons).map(([id]) => [Number(id), getStartingReserveAmmo(Number(id))]),
+  ) as Record<number, number>;
+}
 
 // Story elements
 const SETTLEMENTS = [
@@ -242,6 +264,7 @@ interface GameState {
   health: number;
   maxHealth: number; // Added for token health buffs
   ammo: number;
+  reserveAmmo: number;
   coins: number; // Changed from score to coins
   gamePhase:
     | "login"
@@ -726,13 +749,8 @@ function Player({
   const rotationRef = useRef({ x: 0, y: 0 });
   const isOnGroundRef = useRef(true);
   const mouseDownRef = useRef(false);
-  const weaponAmmo = useRef<Record<number, number>>({
-    1: weapons[1].maxAmmo,
-    2: weapons[2].maxAmmo,
-    3: weapons[3].maxAmmo,
-    4: weapons[4].maxAmmo,
-    5: weapons[5].maxAmmo, // Spreadshot
-  });
+  const weaponAmmo = useRef<Record<number, number>>(getFullMagazineByWeapon());
+  const weaponReserveAmmo = useRef<Record<number, number>>(getFullReserveByWeapon());
   const gameStateRef = useRef(gameState);
 
   // Keep gameStateRef in sync
@@ -743,6 +761,9 @@ function Player({
   // Reset player position when level changes to prevent getting stuck in walls
   useEffect(() => {
     if (playerRef.current) {
+      weaponAmmo.current = getFullMagazineByWeapon();
+      weaponReserveAmmo.current = getFullReserveByWeapon();
+
       // Level-specific safe spawn points
       const spawnPoints: Record<number, [number, number, number]> = {
         0: [0, 1, 0], // Level 1: Center is safe
@@ -1142,15 +1163,21 @@ function Player({
         gameState.unlockedWeapons.includes(weaponId)
       ) {
         weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
+        weaponReserveAmmo.current[gameState.currentWeapon] = gameState.reserveAmmo; // Save current reserve ammo
         // Ensure we have a valid ammo value for the new weapon
         const newAmmo =
           weaponAmmo.current[weaponId] !== undefined
             ? weaponAmmo.current[weaponId]
             : weapons[weaponId].maxAmmo;
+        const newReserveAmmo =
+          weaponReserveAmmo.current[weaponId] !== undefined
+            ? weaponReserveAmmo.current[weaponId]
+            : getStartingReserveAmmo(weaponId);
         setGameState((prev) => ({
           ...prev,
           currentWeapon: weaponId,
           ammo: newAmmo,
+          reserveAmmo: newReserveAmmo,
           isReloading: false,
           reloadDuration: 0,
         }));
@@ -1167,7 +1194,8 @@ function Player({
     if (
       keys.reload &&
       !gameState.isReloading &&
-      gameState.ammo < weapon.maxAmmo
+      gameState.ammo < weapon.maxAmmo &&
+      gameState.reserveAmmo > 0
     ) {
       const shotsMissing = weapon.maxAmmo - gameState.ammo;
       const extraReloadTime =
@@ -1192,12 +1220,17 @@ function Player({
       gameState.isReloading &&
       Date.now() - gameState.reloadStartTime >= gameState.reloadDuration
     ) {
-      const newAmmo = weapon.maxAmmo;
+      const shotsMissing = weapon.maxAmmo - gameState.ammo;
+      const bulletsLoaded = Math.min(shotsMissing, gameState.reserveAmmo);
+      const newAmmo = gameState.ammo + bulletsLoaded;
+      const newReserveAmmo = gameState.reserveAmmo - bulletsLoaded;
       weaponAmmo.current[gameState.currentWeapon] = newAmmo; // Update ref
+      weaponReserveAmmo.current[gameState.currentWeapon] = newReserveAmmo; // Update reserve ref
       setGameState((prev) => ({
         ...prev,
         isReloading: false,
         ammo: newAmmo,
+        reserveAmmo: newReserveAmmo,
         reloadDuration: 0,
       }));
     }
@@ -6218,7 +6251,8 @@ function HUD({
             gameMode: "story",
             gameStartTime: null,
             health: prev.maxHealth,
-            ammo: 12,
+            ammo: weapons[1].maxAmmo,
+            reserveAmmo: getStartingReserveAmmo(1),
             coins: 0,
             enemies: [],
             bullets: [],
@@ -6251,7 +6285,8 @@ function HUD({
             gameMode: "endless",
             gameStartTime: Date.now(),
             health: prev.maxHealth,
-            ammo: 12,
+            ammo: weapons[1].maxAmmo,
+            reserveAmmo: getStartingReserveAmmo(1),
             coins: 0,
             enemies: [],
             bullets: [],
@@ -7938,6 +7973,7 @@ function HUD({
                   gamePhase: "playing",
                   health: prev.maxHealth,
                   ammo: weapons[prev.currentWeapon].maxAmmo,
+                  reserveAmmo: getStartingReserveAmmo(prev.currentWeapon),
                   enemies: [],
                   bullets: [],
                   enemyProjectiles: [],
@@ -8119,7 +8155,8 @@ function HUD({
                 setGameState((prev) => ({
                   ...prev,
                   health: 100,
-                  ammo: 12,
+                  ammo: weapons[1].maxAmmo,
+                  reserveAmmo: getStartingReserveAmmo(1),
                   coins: 0,
                   gamePhase: "playing",
                   enemies: [],
@@ -8222,7 +8259,8 @@ function HUD({
                 setGameState((prev) => ({
                   ...prev,
                   health: 100,
-                  ammo: 12,
+                  ammo: weapons[1].maxAmmo,
+                  reserveAmmo: getStartingReserveAmmo(1),
                   coins: 0,
                   gamePhase: "menu",
                   enemies: [],
@@ -8368,7 +8406,8 @@ function HUD({
                 setGameState((prev) => ({
                   ...prev,
                   health: prev.maxHealth,
-                  ammo: 12,
+                  ammo: weapons[1].maxAmmo,
+                  reserveAmmo: getStartingReserveAmmo(1),
                   coins: 0,
                   gamePhase: "playing",
                   gameStartTime: Date.now(),
@@ -8440,7 +8479,8 @@ function HUD({
                 setGameState((prev) => ({
                   ...prev,
                   health: 100,
-                  ammo: 12,
+                  ammo: weapons[1].maxAmmo,
+                  reserveAmmo: getStartingReserveAmmo(1),
                   coins: 0,
                   gamePhase: "menu",
                   enemies: [],
@@ -8591,7 +8631,8 @@ function HUD({
                   ...prev,
                   gamePhase: "menu",
                   health: 100,
-                  ammo: 12,
+                  ammo: weapons[1].maxAmmo,
+                  reserveAmmo: getStartingReserveAmmo(1),
                   coins: 0,
                   enemies: [],
                   bullets: [],
@@ -8751,6 +8792,9 @@ function HUD({
           </div>
           <div style={{ fontSize: "12px", opacity: 0.8 }}>
             / {weapons[gameState.currentWeapon].maxAmmo}
+          </div>
+          <div style={{ fontSize: "11px", marginTop: "4px", opacity: 0.9 }}>
+            Reserve: {gameState.reserveAmmo}
           </div>
           <div style={{ fontSize: "10px", marginTop: "4px", opacity: 0.6 }}>
             AMMO
@@ -8978,7 +9022,8 @@ function Game() {
   const [gameState, setGameState] = useState<GameState>({
     health: 100,
     maxHealth: 100, // Start with 100 max health
-    ammo: 12, // Start with pistol ammo (updated)
+    ammo: weapons[1].maxAmmo,
+    reserveAmmo: getStartingReserveAmmo(1),
     coins: 0, // Changed from score to coins
     gamePhase: "login",
     enemies: [],
@@ -9076,7 +9121,8 @@ function Game() {
             gameMode: "story",
             gameStartTime: shouldStartAdminLevelTest ? Date.now() : null,
             health: prev.maxHealth,
-            ammo: 12,
+            ammo: weapons[1].maxAmmo,
+            reserveAmmo: getStartingReserveAmmo(1),
             coins: 0,
             enemies: [],
             bullets: [],
