@@ -185,7 +185,7 @@ const LEVELS = [
     name: "Boss Arena",
     description: "A massive open field with the final boss",
     killsRequired: 1,
-    spawnRate: 999,
+    spawnRate: 0,
     maxEnemies: 1,
   },
 ];
@@ -719,7 +719,12 @@ function getWallsForLevel(
       { position: [10, 5, -10], size: [1, 10, 16] },
     ];
   } else if (level === 7) {
-    return [];
+    return [
+      { position: [85, 6, 0], size: [2, 12, 170] },
+      { position: [-85, 6, 0], size: [2, 12, 170] },
+      { position: [0, 6, 85], size: [170, 12, 2] },
+      { position: [0, 6, -85], size: [170, 12, 2] },
+    ];
   }
   return [];
 }
@@ -9218,6 +9223,36 @@ function GameLogic({
   useFrame((state) => {
     if (gameState.gamePhase !== "playing") return;
 
+    const currentLevel = gameState.level.currentLevel;
+
+    // Boss arena: force a single boss spawn and block all regular wave spawns.
+    if (currentLevel === 7) {
+      const bossAlreadyAlive = gameState.enemies.some((enemy) => enemy.type === "boss");
+      if (!bossAlreadyAlive) {
+        const difficulty = DIFFICULTY_SETTINGS[gameState.difficulty];
+        const bossArchetype = ENEMY_ARCHETYPES.boss;
+
+        setGameState((prev) => ({
+          ...prev,
+          enemies: [
+            ...prev.enemies,
+            {
+              id: `boss_${Date.now()}_${Math.random()}`,
+              type: "boss",
+              behavior: "chase",
+              position: [0, 1, 0],
+              velocity: [0, 0, 0],
+              movementDirection: [0, 0, 1],
+              isMoving: false,
+              health: bossArchetype.health * difficulty.enemyHealthMultiplier,
+              nextAttackAt: 0,
+            },
+          ],
+        }));
+      }
+      return;
+    }
+
     // Spawn enemies with level-based spawn rate
     const currentTime = state.clock.elapsedTime;
     const currentLevelData = LEVELS[gameState.level.currentLevel];
@@ -9228,37 +9263,6 @@ function GameLogic({
       currentTime - lastSpawnTime.current > spawnRate &&
       gameState.enemies.length < maxEnemies
     ) {
-      const currentLevel = gameState.level.currentLevel;
-
-      if (currentLevel === 7) {
-        const bossAlreadyAlive = gameState.enemies.some((enemy) => enemy.type === "boss");
-        if (!bossAlreadyAlive) {
-          const difficulty = DIFFICULTY_SETTINGS[gameState.difficulty];
-          const bossArchetype = ENEMY_ARCHETYPES.boss;
-
-          setGameState((prev) => ({
-            ...prev,
-            enemies: [
-              ...prev.enemies,
-              {
-                id: `boss_${Date.now()}_${Math.random()}`,
-                type: "boss",
-                behavior: "chase",
-                position: [0, 1, 0],
-                velocity: [0, 0, 0],
-                movementDirection: [0, 0, 1],
-                isMoving: false,
-                health: bossArchetype.health * difficulty.enemyHealthMultiplier,
-                nextAttackAt: 0,
-              },
-            ],
-          }));
-        }
-
-        lastSpawnTime.current = currentTime;
-        return;
-      }
-
       const angle = Math.random() * Math.PI * 2;
       const distance = 15 + Math.random() * 8;
       const x = Math.sin(angle) * distance;
