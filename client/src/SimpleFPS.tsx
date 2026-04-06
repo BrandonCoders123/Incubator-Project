@@ -180,10 +180,18 @@ const LEVELS = [
     spawnRate: 0.95,
     maxEnemies: 30,
   },
+  {
+    id: 8,
+    name: "Boss Arena",
+    description: "A massive open field with the final boss",
+    killsRequired: 1,
+    spawnRate: 0,
+    maxEnemies: 1,
+  },
 ];
 
 // Enemy types and archetypes
-type EnemyType = "melee" | "ranged" | "giant" | "rat";
+type EnemyType = "melee" | "ranged" | "giant" | "rat" | "boss";
 type Difficulty = "normal" | "hard" | "extreme";
 
 interface Enemy {
@@ -196,6 +204,9 @@ interface Enemy {
   isMoving: boolean;
   health: number;
   nextAttackAt: number;
+  bossAttackUntil: number;
+  bossBeamDirection: [number, number, number] | null;
+  lastBossBeamDamageAt: number;
 }
 
 interface EnemyArchetype {
@@ -237,6 +248,14 @@ const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     attackInterval: 750,
     color: "#363636",
     size: 0.5, //2x smaller than normal enemies
+  },
+  boss: {
+    health: 2000,
+    moveSpeed: 2.8,
+    damage: 70,
+    attackInterval: 1200,
+    color: "#7a1fa2",
+    size: 3,
   },
 };
 
@@ -526,6 +545,8 @@ function getRampsForLevel(level: number): Ramp[] {
       { position: [18, 1, 18], rotation: (-3 * Math.PI) / 4, width: 4, length: 10 },
       { position: [0, 1, 0], rotation: Math.PI / 2, width: 5, length: 14 },
     ];
+  } else if (level === 7) {
+    return [];
   }
   return [];
 }
@@ -574,6 +595,11 @@ function getPickupSpawnPositionsForLevel(
       [-20, 1, -20],
       [20, 1, 20],
       [0, 1, 24],
+    ],
+    7: [
+      [-40, 1, -40],
+      [40, 1, 40],
+      [0, 1, 0],
     ],
   };
 
@@ -695,6 +721,13 @@ function getWallsForLevel(
       { position: [-10, 5, 10], size: [1, 10, 16] },
       { position: [10, 5, -10], size: [1, 10, 16] },
     ];
+  } else if (level === 7) {
+    return [
+      { position: [85, 6, 0], size: [2, 12, 170] },
+      { position: [-85, 6, 0], size: [2, 12, 170] },
+      { position: [0, 6, 85], size: [170, 12, 2] },
+      { position: [0, 6, -85], size: [170, 12, 2] },
+    ];
   }
   return [];
 }
@@ -716,7 +749,11 @@ function GameEnvironment({ gameState }: { gameState: GameState }) {
     <>
       {/* Ground */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-        <planeGeometry args={[100, 100]} />
+        <planeGeometry
+          args={
+            gameState.level.currentLevel === 7 ? [180, 180] : [100, 100]
+          }
+        />
         <meshLambertMaterial map={grassTexture} />
       </mesh>
 
@@ -744,10 +781,12 @@ function GameEnvironment({ gameState }: { gameState: GameState }) {
       ))}
 
       {/* Central platform */}
-      <mesh position={[0, 0.5, 0]}>
-        <boxGeometry args={[8, 1, 8]} />
-        <meshLambertMaterial map={asphaltTexture} />
-      </mesh>
+      {gameState.level.currentLevel !== 7 && (
+        <mesh position={[0, 0.5, 0]}>
+          <boxGeometry args={[8, 1, 8]} />
+          <meshLambertMaterial map={asphaltTexture} />
+        </mesh>
+      )}
 
       {/* Pickups (health/coin supply crates + ammo crates) */}
       {gameState.pickups.map((pickup) => (
@@ -843,6 +882,7 @@ function Player({
         4: [0, 1, -22], // Level 5 (Mustard Mountain): open lane spawn
         5: [-22, 1, 22], // Level 6 (Shattered Skybridge): corner spawn
         6: [0, 1, 24], // Level 7 (Core Meltdown): outer ring spawn
+        7: [0, 1, 60], // Level 8 (Boss Arena): distant start
       };
 
       const spawnPoint = spawnPoints[gameState.level.currentLevel] || [0, 1, 0];
@@ -1548,7 +1588,9 @@ function Enemy({
       const enemyPos = new THREE.Vector3(...enemy.position);
       const cameraPos = camera.position.clone();
       cameraPos.y = enemyPos.y; // Keep same Y level to prevent tilting
-      enemyRef.current.lookAt(cameraPos);
+      if (enemy.type !== "boss") {
+        enemyRef.current.lookAt(cameraPos);
+      }
 
       // AI Movement - different behavior for melee vs ranged
       const playerPos = camera.position.clone();
@@ -1563,13 +1605,18 @@ function Enemy({
           ? toPlayerDirection.clone().divideScalar(distanceToPlayer)
           : new THREE.Vector3(0, 0, 0);
       const behavior = enemy.behavior ?? ENEMY_BEHAVIOR_BY_TYPE[enemy.type];
-      const movementIntent = getEnemyMovementIntent(
-        behavior,
-        normalizedDirection,
-        distanceToPlayer,
-        enemyMoveSpeed,
-        deltaTime,
-      );
+      const currentTime = Date.now();
+      const isBossBeamAttacking =
+        enemy.type === "boss" && currentTime < enemy.bossAttackUntil;
+      const movementIntent = isBossBeamAttacking
+        ? new THREE.Vector3(0, 0, 0)
+        : getEnemyMovementIntent(
+            behavior,
+            normalizedDirection,
+            distanceToPlayer,
+            enemyMoveSpeed,
+            deltaTime,
+          );
 
       const walls = getWallsForLevel(gameState.level.currentLevel);
       const ramps = getRampsForLevel(gameState.level.currentLevel);
@@ -1612,14 +1659,119 @@ function Enemy({
       // Attack logic
       setIsAttacking(distanceToPlayer < 2.5);
 
-      if (
+      if (enemy.type === "boss") {
+        const BOSS_ATTACK_COOLDOWN_MS = 5000;
+        const BOSS_ATTACK_DURATION_MS = 1350;
+        const BOSS_BEAM_TICK_INTERVAL_MS = 160;
+        const BOSS_BEAM_DAMAGE_PER_TICK = 3.8;
+        const BOSS_BEAM_RANGE = 38;
+        const BOSS_BEAM_HIT_RADIUS = 1.5;
+        const BOSS_BEAM_TRACK_SPEED = 0.72; // Lower than player turn speed
+
+        if (currentTime >= enemy.nextAttackAt) {
+          setGameState((prev) => ({
+            ...prev,
+            enemies: prev.enemies.map((e) =>
+              e.id === enemy.id
+                ? {
+                    ...e,
+                    nextAttackAt: currentTime + BOSS_ATTACK_COOLDOWN_MS,
+                    bossAttackUntil: currentTime + BOSS_ATTACK_DURATION_MS,
+                    bossBeamDirection: [
+                      normalizedDirection.x,
+                      normalizedDirection.y,
+                      normalizedDirection.z,
+                    ],
+                  }
+                : e,
+            ),
+          }));
+        } else if (isBossBeamAttacking) {
+          const currentBeamDirection = enemy.bossBeamDirection
+            ? new THREE.Vector3(...enemy.bossBeamDirection)
+            : normalizedDirection.clone();
+          const trackedDirection = currentBeamDirection
+            .clone()
+            .lerp(
+              normalizedDirection,
+              Math.min(1, BOSS_BEAM_TRACK_SPEED * deltaTime),
+            )
+            .normalize();
+
+          setGameState((prev) => ({
+            ...prev,
+            enemies: prev.enemies.map((e) =>
+              e.id === enemy.id
+                ? {
+                    ...e,
+                    bossBeamDirection: [
+                      trackedDirection.x,
+                      trackedDirection.y,
+                      trackedDirection.z,
+                    ],
+                  }
+                : e,
+            ),
+          }));
+
+          if (currentTime - enemy.lastBossBeamDamageAt >= BOSS_BEAM_TICK_INTERVAL_MS) {
+            const beamDir = trackedDirection.clone().normalize();
+            const toPlayer = playerPos.clone().sub(enemyPos);
+            const projectionLength = toPlayer.dot(beamDir);
+
+            if (projectionLength > 0 && projectionLength <= BOSS_BEAM_RANGE) {
+              const projectedPoint = beamDir.clone().multiplyScalar(projectionLength);
+              const perpendicularDistance = toPlayer.sub(projectedPoint).length();
+
+              if (perpendicularDistance <= BOSS_BEAM_HIT_RADIUS) {
+                setGameState((prev) => {
+                  const damageReduction = Math.min(
+                    MAX_DAMAGE_RESISTANCE,
+                    prev.augmentLevels.userDamageResist * 0.06,
+                  );
+                  const reducedDamage =
+                    BOSS_BEAM_DAMAGE_PER_TICK * (1 - damageReduction);
+                  const newHealth = Math.max(0, prev.health - reducedDamage);
+                  return {
+                    ...prev,
+                    health: newHealth,
+                    gamePhase: newHealth <= 0 ? "gameover" : prev.gamePhase,
+                    enemies: prev.enemies.map((e) =>
+                      e.id === enemy.id
+                        ? { ...e, lastBossBeamDamageAt: currentTime }
+                        : e,
+                    ),
+                  };
+                });
+              } else {
+                setGameState((prev) => ({
+                  ...prev,
+                  enemies: prev.enemies.map((e) =>
+                    e.id === enemy.id
+                      ? { ...e, lastBossBeamDamageAt: currentTime }
+                      : e,
+                  ),
+                }));
+              }
+            } else {
+              setGameState((prev) => ({
+                ...prev,
+                enemies: prev.enemies.map((e) =>
+                  e.id === enemy.id
+                    ? { ...e, lastBossBeamDamageAt: currentTime }
+                    : e,
+                ),
+              }));
+            }
+          }
+        }
+      } else if (
         enemy.type === "melee" ||
         enemy.type === "giant" ||
         enemy.type === "rat"
       ) {
         // Melee, Giant, and Rat: Contact damage
         if (distanceToPlayer < 1.5 && gameState.gamePhase === "playing") {
-          const currentTime = Date.now();
           setGameState((prev) => {
             if (
               currentTime - prev.lastDamageTime > enemyAttackInterval &&
@@ -1673,7 +1825,9 @@ function Enemy({
       const bulletPos = new THREE.Vector3(...bullet.position);
       const enemyPos = new THREE.Vector3(...enemy.position);
 
-      if (bulletPos.distanceTo(enemyPos) < 1) {
+      const enemySizeForHitbox = archetype.size || 1;
+      const enemyHitRadius = 0.5 + enemySizeForHitbox * 0.5;
+      if (bulletPos.distanceTo(enemyPos) < enemyHitRadius) {
         // Hit enemy
         setGameState((prev) => {
           // Find current enemy health from state (not closure) to handle multiple pellet hits
@@ -1771,6 +1925,13 @@ function Enemy({
 
   const enemySize = archetype.size || 1;
   const healthBarYPosition = enemySize > 1 ? 3 : 2;
+  const isBossBeamActive =
+    enemy.type === "boss" && Date.now() < enemy.bossAttackUntil && enemy.bossBeamDirection;
+  const bossBeamLength = 38;
+  const bossBeamDirection = enemy.bossBeamDirection
+    ? new THREE.Vector3(...enemy.bossBeamDirection).normalize()
+    : new THREE.Vector3(0, 0, 1);
+  const bossBeamYaw = Math.atan2(bossBeamDirection.x, bossBeamDirection.z);
 
   return (
     <group ref={enemyRef} position={enemy.position}>
@@ -1796,6 +1957,21 @@ function Enemy({
           <meshStandardMaterial color={archetype.color} />
         </mesh>
       )}
+
+      {isBossBeamActive && (
+        <mesh
+          position={[
+            bossBeamDirection.x * (bossBeamLength / 2),
+            1.2,
+            bossBeamDirection.z * (bossBeamLength / 2),
+          ]}
+          rotation={[0, bossBeamYaw, 0]}
+        >
+          <boxGeometry args={[0.18, 0.18, bossBeamLength]} />
+          <meshBasicMaterial color="#ff2d2d" transparent opacity={0.8} />
+        </mesh>
+      )}
+
       {/* Health bar above enemy */}
       <mesh position={[0, healthBarYPosition, 0]}>
         <planeGeometry args={[1 * enemySize, 0.1]} />
@@ -9094,6 +9270,63 @@ function HUD({
             {SETTLEMENTS.length}
           </div>
         </div>
+
+        {(() => {
+          const bossEnemy = gameState.enemies.find((enemy) => enemy.type === "boss");
+          if (!bossEnemy) return null;
+          const bossMaxHealth =
+            ENEMY_ARCHETYPES.boss.health *
+            DIFFICULTY_SETTINGS[gameState.difficulty].enemyHealthMultiplier;
+          const bossHealthPercent = Math.max(
+            0,
+            Math.min(100, (bossEnemy.health / bossMaxHealth) * 100),
+          );
+
+          return (
+            <div
+              style={{
+                position: "absolute",
+                top: "26px",
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: "min(820px, 74vw)",
+                background: "rgba(15,0,18,0.82)",
+                border: "2px solid rgba(186,104,200,0.85)",
+                borderRadius: "10px",
+                padding: "8px 12px 10px",
+                color: "white",
+                textAlign: "center",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+              }}
+            >
+              <div style={{ fontSize: "15px", letterSpacing: "2px", marginBottom: "6px" }}>
+                BOSS
+              </div>
+              <div
+                style={{
+                  width: "100%",
+                  height: "18px",
+                  background: "rgba(255,255,255,0.2)",
+                  borderRadius: "999px",
+                  overflow: "hidden",
+                  border: "1px solid rgba(255,255,255,0.35)",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${bossHealthPercent}%`,
+                    height: "100%",
+                    background: "linear-gradient(90deg, #6a1b9a, #ba68c8)",
+                    transition: "width 0.25s ease",
+                  }}
+                />
+              </div>
+              <div style={{ marginTop: "4px", fontSize: "12px", opacity: 0.95 }}>
+                {Math.max(0, Math.ceil(bossEnemy.health))} / {Math.ceil(bossMaxHealth)}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </>
   );
@@ -9128,6 +9361,39 @@ function GameLogic({
   useFrame((state) => {
     if (gameState.gamePhase !== "playing") return;
 
+    const currentLevel = gameState.level.currentLevel;
+
+    // Boss arena: force a single boss spawn and block all regular wave spawns.
+    if (currentLevel === 7) {
+      const bossAlreadyAlive = gameState.enemies.some((enemy) => enemy.type === "boss");
+      if (!bossAlreadyAlive) {
+        const difficulty = DIFFICULTY_SETTINGS[gameState.difficulty];
+        const bossArchetype = ENEMY_ARCHETYPES.boss;
+
+        setGameState((prev) => ({
+          ...prev,
+          enemies: [
+            ...prev.enemies,
+            {
+              id: `boss_${Date.now()}_${Math.random()}`,
+              type: "boss",
+              behavior: "chase",
+              position: [0, 1, 0],
+              velocity: [0, 0, 0],
+              movementDirection: [0, 0, 1],
+              isMoving: false,
+              health: bossArchetype.health * difficulty.enemyHealthMultiplier,
+              nextAttackAt: 0,
+              bossAttackUntil: 0,
+              bossBeamDirection: null,
+              lastBossBeamDamageAt: 0,
+            },
+          ],
+        }));
+      }
+      return;
+    }
+
     // Spawn enemies with level-based spawn rate
     const currentTime = state.clock.elapsedTime;
     const currentLevelData = LEVELS[gameState.level.currentLevel];
@@ -9150,7 +9416,6 @@ function GameLogic({
       // Level 3 (Crimson Battlefield): 20% melee, 15% ranged, 30% giant (max 8), 35% rat
       // Level 4 (Mustard Mountain): 20% melee, 10% ranged, 30% giant (max 10), 40% rat
       let enemyType: EnemyType = "melee";
-      const currentLevel = gameState.level.currentLevel;
 
       if (currentLevel === 0) {
         // Level 1 (Bun Valley): melee only
@@ -9244,6 +9509,9 @@ function GameLogic({
             isMoving: false,
             health: archetype.health * difficulty.enemyHealthMultiplier,
             nextAttackAt: 0,
+            bossAttackUntil: 0,
+            bossBeamDirection: null,
+            lastBossBeamDamageAt: 0,
           },
         ],
         level: {

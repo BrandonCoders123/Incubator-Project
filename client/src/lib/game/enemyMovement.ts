@@ -6,6 +6,7 @@ export const ENEMY_BEHAVIOR_BY_TYPE = {
   giant: "chase",
   rat: "chase",
   ranged: "kite",
+  boss: "chase",
 } as const;
 
 export function getEnemyMovementIntent(

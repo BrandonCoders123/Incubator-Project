@@ -347,6 +347,7 @@ export default function AdminPanel() {
               <option value={5}>Level 5 - Mustard Mountain Summit</option>
               <option value={6}>Level 6 - Shattered Skybridge</option>
               <option value={7}>Level 7 - Core Meltdown Reactor</option>
+              <option value={8}>Level 8 - Boss Arena</option>
             </select>
             <button
               onClick={handleStartLevelTest}
