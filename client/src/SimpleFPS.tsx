@@ -180,10 +180,18 @@ const LEVELS = [
     spawnRate: 0.95,
     maxEnemies: 30,
   },
+  {
+    id: 8,
+    name: "Boss Arena",
+    description: "A massive open field with the final boss",
+    killsRequired: 1,
+    spawnRate: 999,
+    maxEnemies: 1,
+  },
 ];
 
 // Enemy types and archetypes
-type EnemyType = "melee" | "ranged" | "giant" | "rat";
+type EnemyType = "melee" | "ranged" | "giant" | "rat" | "boss";
 type Difficulty = "normal" | "hard" | "extreme";
 
 interface Enemy {
@@ -237,6 +245,14 @@ const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     attackInterval: 750,
     color: "#363636",
     size: 0.5, //2x smaller than normal enemies
+  },
+  boss: {
+    health: 2000,
+    moveSpeed: 2.8,
+    damage: 70,
+    attackInterval: 1200,
+    color: "#7a1fa2",
+    size: 3,
   },
 };
 
@@ -526,6 +542,8 @@ function getRampsForLevel(level: number): Ramp[] {
       { position: [18, 1, 18], rotation: (-3 * Math.PI) / 4, width: 4, length: 10 },
       { position: [0, 1, 0], rotation: Math.PI / 2, width: 5, length: 14 },
     ];
+  } else if (level === 7) {
+    return [];
   }
   return [];
 }
@@ -574,6 +592,11 @@ function getPickupSpawnPositionsForLevel(
       [-20, 1, -20],
       [20, 1, 20],
       [0, 1, 24],
+    ],
+    7: [
+      [-40, 1, -40],
+      [40, 1, 40],
+      [0, 1, 0],
     ],
   };
 
@@ -695,6 +718,8 @@ function getWallsForLevel(
       { position: [-10, 5, 10], size: [1, 10, 16] },
       { position: [10, 5, -10], size: [1, 10, 16] },
     ];
+  } else if (level === 7) {
+    return [];
   }
   return [];
 }
@@ -716,7 +741,11 @@ function GameEnvironment({ gameState }: { gameState: GameState }) {
     <>
       {/* Ground */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
-        <planeGeometry args={[100, 100]} />
+        <planeGeometry
+          args={
+            gameState.level.currentLevel === 7 ? [180, 180] : [100, 100]
+          }
+        />
         <meshLambertMaterial map={grassTexture} />
       </mesh>
 
@@ -744,10 +773,12 @@ function GameEnvironment({ gameState }: { gameState: GameState }) {
       ))}
 
       {/* Central platform */}
-      <mesh position={[0, 0.5, 0]}>
-        <boxGeometry args={[8, 1, 8]} />
-        <meshLambertMaterial map={asphaltTexture} />
-      </mesh>
+      {gameState.level.currentLevel !== 7 && (
+        <mesh position={[0, 0.5, 0]}>
+          <boxGeometry args={[8, 1, 8]} />
+          <meshLambertMaterial map={asphaltTexture} />
+        </mesh>
+      )}
 
       {/* Pickups (health/coin supply crates + ammo crates) */}
       {gameState.pickups.map((pickup) => (
@@ -843,6 +874,7 @@ function Player({
         4: [0, 1, -22], // Level 5 (Mustard Mountain): open lane spawn
         5: [-22, 1, 22], // Level 6 (Shattered Skybridge): corner spawn
         6: [0, 1, 24], // Level 7 (Core Meltdown): outer ring spawn
+        7: [0, 1, 60], // Level 8 (Boss Arena): distant start
       };
 
       const spawnPoint = spawnPoints[gameState.level.currentLevel] || [0, 1, 0];
@@ -1615,7 +1647,8 @@ function Enemy({
       if (
         enemy.type === "melee" ||
         enemy.type === "giant" ||
-        enemy.type === "rat"
+        enemy.type === "rat" ||
+        enemy.type === "boss"
       ) {
         // Melee, Giant, and Rat: Contact damage
         if (distanceToPlayer < 1.5 && gameState.gamePhase === "playing") {
@@ -9094,6 +9127,63 @@ function HUD({
             {SETTLEMENTS.length}
           </div>
         </div>
+
+        {(() => {
+          const bossEnemy = gameState.enemies.find((enemy) => enemy.type === "boss");
+          if (!bossEnemy) return null;
+          const bossMaxHealth =
+            ENEMY_ARCHETYPES.boss.health *
+            DIFFICULTY_SETTINGS[gameState.difficulty].enemyHealthMultiplier;
+          const bossHealthPercent = Math.max(
+            0,
+            Math.min(100, (bossEnemy.health / bossMaxHealth) * 100),
+          );
+
+          return (
+            <div
+              style={{
+                position: "absolute",
+                top: "26px",
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: "min(820px, 74vw)",
+                background: "rgba(15,0,18,0.82)",
+                border: "2px solid rgba(186,104,200,0.85)",
+                borderRadius: "10px",
+                padding: "8px 12px 10px",
+                color: "white",
+                textAlign: "center",
+                fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+              }}
+            >
+              <div style={{ fontSize: "15px", letterSpacing: "2px", marginBottom: "6px" }}>
+                BOSS
+              </div>
+              <div
+                style={{
+                  width: "100%",
+                  height: "18px",
+                  background: "rgba(255,255,255,0.2)",
+                  borderRadius: "999px",
+                  overflow: "hidden",
+                  border: "1px solid rgba(255,255,255,0.35)",
+                }}
+              >
+                <div
+                  style={{
+                    width: `${bossHealthPercent}%`,
+                    height: "100%",
+                    background: "linear-gradient(90deg, #6a1b9a, #ba68c8)",
+                    transition: "width 0.25s ease",
+                  }}
+                />
+              </div>
+              <div style={{ marginTop: "4px", fontSize: "12px", opacity: 0.95 }}>
+                {Math.max(0, Math.ceil(bossEnemy.health))} / {Math.ceil(bossMaxHealth)}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </>
   );
@@ -9138,6 +9228,37 @@ function GameLogic({
       currentTime - lastSpawnTime.current > spawnRate &&
       gameState.enemies.length < maxEnemies
     ) {
+      const currentLevel = gameState.level.currentLevel;
+
+      if (currentLevel === 7) {
+        const bossAlreadyAlive = gameState.enemies.some((enemy) => enemy.type === "boss");
+        if (!bossAlreadyAlive) {
+          const difficulty = DIFFICULTY_SETTINGS[gameState.difficulty];
+          const bossArchetype = ENEMY_ARCHETYPES.boss;
+
+          setGameState((prev) => ({
+            ...prev,
+            enemies: [
+              ...prev.enemies,
+              {
+                id: `boss_${Date.now()}_${Math.random()}`,
+                type: "boss",
+                behavior: "chase",
+                position: [0, 1, 0],
+                velocity: [0, 0, 0],
+                movementDirection: [0, 0, 1],
+                isMoving: false,
+                health: bossArchetype.health * difficulty.enemyHealthMultiplier,
+                nextAttackAt: 0,
+              },
+            ],
+          }));
+        }
+
+        lastSpawnTime.current = currentTime;
+        return;
+      }
+
       const angle = Math.random() * Math.PI * 2;
       const distance = 15 + Math.random() * 8;
       const x = Math.sin(angle) * distance;
@@ -9150,7 +9271,6 @@ function GameLogic({
       // Level 3 (Crimson Battlefield): 20% melee, 15% ranged, 30% giant (max 8), 35% rat
       // Level 4 (Mustard Mountain): 20% melee, 10% ranged, 30% giant (max 10), 40% rat
       let enemyType: EnemyType = "melee";
-      const currentLevel = gameState.level.currentLevel;
 
       if (currentLevel === 0) {
         // Level 1 (Bun Valley): melee only
