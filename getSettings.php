@@ -14,6 +14,8 @@ if (!isset($_SESSION['user_id'])) {
 $userId = $_SESSION['user_id'];
 
 try {
+    $pdo->exec("ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS grenade_key VARCHAR(50) NOT NULL DEFAULT 'KeyQ'");
+
     $stmt = $pdo->prepare("
         SELECT 
             mouse_sensitivity,
@@ -22,7 +24,8 @@ try {
             move_left_key,
             move_right_key,
             jump_key,
-            crouch_key
+            crouch_key,
+            grenade_key
         FROM user_settings 
         WHERE user_id = ?
     ");
@@ -44,7 +47,8 @@ try {
                 'move_left_key' => 'KeyA',
                 'move_right_key' => 'KeyD',
                 'jump_key' => 'Space',
-                'crouch_key' => 'ControlLeft'
+                'crouch_key' => 'ControlLeft',
+                'grenade_key' => 'KeyQ'
             ]
         ]);
     }
