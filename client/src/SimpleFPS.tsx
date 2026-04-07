@@ -191,7 +191,7 @@ const LEVELS = [
 ];
 
 // Enemy types and archetypes
-type EnemyType = "melee" | "ranged" | "giant" | "rat" | "boss";
+type EnemyType = "melee" | "ranged" | "flyingHybrid" | "giant" | "rat" | "boss";
 type Difficulty = "normal" | "hard" | "extreme";
 
 interface Enemy {
@@ -204,6 +204,7 @@ interface Enemy {
   isMoving: boolean;
   health: number;
   nextAttackAt: number;
+  attackPatternStep?: "volley" | "melee";
   bossBeamEndsAt?: number;
   bossLastBeamDamageAt?: number;
 }
@@ -231,6 +232,13 @@ const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     damage: 10,
     attackInterval: 1500, // Medium fire rate
     color: "#ff6600",
+  },
+  flyingHybrid: {
+    health: 275,
+    moveSpeed: 6.5,
+    damage: 18,
+    attackInterval: 1800,
+    color: "#44d5ff",
   },
   giant: {
     health: 400,
@@ -1833,6 +1841,14 @@ function Enemy({
           ? toPlayerDirection.clone().divideScalar(distanceToPlayer)
           : new THREE.Vector3(0, 0, 0);
       const behavior = enemy.behavior ?? ENEMY_BEHAVIOR_BY_TYPE[enemy.type];
+      const activePatternStep =
+        enemy.type === "flyingHybrid" ? (enemy.attackPatternStep ?? "volley") : undefined;
+      const movementBehavior =
+        enemy.type === "flyingHybrid"
+          ? activePatternStep === "melee"
+            ? "chase"
+            : "kite"
+          : behavior;
       const currentTime = Date.now();
       const bossBeamActive =
         enemy.type === "boss" &&
@@ -1866,7 +1882,7 @@ function Enemy({
       }
 
       const movementIntent = getEnemyMovementIntent(
-        behavior,
+        movementBehavior,
         normalizedDirection,
         distanceToPlayer,
         bossBeamActive ? 0 : enemyMoveSpeed,
@@ -1899,7 +1915,7 @@ function Enemy({
                   number,
                   number,
                 ],
-                behavior,
+                behavior: movementBehavior,
                 isMoving,
                 movementDirection: [
                   movementDirection.x,
@@ -1911,6 +1927,10 @@ function Enemy({
                 bossLastBeamDamageAt:
                   enemy.type === "boss"
                     ? (enemy.bossLastBeamDamageAt ?? 0)
+                    : undefined,
+                attackPatternStep:
+                  enemy.type === "flyingHybrid"
+                    ? (enemy.attackPatternStep ?? "volley")
                     : undefined,
               }
             : e,
@@ -2011,6 +2031,73 @@ function Enemy({
               },
             ],
           }));
+        }
+      } else if (enemy.type === "flyingHybrid") {
+        if (activePatternStep === "volley" && currentTime >= enemy.nextAttackAt && distanceToPlayer < 20) {
+          const projectileOrigin: [number, number, number] = [enemyPos.x, enemyPos.y + 0.4, enemyPos.z];
+          const shotAngles = [-0.14, 0, 0.14];
+          const volleyProjectiles = shotAngles.map((angleOffset) => {
+            const shotDirection = normalizedDirection
+              .clone()
+              .applyAxisAngle(new THREE.Vector3(0, 1, 0), angleOffset)
+              .normalize();
+
+            return {
+              id: `enemyproj_${Date.now()}_${Math.random()}`,
+              position: projectileOrigin,
+              direction: [shotDirection.x, shotDirection.y, shotDirection.z] as [
+                number,
+                number,
+                number,
+              ],
+              damage: enemyDamage,
+            };
+          });
+
+          setGameState((prev) => ({
+            ...prev,
+            enemies: prev.enemies.map((e) =>
+              e.id === enemy.id
+                ? {
+                    ...e,
+                    attackPatternStep: "melee",
+                    behavior: "chase",
+                    nextAttackAt: currentTime + enemyAttackInterval * 0.75,
+                  }
+                : e,
+            ),
+            enemyProjectiles: [...prev.enemyProjectiles, ...volleyProjectiles],
+          }));
+        } else if (activePatternStep === "melee") {
+          if (distanceToPlayer < 1.8 && currentTime >= enemy.nextAttackAt) {
+            setGameState((prev) => {
+              if (prev.gamePhase !== "playing") return prev;
+
+              const damageReduction = Math.min(
+                MAX_DAMAGE_RESISTANCE,
+                prev.augmentLevels.userDamageResist * 0.06,
+              );
+              const reducedDamage = enemyDamage * (1 - damageReduction);
+              const newHealth = Math.max(0, prev.health - reducedDamage);
+
+              return {
+                ...prev,
+                health: newHealth,
+                lastDamageTime: currentTime,
+                gamePhase: newHealth <= 0 ? "gameover" : prev.gamePhase,
+                enemies: prev.enemies.map((e) =>
+                  e.id === enemy.id
+                    ? {
+                        ...e,
+                        attackPatternStep: "volley",
+                        behavior: "kite",
+                        nextAttackAt: currentTime + enemyAttackInterval,
+                      }
+                    : e,
+                ),
+              };
+            });
+          }
         }
       }
     }
@@ -2141,6 +2228,21 @@ function Enemy({
         >
           <RobotMeleeSprite size={enemySize} />
         </Suspense>
+      ) : enemy.type === "flyingHybrid" ? (
+        <group>
+          <mesh>
+            <sphereGeometry args={[0.45 * enemySize, 16, 16]} />
+            <meshStandardMaterial color={archetype.color} emissive="#147c99" emissiveIntensity={0.45} />
+          </mesh>
+          <mesh position={[0.58 * enemySize, 0, 0]}>
+            <boxGeometry args={[0.65 * enemySize, 0.08 * enemySize, 0.22 * enemySize]} />
+            <meshStandardMaterial color="#9ceaff" />
+          </mesh>
+          <mesh position={[-0.58 * enemySize, 0, 0]}>
+            <boxGeometry args={[0.65 * enemySize, 0.08 * enemySize, 0.22 * enemySize]} />
+            <meshStandardMaterial color="#9ceaff" />
+          </mesh>
+        </group>
       ) : (
         <mesh>
           <boxGeometry
@@ -9736,50 +9838,58 @@ function GameLogic({
           enemyType = "rat";
         }
       } else if (currentLevel === 3) {
-        // Level 4 (Crimson Battlefield): 20% melee, 15% ranged, 30% giant (max 8), 35% rat
+      // Level 4 (Crimson Battlefield): 18% melee, 14% ranged, 14% flying hybrid, 30% giant (max 8), 24% rat
         const roll = Math.random();
         if (roll < 0.3 && gameState.level.giantsSpawnedThisLevel < 8) {
           enemyType = "giant";
-        } else if (roll < 0.5) {
+        } else if (roll < 0.44) {
           enemyType = "melee";
-        } else if (roll < 0.65) {
+        } else if (roll < 0.58) {
           enemyType = "ranged";
+        } else if (roll < 0.72) {
+          enemyType = "flyingHybrid";
         } else {
           enemyType = "rat";
         }
       } else if (currentLevel === 4) {
-        // Level 5 (Mustard Mountain): 20% melee, 10% ranged, 30% giant (max 10), 40% rat
+        // Level 5 (Mustard Mountain): 16% melee, 10% ranged, 14% flying hybrid, 30% giant (max 10), 30% rat
         const roll = Math.random();
         if (roll < 0.3 && gameState.level.giantsSpawnedThisLevel < 10) {
           enemyType = "giant";
-        } else if (roll < 0.5) {
+        } else if (roll < 0.46) {
           enemyType = "melee";
-        } else if (roll < 0.6) {
+        } else if (roll < 0.56) {
           enemyType = "ranged";
+        } else if (roll < 0.7) {
+          enemyType = "flyingHybrid";
         } else {
           enemyType = "rat";
         }
       } else if (currentLevel === 5) {
-        // Level 6 (Skybridge): 15% melee, 20% ranged, 35% giant (max 14), 30% rat
+        // Level 6 (Skybridge): 13% melee, 18% ranged, 14% flying hybrid, 35% giant (max 14), 20% rat
         const roll = Math.random();
         if (roll < 0.35 && gameState.level.giantsSpawnedThisLevel < 14) {
           enemyType = "giant";
-        } else if (roll < 0.5) {
+        } else if (roll < 0.48) {
           enemyType = "melee";
-        } else if (roll < 0.7) {
+        } else if (roll < 0.66) {
           enemyType = "ranged";
+        } else if (roll < 0.8) {
+          enemyType = "flyingHybrid";
         } else {
           enemyType = "rat";
         }
       } else {
-        // Level 7+ (Reactor): 10% melee, 25% ranged, 40% giant (max 18), 25% rat
+        // Level 7+ (Reactor): 8% melee, 20% ranged, 17% flying hybrid, 40% giant (max 18), 15% rat
         const roll = Math.random();
         if (roll < 0.4 && gameState.level.giantsSpawnedThisLevel < 18) {
           enemyType = "giant";
-        } else if (roll < 0.5) {
+        } else if (roll < 0.48) {
           enemyType = "melee";
-        } else if (roll < 0.75) {
+        } else if (roll < 0.68) {
           enemyType = "ranged";
+        } else if (roll < 0.85) {
+          enemyType = "flyingHybrid";
         } else {
           enemyType = "rat";
         }
@@ -9796,12 +9906,13 @@ function GameLogic({
             id: `enemy_${Date.now()}_${Math.random()}`,
             type: enemyType,
             behavior: ENEMY_BEHAVIOR_BY_TYPE[enemyType],
-            position: [x, 1, z],
+            position: [x, enemyType === "flyingHybrid" ? 2.6 : 1, z],
             velocity: [0, 0, 0],
             movementDirection: [0, 0, 1],
             isMoving: false,
             health: archetype.health * difficulty.enemyHealthMultiplier,
             nextAttackAt: 0,
+            attackPatternStep: enemyType === "flyingHybrid" ? "volley" : undefined,
             bossBeamEndsAt: 0,
             bossLastBeamDamageAt: 0,
           },
