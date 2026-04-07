@@ -12,7 +12,8 @@ export type ActionName =
   | "weapon1"
   | "weapon2"
   | "weapon3"
-  | "weapon4";
+  | "weapon4"
+  | "weapon5";
 
 export type Keybindings = Record<ActionName, string[]>;
 
@@ -30,6 +31,7 @@ const defaultKeybindings: Keybindings = {
   weapon2: ["Digit2"],
   weapon3: ["Digit3"],
   weapon4: ["Digit4"],
+  weapon5: ["Digit5"],
 };
 
 interface SettingsState {
