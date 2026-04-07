@@ -6,6 +6,7 @@ export type ActionName =
   | "leftward"
   | "rightward"
   | "jump"
+  | "grenade"
   | "reload"
   | "pause"
   | "weapon1"
@@ -22,6 +23,7 @@ const defaultKeybindings: Keybindings = {
   leftward: ["KeyA", "ArrowLeft"],
   rightward: ["KeyD", "ArrowRight"],
   jump: ["Space"],
+  grenade: ["KeyQ"],
   reload: ["KeyR"],
   pause: ["Escape"],
   weapon1: ["Digit1"],
