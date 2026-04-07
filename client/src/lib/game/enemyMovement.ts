@@ -6,6 +6,7 @@ export const ENEMY_BEHAVIOR_BY_TYPE = {
   giant: "chase",
   rat: "chase",
   ranged: "kite",
+  flyingHybrid: "kite",
   boss: "chase",
 } as const;
 
