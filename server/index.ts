@@ -1,7 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { initAugmentTables } from "./pg-augments";
+import { initAugmentTables, syncExistingUsers } from "./pg-augments";
 import session from 'express-session';
 import createMemoryStore from 'memorystore';
 
@@ -64,6 +64,9 @@ app.use((req, res, next) => {
 
 (async () => {
   await initAugmentTables();
+
+  // Seed any existing accounts into player_run_state so no one needs to re-register
+  await syncExistingUsers();
 
   const server = await registerRoutes(app);
 
