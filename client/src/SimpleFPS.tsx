@@ -41,6 +41,9 @@ interface Weapon {
   tier: number;
   pelletCount?: number; // for shotgun-type weapons
   spreadAngle?: number; // spread angle in degrees
+  burnDamagePerTick?: number;
+  burnDurationMs?: number;
+  burnTickMs?: number;
 }
 
 const weapons: Record<number, Weapon> = {
@@ -95,6 +98,19 @@ const weapons: Record<number, Weapon> = {
     tier: 2,
     pelletCount: 8, // 8 pellets per shell
     spreadAngle: 20, // 20 degree cone
+  },
+  6: {
+    name: "Flamethrower",
+    maxAmmo: 120,
+    reserveAmmoCap: 360,
+    damage: 6,
+    reloadTime: 2200,
+    fireRate: 18,
+    bulletsPerKill: 8,
+    tier: 5,
+    burnDamagePerTick: 3,
+    burnDurationMs: 2500,
+    burnTickMs: 400,
   },
 };
 
@@ -207,6 +223,10 @@ interface Enemy {
   attackPatternStep?: "volley" | "melee";
   bossBeamEndsAt?: number;
   bossLastBeamDamageAt?: number;
+  burningUntil?: number;
+  nextBurnTickAt?: number;
+  burnDamagePerTick?: number;
+  burnTickMs?: number;
 }
 
 interface EnemyArchetype {
@@ -352,6 +372,9 @@ interface GameState {
     position: [number, number, number];
     direction: [number, number, number];
     damage: number;
+    burnDamagePerTick?: number;
+    burnDurationMs?: number;
+    burnTickMs?: number;
   }>;
   grenadeProjectiles: Array<{
     id: string;
@@ -1050,6 +1073,9 @@ function Player({
               position: [number, number, number];
               direction: [number, number, number];
               damage: number;
+              burnDamagePerTick?: number;
+              burnDurationMs?: number;
+              burnTickMs?: number;
             }> = [];
 
             if (currentWeapon.pelletCount && currentWeapon.spreadAngle) {
@@ -1096,6 +1122,9 @@ function Player({
                   position: [bulletPos.x, bulletPos.y, bulletPos.z],
                   direction: [spreadDir.x, spreadDir.y, spreadDir.z],
                   damage: currentWeapon.damage + gameStateRef.current.augmentLevels.weaponDamage * 5,
+                  burnDamagePerTick: currentWeapon.burnDamagePerTick,
+                  burnDurationMs: currentWeapon.burnDurationMs,
+                  burnTickMs: currentWeapon.burnTickMs,
                 });
               }
             } else {
@@ -1105,6 +1134,9 @@ function Player({
                 position: [bulletPos.x, bulletPos.y, bulletPos.z],
                 direction: [baseDirection.x, baseDirection.y, baseDirection.z],
                 damage: currentWeapon.damage + gameStateRef.current.augmentLevels.weaponDamage * 5,
+                burnDamagePerTick: currentWeapon.burnDamagePerTick,
+                burnDurationMs: currentWeapon.burnDurationMs,
+                burnTickMs: currentWeapon.burnTickMs,
               });
             }
 
@@ -1241,6 +1273,9 @@ function Player({
               position: [bulletPos.x, bulletPos.y, bulletPos.z],
               direction: [direction.x, direction.y, direction.z],
               damage: currentWeapon.damage + gameState.augmentLevels.weaponDamage * 5,
+              burnDamagePerTick: currentWeapon.burnDamagePerTick,
+              burnDurationMs: currentWeapon.burnDurationMs,
+              burnTickMs: currentWeapon.burnTickMs,
             },
           ],
           lastShotTime: now,
@@ -1446,9 +1481,9 @@ function Player({
       }
     }
 
-    // Weapon switching via loadout (keys 1-4 select tier, loadout determines weapon)
-    // Default loadout if not set: T1=1, T2=2, T3=3, T4=4
-    const currentLoadout = gameState.loadout || { 1: 1, 2: 2, 3: 3, 4: 4 };
+    // Weapon switching via loadout (keys 1-5 select tier, loadout determines weapon)
+    // Default loadout if not set: T1=1, T2=2, T3=3, T4=4, T5=6
+    const currentLoadout = gameState.loadout || { 1: 1, 2: 2, 3: 3, 4: 4, 5: 6 };
     const switchToTier = (tier: number) => {
       const weaponId = currentLoadout[tier];
       if (
@@ -1482,6 +1517,7 @@ function Player({
     if (keys.weapon2) switchToTier(2);
     if (keys.weapon3) switchToTier(3);
     if (keys.weapon4) switchToTier(4);
+    if (keys.weapon5) switchToTier(5);
 
     // Reload
     const weapon = weapons[gameState.currentWeapon];
@@ -1855,6 +1891,27 @@ function Enemy({
         typeof enemy.bossBeamEndsAt === "number" &&
         currentTime < enemy.bossBeamEndsAt;
 
+      if (
+        (enemy.burningUntil ?? 0) > currentTime &&
+        currentTime >= (enemy.nextBurnTickAt ?? 0) &&
+        (enemy.burnDamagePerTick ?? 0) > 0
+      ) {
+        setGameState((prev) => ({
+          ...prev,
+          enemies: prev.enemies
+            .map((e) =>
+              e.id === enemy.id
+                ? {
+                    ...e,
+                    health: e.health - (e.burnDamagePerTick ?? 0),
+                    nextBurnTickAt: currentTime + (e.burnTickMs ?? 400),
+                  }
+                : e,
+            )
+            .filter((e) => e.health > 0),
+        }));
+      }
+
       const currentFacingDirection = new THREE.Vector3(
         enemy.movementDirection[0],
         enemy.movementDirection[1],
@@ -2176,7 +2233,21 @@ function Enemy({
             enemies: prev.enemies
               .map((e) =>
                 e.id === enemy.id
-                  ? { ...e, health: e.health - bullet.damage }
+                  ? {
+                      ...e,
+                      health: e.health - bullet.damage,
+                      burningUntil:
+                        bullet.burnDamagePerTick && bullet.burnDurationMs
+                          ? Date.now() + bullet.burnDurationMs
+                          : e.burningUntil,
+                      nextBurnTickAt:
+                        bullet.burnDamagePerTick && bullet.burnTickMs
+                          ? Date.now() + bullet.burnTickMs
+                          : e.nextBurnTickAt,
+                      burnDamagePerTick:
+                        bullet.burnDamagePerTick ?? e.burnDamagePerTick,
+                      burnTickMs: bullet.burnTickMs ?? e.burnTickMs,
+                    }
                   : e,
               )
               .filter((e) => e.health > 0),
@@ -2525,6 +2596,13 @@ function WeaponSprite({ gameState }: { gameState: GameState }) {
       Magma: "#FF4500",
       "Void Purple": "#8B008B",
     },
+    6: {
+      // Flamethrower skins
+      Default: "#cc4b00",
+      "Ember Orange": "#ff6a00",
+      "Ash Gray": "#6e6e6e",
+      "Inferno Gold": "#ffb000",
+    },
   };
 
   // Get weapon color based on equipped skin from gameState
@@ -2546,6 +2624,8 @@ function WeaponSprite({ gameState }: { gameState: GameState }) {
         return [0.5, 0.9]; // Assault rifle
       case 4:
         return [0.6, 1.2]; // Large LMG
+      case 6:
+        return [0.55, 1.15]; // Flamethrower body
       default:
         return [0.3, 0.6];
     }
@@ -2655,7 +2735,7 @@ function IntroCutscene({
           const adminFullLoadout =
             localStorage.getItem("adminFullLoadout") === "true" && prev.isAdmin;
           const newUnlockedWeapons = adminFullLoadout
-            ? [1, 2, 3, 4, 5]
+            ? [1, 2, 3, 4, 5, 6]
             : prev.unlockedWeapons;
 
           return {
@@ -2759,7 +2839,7 @@ function IntroCutscene({
                 localStorage.getItem("adminFullLoadout") === "true" &&
                 prev.isAdmin;
               const newUnlockedWeapons = adminFullLoadout
-                ? [1, 2, 3, 4, 5]
+                ? [1, 2, 3, 4, 5, 6]
                 : prev.unlockedWeapons;
 
               return {
@@ -2880,7 +2960,7 @@ function InventoryPage({
   const [currency, setCurrency] = useState(gameState.user.currency);
   const [showLoadoutPopup, setShowLoadoutPopup] = useState(false);
   const [loadout, setLoadout] = useState<Record<number, number>>(
-    gameState.loadout || { 1: 1, 2: 2, 3: 3, 4: 4 },
+    gameState.loadout || { 1: 1, 2: 2, 3: 3, 4: 4, 5: 6 },
   );
   const [selectedCrosshair, setSelectedCrosshair] = useState(() => {
     const saved = localStorage.getItem("selectedCrosshairId");
@@ -2925,6 +3005,13 @@ function InventoryPage({
       skins: ["Default", "Buckshot Blue", "Scatter Red", "Pellet Storm"],
       tier: 2,
     },
+    {
+      id: 6,
+      name: "Flamethrower",
+      shopPrefix: "Flamethrower",
+      skins: ["Default", "Ember Orange", "Ash Gray", "Inferno Gold"],
+      tier: 5,
+    },
   ];
 
   // Track equipped skins per weapon - initialize from gameState
@@ -2935,6 +3022,7 @@ function InventoryPage({
       3: "Default",
       4: "Default",
       5: "Default",
+      6: "Default",
     },
   );
 
@@ -3112,14 +3200,14 @@ function InventoryPage({
                 marginBottom: "25px",
               }}
             >
-              Press 1-4 in game to switch between tier weapons
+              Press 1-5 in game to switch between tier weapons
             </p>
 
             {/* Tier Slots */}
             <div
               style={{ display: "flex", flexDirection: "column", gap: "15px" }}
             >
-              {[1, 2, 3, 4].map((tier) => {
+              {[1, 2, 3, 4, 5].map((tier) => {
                 const tierWeapons = allWeapons.filter((w) => w.tier === tier);
                 const equippedWeaponId = loadout[tier];
                 const equippedWeapon = allWeapons.find(
@@ -3797,6 +3885,7 @@ function InventoryPage({
                       Rifle: "#2196F3",
                       Sniper: "#9C27B0",
                       Plasma: "#FF5722",
+                      Flamethrower: "#ff6a00",
                     };
 
                     return (
@@ -4992,7 +5081,7 @@ function ProfilePage({
               4: "Default",
               5: "Default",
             },
-            loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
+            loadout: { 1: 1, 2: 2, 3: 3, 4: 4, 5: 6 },
           }));
           return;
         }
@@ -6549,7 +6638,7 @@ function HUD({
                         4: "Default",
                         5: "Default",
                       },
-                      loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
+                      loadout: { 1: 1, 2: 2, 3: 3, 4: 4, 5: 6 },
                       isAdmin: data.isAdmin || false,
                     }));
 
@@ -6794,7 +6883,7 @@ function HUD({
                         4: "Default",
                         5: "Default",
                       },
-                      loadout: { 1: 1, 2: 2, 3: 3, 4: 4 },
+                      loadout: { 1: 1, 2: 2, 3: 3, 4: 4, 5: 6 },
                     }));
                   } else {
                     const error = await response.json();
@@ -7491,6 +7580,7 @@ function HUD({
                 Rifle: "#2196F3",
                 Sniper: "#9C27B0",
                 Plasma: "#FF5722",
+                Flamethrower: "#ff6a00",
               };
 
               return (
@@ -7809,7 +7899,7 @@ function HUD({
     const nextLevel = LEVELS[gameState.level.currentLevel + 1];
 
     // Determine weapon unlock for this level
-    // Weapons are grouped by tier: T1=[1], T2=[2,5], T3=[3], T4=[4]
+    // Weapons are grouped by tier: T1=[1], T2=[2,5], T3=[3], T4=[4], T5=[6]
     let weaponUnlock = null;
     let additionalUnlocks: number[] = [];
     if (gameState.level.currentLevel === 0) {
@@ -8962,7 +9052,7 @@ function HUD({
                     killsThisLevel: 0,
                     giantsSpawnedThisLevel: 0,
                   },
-                  unlockedWeapons: [1],
+                  unlockedWeapons: [1, 6],
                   inventory: [],
                   augmentLevels: {
                     weaponDamage: 0,
@@ -9223,7 +9313,7 @@ function HUD({
                     killsThisLevel: 0,
                     giantsSpawnedThisLevel: 0,
                   },
-                  unlockedWeapons: [1],
+                  unlockedWeapons: [1, 6],
                   inventory: [],
                   user: {
                     ...prev.user,
@@ -9915,6 +10005,10 @@ function GameLogic({
             attackPatternStep: enemyType === "flyingHybrid" ? "volley" : undefined,
             bossBeamEndsAt: 0,
             bossLastBeamDamageAt: 0,
+            burningUntil: 0,
+            nextBurnTickAt: 0,
+            burnDamagePerTick: 0,
+            burnTickMs: 0,
           },
         ],
         level: {
@@ -9970,7 +10064,7 @@ function Game() {
       killsThisLevel: 0,
       giantsSpawnedThisLevel: 0,
     },
-    unlockedWeapons: [1], // Start with pistol only
+    unlockedWeapons: [1, 6], // Start with pistol and flamethrower
     inventory: [], // No items purchased yet
     tokensPurchased: 0, // No health buff tokens purchased yet
     augmentLevels: {
@@ -9996,8 +10090,9 @@ function Game() {
       3: "Default",
       4: "Default",
       5: "Default",
+      6: "Default",
     },
-    loadout: { 1: 1, 2: 2, 3: 3, 4: 4 }, // Tier -> weapon ID: T1=Ketchup, T2=Mustard(default), T3=Topping, T4=Muffin
+    loadout: { 1: 1, 2: 2, 3: 3, 4: 4, 5: 6 }, // Tier -> weapon ID: T1=Ketchup, T2=Mustard(default), T3=Topping, T4=Muffin, T5=Flamethrower
     isAdmin: false,
     gameStartTime: null,
     gameMode: "story",
@@ -10032,8 +10127,8 @@ function Game() {
             (localStorage.getItem("adminFullLoadout") === "true" ||
               shouldStartAdminLevelTest);
           const unlockedWeaponsAtStart = adminFullLoadoutEnabled
-            ? [1, 2, 3, 4, 5]
-            : [1];
+            ? [1, 2, 3, 4, 5, 6]
+            : [1, 6];
 
           setGameState((prev) => ({
             ...prev,
