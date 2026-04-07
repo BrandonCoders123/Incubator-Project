@@ -693,7 +693,7 @@ function createSupplyCrate(level: number, position: [number, number, number]): M
     healthRestore: 25,
     coinReward: 2,
     ammoReward: 0,
-    grenadeReward: 1,
+    grenadeReward: 0,
   };
 }
 
@@ -705,8 +705,30 @@ function createAmmoCrate(level: number, position: [number, number, number]): Map
     healthRestore: 0,
     coinReward: 0,
     ammoReward: AMMO_CRATE_RESERVE_REWARD_RATIO,
-    grenadeReward: 0,
+    grenadeReward: 1,
   };
+}
+
+function buildGrenadeTrajectoryPoints(
+  origin: THREE.Vector3,
+  velocity: THREE.Vector3,
+): [number, number, number][] {
+  const points: [number, number, number][] = [];
+  const gravity = 24;
+  const steps = 24;
+  const stepSize = 0.08;
+
+  for (let i = 0; i <= steps; i++) {
+    const t = i * stepSize;
+    const point = origin
+      .clone()
+      .add(velocity.clone().multiplyScalar(t))
+      .add(new THREE.Vector3(0, -0.5 * gravity * t * t, 0));
+    points.push([point.x, Math.max(0.2, point.y), point.z]);
+    if (point.y <= 0.2) break;
+  }
+
+  return points;
 }
 
 // Get walls for current level
@@ -1139,6 +1161,16 @@ function Player({
       if (gameStateRef.current.grenades <= 0) return;
       grenadeKeyHeldRef.current = true;
       grenadeChargeStartRef.current = performance.now();
+      const direction = new THREE.Vector3(
+        -Math.sin(rotationRef.current.y) * Math.cos(rotationRef.current.x),
+        Math.sin(rotationRef.current.x),
+        -Math.cos(rotationRef.current.y) * Math.cos(rotationRef.current.x),
+      ).normalize();
+      const origin = camera.position.clone().add(direction.clone().multiplyScalar(1.1));
+      const velocity = direction
+        .multiplyScalar(GRENADE_MIN_THROW_SPEED)
+        .add(new THREE.Vector3(0, 4, 0));
+      setGrenadeTrajectory(buildGrenadeTrajectoryPoints(origin, velocity));
       event.preventDefault();
     };
 
@@ -1453,21 +1485,9 @@ function Player({
       ).normalize();
       const origin = camera.position.clone().add(direction.clone().multiplyScalar(1.1));
       const velocity = direction.multiplyScalar(throwSpeed).add(new THREE.Vector3(0, 4, 0));
-
-      const points: [number, number, number][] = [];
-      const gravity = 24;
-      const steps = 20;
-      const stepSize = 0.08;
-      for (let i = 0; i <= steps; i++) {
-        const t = i * stepSize;
-        const point = origin
-          .clone()
-          .add(velocity.clone().multiplyScalar(t))
-          .add(new THREE.Vector3(0, -0.5 * gravity * t * t, 0));
-        points.push([point.x, Math.max(0.2, point.y), point.z]);
-        if (point.y <= 0.2) break;
-      }
-      setGrenadeTrajectory(points);
+      setGrenadeTrajectory(buildGrenadeTrajectoryPoints(origin, velocity));
+    } else if (grenadeTrajectory.length > 0) {
+      setGrenadeTrajectory([]);
     }
 
     // Weapon switching via loadout (keys 1-4 select tier, loadout determines weapon)
@@ -1668,7 +1688,8 @@ function Player({
         <Line
           points={grenadeTrajectory}
           color="#f9c74f"
-          lineWidth={2}
+          lineWidth={4}
+          depthTest={false}
           transparent
           opacity={0.9}
         />
