@@ -33,8 +33,11 @@ $moveLeft = isset($input['move_left_key']) ? $input['move_left_key'] : 'KeyA';
 $moveRight = isset($input['move_right_key']) ? $input['move_right_key'] : 'KeyD';
 $jumpKey = isset($input['jump_key']) ? $input['jump_key'] : 'Space';
 $crouchKey = isset($input['crouch_key']) ? $input['crouch_key'] : 'ControlLeft';
+$grenadeKey = isset($input['grenade_key']) ? $input['grenade_key'] : 'KeyQ';
 
 try {
+    $pdo->exec("ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS grenade_key VARCHAR(50) NOT NULL DEFAULT 'KeyQ'");
+
     $stmt = $pdo->prepare("
         UPDATE user_settings 
         SET 
@@ -44,7 +47,8 @@ try {
             move_left_key = ?,
             move_right_key = ?,
             jump_key = ?,
-            crouch_key = ?
+            crouch_key = ?,
+            grenade_key = ?
         WHERE user_id = ?
     ");
     
@@ -56,14 +60,15 @@ try {
         $moveRight,
         $jumpKey,
         $crouchKey,
+        $grenadeKey,
         $userId
     ]);
 
     if ($stmt->rowCount() === 0) {
         $insertStmt = $pdo->prepare("
             INSERT INTO user_settings 
-            (user_id, mouse_sensitivity, move_forward_key, move_backward_key, move_left_key, move_right_key, jump_key, crouch_key)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (user_id, mouse_sensitivity, move_forward_key, move_backward_key, move_left_key, move_right_key, jump_key, crouch_key, grenade_key)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $insertStmt->execute([
             $userId,
@@ -73,7 +78,8 @@ try {
             $moveLeft,
             $moveRight,
             $jumpKey,
-            $crouchKey
+            $crouchKey,
+            $grenadeKey
         ]);
     }
 

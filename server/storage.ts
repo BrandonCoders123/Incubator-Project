@@ -133,8 +133,14 @@ class PostgresStorage implements IStorage {
         move_backward_key VARCHAR(50) NOT NULL DEFAULT 'KeyS',
         move_left_key VARCHAR(50) NOT NULL DEFAULT 'KeyA',
         move_right_key VARCHAR(50) NOT NULL DEFAULT 'KeyD',
-        jump_key VARCHAR(50) NOT NULL DEFAULT 'Space'
+        jump_key VARCHAR(50) NOT NULL DEFAULT 'Space',
+        grenade_key VARCHAR(50) NOT NULL DEFAULT 'KeyQ'
       )
+    `);
+
+    await this.pool.query(`
+      ALTER TABLE user_settings
+      ADD COLUMN IF NOT EXISTS grenade_key VARCHAR(50) NOT NULL DEFAULT 'KeyQ'
     `);
 
     await this.pool.query(`
@@ -475,7 +481,7 @@ class PostgresStorage implements IStorage {
     try {
       const result = await this.pool.query(
         `SELECT mouse_sensitivity, move_forward_key, move_backward_key,
-                move_left_key, move_right_key, jump_key
+                move_left_key, move_right_key, jump_key, grenade_key
          FROM user_settings WHERE user_id = $1`,
         [userId]
       );
@@ -489,6 +495,7 @@ class PostgresStorage implements IStorage {
         move_left_key: "KeyA",
         move_right_key: "KeyD",
         jump_key: "Space",
+        grenade_key: "KeyQ",
       };
     } catch (err) {
       console.error("Error fetching user settings:", err);
@@ -499,6 +506,7 @@ class PostgresStorage implements IStorage {
         move_left_key: "KeyA",
         move_right_key: "KeyD",
         jump_key: "Space",
+        grenade_key: "KeyQ",
       };
     }
   }
@@ -507,15 +515,16 @@ class PostgresStorage implements IStorage {
     try {
       await this.pool.query(
         `INSERT INTO user_settings (user_id, mouse_sensitivity, move_forward_key,
-          move_backward_key, move_left_key, move_right_key, jump_key)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+          move_backward_key, move_left_key, move_right_key, jump_key, grenade_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (user_id) DO UPDATE SET
            mouse_sensitivity = EXCLUDED.mouse_sensitivity,
            move_forward_key = EXCLUDED.move_forward_key,
            move_backward_key = EXCLUDED.move_backward_key,
            move_left_key = EXCLUDED.move_left_key,
            move_right_key = EXCLUDED.move_right_key,
-           jump_key = EXCLUDED.jump_key`,
+           jump_key = EXCLUDED.jump_key,
+           grenade_key = EXCLUDED.grenade_key`,
         [
           userId,
           settings.mouse_sensitivity || 1.0,
@@ -524,6 +533,7 @@ class PostgresStorage implements IStorage {
           settings.move_left_key || "KeyA",
           settings.move_right_key || "KeyD",
           settings.jump_key || "Space",
+          settings.grenade_key || "KeyQ",
         ]
       );
     } catch (err) {

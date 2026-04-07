@@ -11,7 +11,6 @@ import {
   KeyboardControls,
   useKeyboardControls,
   useTexture,
-  Line,
 } from "@react-three/drei";
 import * as THREE from "three";
 import "@fontsource/inter";
@@ -693,7 +692,7 @@ function createSupplyCrate(level: number, position: [number, number, number]): M
     healthRestore: 25,
     coinReward: 2,
     ammoReward: 0,
-    grenadeReward: 1,
+    grenadeReward: 0,
   };
 }
 
@@ -705,7 +704,7 @@ function createAmmoCrate(level: number, position: [number, number, number]): Map
     healthRestore: 0,
     coinReward: 0,
     ammoReward: AMMO_CRATE_RESERVE_REWARD_RATIO,
-    grenadeReward: 0,
+    grenadeReward: 1,
   };
 }
 
@@ -953,7 +952,6 @@ function Player({
   const gameStateRef = useRef(gameState);
   const grenadeChargeStartRef = useRef<number | null>(null);
   const grenadeKeyHeldRef = useRef(false);
-  const [grenadeTrajectory, setGrenadeTrajectory] = useState<[number, number, number][]>([]);
 
   // Keep gameStateRef in sync
   useEffect(() => {
@@ -1149,7 +1147,6 @@ function Player({
       const chargeStart = grenadeChargeStartRef.current;
       grenadeKeyHeldRef.current = false;
       grenadeChargeStartRef.current = null;
-      setGrenadeTrajectory([]);
 
       if (chargeStart === null || gameStateRef.current.gamePhase !== "playing") return;
       if (gameStateRef.current.grenades <= 0) return;
@@ -1408,7 +1405,7 @@ function Player({
               0,
             );
             const totalGrenadeReward = collectedPickups
-              .filter((pickup) => pickup.type === "supplyCrate")
+              .filter((pickup) => pickup.type === "ammoCrate")
               .reduce((sum, pickup) => sum + pickup.grenadeReward, 0);
 
             const currentWeapon = prev.currentWeapon;
@@ -1439,35 +1436,6 @@ function Player({
           });
         }
       }
-    }
-
-    if (grenadeKeyHeldRef.current && grenadeChargeStartRef.current !== null) {
-      const heldMs = performance.now() - grenadeChargeStartRef.current;
-      const charge = Math.min(1, heldMs / GRENADE_MAX_CHARGE_MS);
-      const throwSpeed =
-        GRENADE_MIN_THROW_SPEED + (GRENADE_MAX_THROW_SPEED - GRENADE_MIN_THROW_SPEED) * charge;
-      const direction = new THREE.Vector3(
-        -Math.sin(rotationRef.current.y) * Math.cos(rotationRef.current.x),
-        Math.sin(rotationRef.current.x),
-        -Math.cos(rotationRef.current.y) * Math.cos(rotationRef.current.x),
-      ).normalize();
-      const origin = camera.position.clone().add(direction.clone().multiplyScalar(1.1));
-      const velocity = direction.multiplyScalar(throwSpeed).add(new THREE.Vector3(0, 4, 0));
-
-      const points: [number, number, number][] = [];
-      const gravity = 24;
-      const steps = 20;
-      const stepSize = 0.08;
-      for (let i = 0; i <= steps; i++) {
-        const t = i * stepSize;
-        const point = origin
-          .clone()
-          .add(velocity.clone().multiplyScalar(t))
-          .add(new THREE.Vector3(0, -0.5 * gravity * t * t, 0));
-        points.push([point.x, Math.max(0.2, point.y), point.z]);
-        if (point.y <= 0.2) break;
-      }
-      setGrenadeTrajectory(points);
     }
 
     // Weapon switching via loadout (keys 1-4 select tier, loadout determines weapon)
@@ -1664,15 +1632,6 @@ function Player({
           opacity={0}
         />
       </mesh>
-      {grenadeTrajectory.length > 1 && (
-        <Line
-          points={grenadeTrajectory}
-          color="#f9c74f"
-          lineWidth={2}
-          transparent
-          opacity={0.9}
-        />
-      )}
     </group>
   );
 }
@@ -4188,7 +4147,7 @@ function SettingsPage({
             move_left_key: s.move_left_key || "KeyA",
             move_right_key: s.move_right_key || "KeyD",
             jump_key: s.jump_key || "Space",
-            grenade_key: localStorage.getItem("grenade_key") || "KeyQ",
+            grenade_key: s.grenade_key || "KeyQ",
           });
           // Also apply to global store immediately
           setKeybinding("forward", s.move_forward_key || "KeyW");
@@ -4196,7 +4155,7 @@ function SettingsPage({
           setKeybinding("leftward", s.move_left_key || "KeyA");
           setKeybinding("rightward", s.move_right_key || "KeyD");
           setKeybinding("jump", s.jump_key || "Space");
-          setKeybinding("grenade", localStorage.getItem("grenade_key") || "KeyQ");
+          setKeybinding("grenade", s.grenade_key || "KeyQ");
           const sens = parseFloat(s.mouse_sensitivity);
           setNormalSensitivity(isNaN(sens) ? 1 : sens);
         }
@@ -6505,10 +6464,7 @@ function HUD({
                         setKeybinding("leftward", s.move_left_key);
                         setKeybinding("rightward", s.move_right_key);
                         setKeybinding("jump", s.jump_key);
-                        setKeybinding(
-                          "grenade",
-                          localStorage.getItem("grenade_key") || "KeyQ",
-                        );
+                        setKeybinding("grenade", s.grenade_key || "KeyQ");
                         const sens = parseFloat(s.mouse_sensitivity);
                         setNormalSensitivity(isNaN(sens) ? 1 : sens);
                       }
@@ -10029,10 +9985,7 @@ function Game() {
               setKeybinding("leftward", s.move_left_key);
               setKeybinding("rightward", s.move_right_key);
               setKeybinding("jump", s.jump_key);
-              setKeybinding(
-                "grenade",
-                localStorage.getItem("grenade_key") || "KeyQ",
-              );
+              setKeybinding("grenade", s.grenade_key || "KeyQ");
               const sens = parseFloat(s.mouse_sensitivity);
               setNormalSensitivity(isNaN(sens) ? 1 : sens);
             }
