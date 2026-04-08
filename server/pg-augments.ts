@@ -32,6 +32,15 @@ export async function initAugmentTables(): Promise<void> {
     );
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS player_loadout (
+      user_id        INTEGER PRIMARY KEY,
+      loadout        JSONB NOT NULL DEFAULT '{"1":1,"2":2,"3":3,"4":4}',
+      equipped_skins JSONB NOT NULL DEFAULT '{}',
+      updated_at     TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+
   console.log("[pg-augments] Tables ready");
 }
 
@@ -124,5 +133,49 @@ export async function saveRunState(
 export async function resetRunState(userId: number): Promise<void> {
   await pool.query("DELETE FROM player_augments WHERE user_id = $1", [userId]);
   await pool.query("DELETE FROM player_run_state WHERE user_id = $1", [userId]);
+}
+
+// ── Loadout & Equipped Skins ─────────────────────────────────────────────────
+
+export interface LoadoutData {
+  loadout: Record<string, number>;        // slot "1"-"4" → weapon ID
+  equippedSkins: Record<string, string>;  // weapon ID (as string) → skin name
+}
+
+const DEFAULT_LOADOUT: LoadoutData = {
+  loadout: { "1": 1, "2": 2, "3": 3, "4": 4 },
+  equippedSkins: {},
+};
+
+export async function getLoadout(userId: number): Promise<LoadoutData> {
+  const res = await pool.query<{ loadout: any; equipped_skins: any }>(
+    "SELECT loadout, equipped_skins FROM player_loadout WHERE user_id = $1",
+    [userId]
+  );
+
+  if (res.rows.length === 0) {
+    return { ...DEFAULT_LOADOUT };
+  }
+
+  return {
+    loadout: res.rows[0].loadout ?? DEFAULT_LOADOUT.loadout,
+    equippedSkins: res.rows[0].equipped_skins ?? {},
+  };
+}
+
+export async function saveLoadout(
+  userId: number,
+  loadout: Record<string, number>,
+  equippedSkins: Record<string, string>
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO player_loadout (user_id, loadout, equipped_skins, updated_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (user_id) DO UPDATE
+       SET loadout        = EXCLUDED.loadout,
+           equipped_skins = EXCLUDED.equipped_skins,
+           updated_at     = NOW()`,
+    [userId, JSON.stringify(loadout), JSON.stringify(equippedSkins)]
+  );
 }
 
