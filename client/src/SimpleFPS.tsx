@@ -832,29 +832,11 @@ function getWallsForLevel(
     ];
   } else if (level === 7) {
     return [
-      // Large reactor perimeter
+      // Boss arena perimeter only (open interior for boss movement)
       { position: [85, 6, 0], size: [2, 12, 170] },
       { position: [-85, 6, 0], size: [2, 12, 170] },
       { position: [0, 6, 85], size: [170, 12, 2] },
       { position: [0, 6, -85], size: [170, 12, 2] },
-      // Inner ring with four wide openings so the player can always reach the center
-      { position: [0, 5, -30], size: [50, 10, 2] },
-      { position: [0, 5, 30], size: [50, 10, 2] },
-      { position: [-30, 5, 0], size: [2, 10, 50] },
-      { position: [30, 5, 0], size: [2, 10, 50] },
-      // Core hazard shell (not fully sealed)
-      { position: [0, 5, -10], size: [18, 10, 2] },
-      { position: [0, 5, 10], size: [18, 10, 2] },
-      { position: [-10, 5, 0], size: [2, 10, 18] },
-      { position: [10, 5, 0], size: [2, 10, 18] },
-    ];
-  } else if (level === 8) {
-    return [
-      // Boss arena perimeter only (open interior for boss movement)
-      { position: [50, 6, 0], size: [2, 12, 100] },
-      { position: [-50, 6, 0], size: [2, 12, 100] },
-      { position: [0, 6, 50], size: [100, 12, 2] },
-      { position: [0, 6, -50], size: [100, 12, 2] },
     ];
   }
   return [];
