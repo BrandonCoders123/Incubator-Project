@@ -832,21 +832,11 @@ function getWallsForLevel(
     ];
   } else if (level === 7) {
     return [
-      // Large reactor perimeter
+      // Boss arena perimeter only (open interior for boss movement)
       { position: [85, 6, 0], size: [2, 12, 170] },
       { position: [-85, 6, 0], size: [2, 12, 170] },
       { position: [0, 6, 85], size: [170, 12, 2] },
       { position: [0, 6, -85], size: [170, 12, 2] },
-      // Inner ring with four wide openings so the player can always reach the center
-      { position: [0, 5, -30], size: [50, 10, 2] },
-      { position: [0, 5, 30], size: [50, 10, 2] },
-      { position: [-30, 5, 0], size: [2, 10, 50] },
-      { position: [30, 5, 0], size: [2, 10, 50] },
-      // Core hazard shell (not fully sealed)
-      { position: [0, 5, -10], size: [18, 10, 2] },
-      { position: [0, 5, 10], size: [18, 10, 2] },
-      { position: [-10, 5, 0], size: [2, 10, 18] },
-      { position: [10, 5, 0], size: [2, 10, 18] },
     ];
   }
   return [];
@@ -871,7 +861,7 @@ function GameEnvironment({ gameState }: { gameState: GameState }) {
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
         <planeGeometry
           args={
-            gameState.level.currentLevel === 7 ? [180, 180] : [100, 100]
+            gameState.level.currentLevel >= 7 ? [180, 180] : [100, 100]
           }
         />
         <meshLambertMaterial map={grassTexture} />
@@ -2030,7 +2020,8 @@ function Enemy({
               e.id === enemy.id
                 ? {
                     ...e,
-                    nextAttackAt: currentTime + BOSS_BEAM_COOLDOWN_MS,
+                    nextAttackAt:
+                      currentTime + BOSS_BEAM_DURATION_MS + BOSS_BEAM_COOLDOWN_MS,
                     bossBeamEndsAt: currentTime + BOSS_BEAM_DURATION_MS,
                   }
                 : e,
