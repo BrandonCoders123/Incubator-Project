@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { getRunState, saveRunState, resetRunState } from "./pg-augments";
+import { getRunState, saveRunState, resetRunState, getLoadout, saveLoadout } from "./pg-augments";
 import bcrypt from "bcrypt";
 import multer from "multer";
 import path from "path";
@@ -831,6 +831,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to reset run state:", error);
       res.status(500).json({ error: "Failed to reset run state" });
+    }
+  });
+
+  // ── Loadout & Equipped Skins Routes ─────────────────────────────────────────
+
+  // GET /api/loadout — fetch the player's saved weapon loadout and equipped skins
+  app.get("/api/loadout", requireAuth, async (req, res) => {
+    try {
+      const data = await getLoadout(req.session.userId!);
+      res.json(data);
+    } catch (error) {
+      console.error("Failed to fetch loadout:", error);
+      res.status(500).json({ error: "Failed to fetch loadout" });
+    }
+  });
+
+  // POST /api/loadout — save the player's weapon loadout and equipped skins
+  // Body: { loadout: Record<string, number>, equippedSkins: Record<string, string> }
+  app.post("/api/loadout", requireAuth, async (req, res) => {
+    try {
+      const { loadout, equippedSkins } = req.body;
+      if (!loadout || typeof loadout !== "object") {
+        return res.status(400).json({ error: "loadout must be an object" });
+      }
+      if (!equippedSkins || typeof equippedSkins !== "object") {
+        return res.status(400).json({ error: "equippedSkins must be an object" });
+      }
+      await saveLoadout(req.session.userId!, loadout, equippedSkins);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to save loadout:", error);
+      res.status(500).json({ error: "Failed to save loadout" });
     }
   });
 
