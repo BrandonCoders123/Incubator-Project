@@ -2,7 +2,6 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { getRunState, saveRunState, resetRunState } from "./pg-augments";
-import { migrateFromMySQL } from "./migrate-mysql-to-pg";
 import bcrypt from "bcrypt";
 import multer from "multer";
 import path from "path";
@@ -778,19 +777,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Admin transactions fetch error:", error);
       res.status(500).json({ error: "Failed to fetch transactions" });
-    }
-  });
-
-  // ── MySQL → PostgreSQL one-time migration ───────────────────────────────────
-  // POST /api/admin/migrate-from-mysql — copies all MySQL accounts into PostgreSQL
-  app.post("/api/admin/migrate-from-mysql", requireAdmin, async (req, res) => {
-    try {
-      console.log("[migrate] Admin triggered MySQL → PostgreSQL migration");
-      const stats = await migrateFromMySQL();
-      res.json({ success: true, ...stats });
-    } catch (error: any) {
-      console.error("Migration error:", error);
-      res.status(500).json({ error: error.message || "Migration failed" });
     }
   });
 
