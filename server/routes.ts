@@ -1,6 +1,8 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { getRunState, saveRunState, resetRunState } from "./pg-augments";
+import { migrateFromMySQL } from "./migrate-mysql-to-pg";
 import bcrypt from "bcrypt";
 import multer from "multer";
 import path from "path";
@@ -778,6 +780,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to fetch transactions" });
     }
   });
+
+  // ── MySQL → PostgreSQL one-time migration ───────────────────────────────────
+  // POST /api/admin/migrate-from-mysql — copies all MySQL accounts into PostgreSQL
+  app.post("/api/admin/migrate-from-mysql", requireAdmin, async (req, res) => {
+    try {
+      console.log("[migrate] Admin triggered MySQL → PostgreSQL migration");
+      const stats = await migrateFromMySQL();
+      res.json({ success: true, ...stats });
+    } catch (error: any) {
+      console.error("Migration error:", error);
+      res.status(500).json({ error: error.message || "Migration failed" });
+    }
+  });
+
+  // ── Augment / Run-State Routes ──────────────────────────────────────────────
+
+  // GET /api/run/state — fetch the logged-in player's current augments and mode levels
+  app.get("/api/run/state", requireAuth, async (req, res) => {
+    try {
+      const state = await getRunState(req.session.userId!);
+      res.json({ success: true, ...state });
+    } catch (error) {
+      console.error("Failed to get run state:", error);
+      res.status(500).json({ error: "Failed to fetch run state" });
+    }
+  });
+
+  // POST /api/run/state — save augment tiers and current mode levels
+  // Body: { storyModeLevel, endlessModeLevel, augments: { weaponDamage, ... } }
+  app.post("/api/run/state", requireAuth, async (req, res) => {
+    try {
+      const { storyModeLevel, endlessModeLevel, augments } = req.body;
+
+      if (
+        typeof storyModeLevel !== "number" ||
+        typeof endlessModeLevel !== "number" ||
+        typeof augments !== "object" ||
+        augments === null
+      ) {
+        return res.status(400).json({ error: "Invalid body" });
+      }
+
+      await saveRunState(
+        req.session.userId!,
+        storyModeLevel,
+        endlessModeLevel,
+        augments
+      );
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to save run state:", error);
+      res.status(500).json({ error: "Failed to save run state" });
+    }
+  });
+
+  // DELETE /api/run/reset — wipe all temporary augment/level data for this player
+  // Call this on death, win, or manual progress reset
+  app.delete("/api/run/reset", requireAuth, async (req, res) => {
+    try {
+      await resetRunState(req.session.userId!);
+      res.json({ success: true, message: "Run state cleared" });
+    } catch (error) {
+      console.error("Failed to reset run state:", error);
+      res.status(500).json({ error: "Failed to reset run state" });
+    }
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
 
   const httpServer = createServer(app);
 

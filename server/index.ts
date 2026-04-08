@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { initAugmentTables, syncExistingUsers } from "./pg-augments";
+import { migrateFromMySQL } from "./migrate-mysql-to-pg";
 import session from 'express-session';
 import createMemoryStore from 'memorystore';
 
@@ -62,6 +64,21 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await initAugmentTables();
+
+  // Migrate accounts from MySQL → PostgreSQL (safe to run every startup; skips existing rows)
+  const mysqlVars = ["MYSQL_HOST", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE"];
+  if (mysqlVars.every((v) => process.env[v])) {
+    try {
+      await migrateFromMySQL();
+    } catch (err) {
+      console.error("[migrate] MySQL migration failed (non-fatal):", err);
+    }
+  }
+
+  // Seed any existing accounts into player_run_state so no one needs to re-register
+  await syncExistingUsers();
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
