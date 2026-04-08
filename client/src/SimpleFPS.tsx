@@ -974,6 +974,39 @@ function Player({
   const grenadeChargeStartRef = useRef<number | null>(null);
   const grenadeKeyHeldRef = useRef(false);
 
+  const getCurrentLoadout = () => gameStateRef.current.loadout || { 1: 1, 2: 2, 3: 3, 4: 4, 5: 6 };
+
+  const switchToTier = (tier: number) => {
+    const currentState = gameStateRef.current;
+    const currentLoadout = getCurrentLoadout();
+    const weaponId = currentLoadout[tier];
+    if (
+      weaponId &&
+      currentState.currentWeapon !== weaponId &&
+      currentState.unlockedWeapons.includes(weaponId)
+    ) {
+      weaponAmmo.current[currentState.currentWeapon] = currentState.ammo; // Save current ammo
+      weaponReserveAmmo.current[currentState.currentWeapon] = currentState.reserveAmmo; // Save current reserve ammo
+      // Ensure we have a valid ammo value for the new weapon
+      const newAmmo =
+        weaponAmmo.current[weaponId] !== undefined
+          ? weaponAmmo.current[weaponId]
+          : weapons[weaponId].maxAmmo;
+      const newReserveAmmo =
+        weaponReserveAmmo.current[weaponId] !== undefined
+          ? weaponReserveAmmo.current[weaponId]
+          : getStartingReserveAmmo(weaponId);
+      setGameState((prev) => ({
+        ...prev,
+        currentWeapon: weaponId,
+        ammo: newAmmo,
+        reserveAmmo: newReserveAmmo,
+        isReloading: false,
+        reloadDuration: 0,
+      }));
+    }
+  };
+
   // Keep gameStateRef in sync
   useEffect(() => {
     gameStateRef.current = gameState;
@@ -1219,6 +1252,36 @@ function Player({
       window.removeEventListener("keyup", handleKeyUp);
     };
   }, [camera, setGameState]);
+
+  useEffect(() => {
+    const handleWheel = (event: WheelEvent) => {
+      if (gameStateRef.current.gamePhase !== "playing" || !document.pointerLockElement) return;
+
+      const direction = event.deltaY > 0 ? 1 : -1;
+
+      const currentState = gameStateRef.current;
+      const currentLoadout = getCurrentLoadout();
+      const tiers = [1, 2, 3, 4, 5];
+      const currentTier =
+        tiers.find((tier) => currentLoadout[tier] === currentState.currentWeapon) ||
+        Math.min(5, Math.max(1, currentState.currentWeapon));
+
+      for (let i = 1; i <= tiers.length; i += 1) {
+        const wrappedTier = (((currentTier - 1 + direction * i) % tiers.length) + tiers.length) % tiers.length + 1;
+        const weaponId = currentLoadout[wrappedTier];
+        if (!weaponId) continue;
+        if (!currentState.unlockedWeapons.includes(weaponId)) continue;
+        if (weaponId === currentState.currentWeapon) continue;
+
+        switchToTier(wrappedTier);
+        event.preventDefault();
+        break;
+      }
+    };
+
+    window.addEventListener("wheel", handleWheel, { passive: false });
+    return () => window.removeEventListener("wheel", handleWheel);
+  }, [setGameState]);
 
   useFrame((state, deltaTime) => {
     if (gameState.gamePhase !== "playing") return;
@@ -1472,37 +1535,6 @@ function Player({
     }
 
     // Weapon switching via loadout (keys 1-5 select tier, loadout determines weapon)
-    // Default loadout if not set: T1=1, T2=2, T3=3, T4=4, T5=6
-    const currentLoadout = gameState.loadout || { 1: 1, 2: 2, 3: 3, 4: 4, 5: 6 };
-    const switchToTier = (tier: number) => {
-      const weaponId = currentLoadout[tier];
-      if (
-        weaponId &&
-        gameState.currentWeapon !== weaponId &&
-        gameState.unlockedWeapons.includes(weaponId)
-      ) {
-        weaponAmmo.current[gameState.currentWeapon] = gameState.ammo; // Save current ammo
-        weaponReserveAmmo.current[gameState.currentWeapon] = gameState.reserveAmmo; // Save current reserve ammo
-        // Ensure we have a valid ammo value for the new weapon
-        const newAmmo =
-          weaponAmmo.current[weaponId] !== undefined
-            ? weaponAmmo.current[weaponId]
-            : weapons[weaponId].maxAmmo;
-        const newReserveAmmo =
-          weaponReserveAmmo.current[weaponId] !== undefined
-            ? weaponReserveAmmo.current[weaponId]
-            : getStartingReserveAmmo(weaponId);
-        setGameState((prev) => ({
-          ...prev,
-          currentWeapon: weaponId,
-          ammo: newAmmo,
-          reserveAmmo: newReserveAmmo,
-          isReloading: false,
-          reloadDuration: 0,
-        }));
-      }
-    };
-
     if (keys.weapon1) switchToTier(1);
     if (keys.weapon2) switchToTier(2);
     if (keys.weapon3) switchToTier(3);
@@ -9697,7 +9729,7 @@ function HUD({
             AMMO
           </div>
           <div style={{ fontSize: "8px", marginTop: "4px", opacity: 0.5 }}>
-            Keys: 1-4 switch | R reload | Q hold/throw grenade
+            Keys: 1-5 or mouse wheel switch | R reload | Q hold/throw grenade
           </div>
         </div>
 
