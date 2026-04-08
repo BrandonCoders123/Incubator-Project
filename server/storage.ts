@@ -1,6 +1,5 @@
 import type { User, InsertUser } from "@shared/schema";
-import pg from "pg";
-const { Pool } = pg;
+import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
 
 // All storage operations the rest of the app expects
@@ -69,141 +68,55 @@ export interface IStorage {
   getPlayerStats(userId: number): Promise<{ total_shots: number; shots_hit: number; deaths: number; minutes_played: number }>;
 }
 
-class PostgresStorage implements IStorage {
-  private pool: Pool;
+class MySQLStorage implements IStorage {
+  private pool: mysql.Pool;
 
   constructor() {
-    if (!process.env.DATABASE_URL) {
-      throw new Error("Missing required DATABASE_URL environment variable");
+    const required = ["MYSQL_HOST", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE"];
+    const missing = required.filter((v) => !process.env[v]);
+    if (missing.length > 0) {
+      throw new Error(`Missing required MySQL environment variables: ${missing.join(", ")}`);
     }
 
-    this.pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+    this.pool = mysql.createPool({
+      host: process.env.MYSQL_HOST,
+      user: process.env.MYSQL_USER,
+      password: process.env.MYSQL_PASSWORD,
+      database: process.env.MYSQL_DATABASE,
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0,
     });
-
-    this.initTables().catch((err) => {
-      console.error("Failed to initialize database tables:", err);
-    });
-  }
-
-  private async initTables(): Promise<void> {
-    await this.pool.query(`
-      CREATE TABLE IF NOT EXISTS accounts (
-        user_id SERIAL PRIMARY KEY,
-        username VARCHAR(255) NOT NULL UNIQUE,
-        password_hash VARCHAR(255) NOT NULL,
-        email VARCHAR(255) NOT NULL,
-        profile_pic TEXT,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        last_login TIMESTAMPTZ,
-        is_banned INTEGER NOT NULL DEFAULT 0,
-        ban_reason TEXT,
-        banned_at TIMESTAMPTZ,
-        warning_count INTEGER NOT NULL DEFAULT 0,
-        "adminCheck" INTEGER NOT NULL DEFAULT 0
-      )
-    `);
-
-    await this.pool.query(`
-      CREATE TABLE IF NOT EXISTS items (
-        item_id SERIAL PRIMARY KEY,
-        item_name VARCHAR(255) NOT NULL,
-        item_type VARCHAR(255) NOT NULL,
-        store_price INTEGER NOT NULL DEFAULT 0,
-        is_cosmetic INTEGER NOT NULL DEFAULT 0
-      )
-    `);
-
-    await this.pool.query(`
-      CREATE TABLE IF NOT EXISTS inventory_items (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES accounts(user_id) ON DELETE CASCADE,
-        item_id INTEGER NOT NULL DEFAULT 0,
-        gold INTEGER NOT NULL DEFAULT 1000,
-        purchased_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
-
-    await this.pool.query(`
-      CREATE TABLE IF NOT EXISTS user_settings (
-        user_id INTEGER PRIMARY KEY REFERENCES accounts(user_id) ON DELETE CASCADE,
-        mouse_sensitivity REAL NOT NULL DEFAULT 1.0,
-        move_forward_key VARCHAR(50) NOT NULL DEFAULT 'KeyW',
-        move_backward_key VARCHAR(50) NOT NULL DEFAULT 'KeyS',
-        move_left_key VARCHAR(50) NOT NULL DEFAULT 'KeyA',
-        move_right_key VARCHAR(50) NOT NULL DEFAULT 'KeyD',
-        jump_key VARCHAR(50) NOT NULL DEFAULT 'Space',
-        grenade_key VARCHAR(50) NOT NULL DEFAULT 'KeyQ'
-      )
-    `);
-
-    await this.pool.query(`
-      ALTER TABLE user_settings
-      ADD COLUMN IF NOT EXISTS grenade_key VARCHAR(50) NOT NULL DEFAULT 'KeyQ'
-    `);
-
-    await this.pool.query(`
-      CREATE TABLE IF NOT EXISTS leaderboard_2 (
-        leaderboard_id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL UNIQUE REFERENCES accounts(user_id) ON DELETE CASCADE,
-        fastest_run_time VARCHAR(50),
-        total_kills INTEGER NOT NULL DEFAULT 0,
-        rank INTEGER,
-        date_recorded TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
-
-    await this.pool.query(`
-      CREATE TABLE IF NOT EXISTS transactions_v2 (
-        transaction_id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL,
-        amount_spent_usd DECIMAL(10,2) NOT NULL,
-        card_number VARCHAR(20),
-        currency_purchased INTEGER NOT NULL,
-        transaction_date TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
-
-    await this.pool.query(`
-      CREATE TABLE IF NOT EXISTS player_stats (
-        user_id INTEGER PRIMARY KEY REFERENCES accounts(user_id) ON DELETE CASCADE,
-        total_shots INTEGER NOT NULL DEFAULT 0,
-        shots_hit INTEGER NOT NULL DEFAULT 0,
-        deaths INTEGER NOT NULL DEFAULT 0,
-        minutes_played INTEGER NOT NULL DEFAULT 0
-      )
-    `);
   }
 
   // ---------- User lookups ----------
 
   async getUser(id: number): Promise<User | undefined> {
-    const result = await this.pool.query(
-      "SELECT user_id AS id, username, password_hash AS password, email FROM accounts WHERE user_id = $1",
+    const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
+      "SELECT user_id AS id, username, password_hash AS password, email FROM accounts WHERE user_id = ?",
       [id]
     );
-    return result.rows[0];
+    return rows[0] as User | undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const result = await this.pool.query(
+    const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
       `SELECT user_id AS id, username, password_hash AS password, email,
-              COALESCE("adminCheck", 0) as "adminCheck",
-              COALESCE(is_banned, 0) as is_banned, ban_reason
-       FROM accounts WHERE username = $1`,
+              COALESCE(\`adminCheck\`, 0) AS adminCheck,
+              COALESCE(is_banned, 0) AS is_banned, ban_reason
+       FROM accounts WHERE username = ?`,
       [username]
     );
-    return result.rows[0];
+    return rows[0] as User | undefined;
   }
 
   async isUserAdmin(userId: number): Promise<boolean> {
     try {
-      const result = await this.pool.query(
-        `SELECT COALESCE("adminCheck", 0) as "adminCheck" FROM accounts WHERE user_id = $1`,
+      const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
+        "SELECT COALESCE(`adminCheck`, 0) AS adminCheck FROM accounts WHERE user_id = ?",
         [userId]
       );
-      return result.rows[0]?.adminCheck === 1;
+      return rows[0]?.adminCheck === 1;
     } catch (err) {
       console.error("Error checking admin status:", err);
       return false;
@@ -216,13 +129,13 @@ class PostgresStorage implements IStorage {
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(insertUser.password, saltRounds);
 
-    const result = await this.pool.query(
-      "INSERT INTO accounts (username, password_hash, email) VALUES ($1, $2, $3) RETURNING user_id AS id, username, email",
+    const [result] = await this.pool.query<mysql.ResultSetHeader>(
+      "INSERT INTO accounts (username, password_hash, email) VALUES (?, ?, ?)",
       [insertUser.username, hashedPassword, insertUser.email]
     );
 
     return {
-      id: result.rows[0].id,
+      id: result.insertId,
       username: insertUser.username,
       password: hashedPassword,
       email: insertUser.email,
@@ -233,29 +146,29 @@ class PostgresStorage implements IStorage {
 
   async updateUserCurrency(username: string, currency: number): Promise<void> {
     try {
-      const userResult = await this.pool.query(
-        "SELECT user_id FROM accounts WHERE username = $1",
+      const [userRows] = await this.pool.query<mysql.RowDataPacket[]>(
+        "SELECT user_id FROM accounts WHERE username = ?",
         [username]
       );
-      if (userResult.rows.length === 0) {
+      if (userRows.length === 0) {
         console.log(`[updateUserCurrency] User ${username} not found`);
         return;
       }
-      const userId = userResult.rows[0].user_id;
+      const userId = userRows[0].user_id;
 
-      const invResult = await this.pool.query(
-        "SELECT id FROM inventory_items WHERE user_id = $1 LIMIT 1",
+      const [invRows] = await this.pool.query<mysql.RowDataPacket[]>(
+        "SELECT id FROM inventory_items WHERE user_id = ? LIMIT 1",
         [userId]
       );
 
-      if (invResult.rows.length > 0) {
+      if (invRows.length > 0) {
         await this.pool.query(
-          "UPDATE inventory_items SET gold = $1 WHERE user_id = $2",
+          "UPDATE inventory_items SET gold = ? WHERE user_id = ?",
           [currency, userId]
         );
       } else {
         await this.pool.query(
-          "INSERT INTO inventory_items (user_id, item_id, gold) VALUES ($1, 0, $2)",
+          "INSERT INTO inventory_items (user_id, item_id, gold) VALUES (?, 0, ?)",
           [userId, currency]
         );
       }
@@ -270,28 +183,26 @@ class PostgresStorage implements IStorage {
     username: string
   ): Promise<{ currency: number; cosmetics: string[] } | undefined> {
     try {
-      const userResult = await this.pool.query(
-        "SELECT user_id FROM accounts WHERE username = $1",
+      const [userRows] = await this.pool.query<mysql.RowDataPacket[]>(
+        "SELECT user_id FROM accounts WHERE username = ?",
         [username]
       );
-      if (userResult.rows.length === 0) {
-        return { currency: 500, cosmetics: [] };
-      }
-      const userId = userResult.rows[0].user_id;
+      if (userRows.length === 0) return { currency: 500, cosmetics: [] };
+      const userId = userRows[0].user_id;
 
-      const goldResult = await this.pool.query(
-        "SELECT gold FROM inventory_items WHERE user_id = $1 LIMIT 1",
+      const [goldRows] = await this.pool.query<mysql.RowDataPacket[]>(
+        "SELECT gold FROM inventory_items WHERE user_id = ? LIMIT 1",
         [userId]
       );
-      const currency = goldResult.rows.length > 0 ? (goldResult.rows[0].gold || 500) : 500;
+      const currency = goldRows.length > 0 ? (goldRows[0].gold || 500) : 500;
 
-      const cosmeticResult = await this.pool.query(
+      const [cosmeticRows] = await this.pool.query<mysql.RowDataPacket[]>(
         `SELECT i.item_name FROM items i
          INNER JOIN inventory_items ii ON i.item_id = ii.item_id
-         WHERE ii.user_id = $1 AND i.is_cosmetic = 1`,
+         WHERE ii.user_id = ? AND i.is_cosmetic = 1`,
         [userId]
       );
-      const cosmetics = cosmeticResult.rows.map((row: any) => row.item_name);
+      const cosmetics = cosmeticRows.map((row: any) => row.item_name);
 
       return { currency, cosmetics };
     } catch (err) {
@@ -305,46 +216,45 @@ class PostgresStorage implements IStorage {
   async getUserProfile(
     userId: number
   ): Promise<{ username: string; email: string; profilePicture: string | null; warning_count: number; isAdmin: boolean } | undefined> {
-    const result = await this.pool.query(
-      `SELECT username, email, profile_pic AS "profilePicture",
-              COALESCE(warning_count, 0) as warning_count,
-              COALESCE("adminCheck", 0) as "adminCheck"
-       FROM accounts WHERE user_id = $1`,
+    const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
+      `SELECT username, email, profile_pic AS profilePicture,
+              COALESCE(warning_count, 0) AS warning_count,
+              COALESCE(\`adminCheck\`, 0) AS adminCheck
+       FROM accounts WHERE user_id = ?`,
       [userId]
     );
-    if (result.rows[0]) {
+    if (rows[0]) {
       return {
-        ...result.rows[0],
-        isAdmin: result.rows[0].adminCheck === 1,
-      };
+        ...rows[0],
+        profilePicture: rows[0].profilePicture ?? null,
+        isAdmin: rows[0].adminCheck === 1,
+      } as any;
     }
     return undefined;
   }
 
   async updateUsername(userId: number, newUsername: string): Promise<void> {
-    const existing = await this.pool.query(
-      "SELECT user_id FROM accounts WHERE username = $1 AND user_id != $2",
+    const [existing] = await this.pool.query<mysql.RowDataPacket[]>(
+      "SELECT user_id FROM accounts WHERE username = ? AND user_id != ?",
       [newUsername, userId]
     );
-    if (existing.rows.length > 0) {
-      throw new Error("Username already taken");
-    }
+    if (existing.length > 0) throw new Error("Username already taken");
     await this.pool.query(
-      "UPDATE accounts SET username = $1 WHERE user_id = $2",
+      "UPDATE accounts SET username = ? WHERE user_id = ?",
       [newUsername, userId]
     );
   }
 
   async updatePassword(userId: number, newPasswordHash: string): Promise<void> {
     await this.pool.query(
-      "UPDATE accounts SET password_hash = $1 WHERE user_id = $2",
+      "UPDATE accounts SET password_hash = ? WHERE user_id = ?",
       [newPasswordHash, userId]
     );
   }
 
   async updateProfilePicture(userId: number, profilePictureUrl: string): Promise<void> {
     await this.pool.query(
-      "UPDATE accounts SET profile_pic = $1 WHERE user_id = $2",
+      "UPDATE accounts SET profile_pic = ? WHERE user_id = ?",
       [profilePictureUrl, userId]
     );
   }
@@ -352,23 +262,22 @@ class PostgresStorage implements IStorage {
   // ---------- Password verification ----------
 
   async verifyPassword(userId: number, password: string): Promise<boolean> {
-    const result = await this.pool.query(
-      "SELECT password_hash FROM accounts WHERE user_id = $1",
+    const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
+      "SELECT password_hash FROM accounts WHERE user_id = ?",
       [userId]
     );
-    if (result.rows.length === 0) return false;
-    return await bcrypt.compare(password, result.rows[0].password_hash);
+    if (rows.length === 0) return false;
+    return await bcrypt.compare(password, rows[0].password_hash);
   }
 
   // ---------- Shop items ----------
 
   async getShopItems(): Promise<any[]> {
     try {
-      const result = await this.pool.query(
-        `SELECT item_id as id, item_name as name, item_type as type, store_price as price, is_cosmetic
-         FROM items ORDER BY item_id ASC`
+      const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
+        "SELECT item_id AS id, item_name AS name, item_type AS type, store_price AS price, is_cosmetic FROM items ORDER BY item_id ASC"
       );
-      return result.rows.map((item: any) => ({
+      return rows.map((item: any) => ({
         id: item.id,
         name: item.name,
         description: item.type,
@@ -387,21 +296,21 @@ class PostgresStorage implements IStorage {
 
   async getUserInventory(userId: number): Promise<any[]> {
     try {
-      const result = await this.pool.query(
-        `SELECT DISTINCT i.item_id as id, i.item_name as name, i.item_type as type,
-                i.store_price as price, i.is_cosmetic
+      const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
+        `SELECT DISTINCT i.item_id AS id, i.item_name AS name, i.item_type AS type,
+                i.store_price AS price, i.is_cosmetic
          FROM items i
          INNER JOIN inventory_items ii ON i.item_id = ii.item_id
-         WHERE ii.user_id = $1
+         WHERE ii.user_id = ?
          ORDER BY i.item_id ASC`,
         [userId]
       );
-      return result.rows.map((item: any) => ({
+      return rows.map((item: any) => ({
         id: item.id,
         name: item.name,
         type: item.type,
         price: item.price,
-        isCosmeticItem: item.is_cosmetic === 1 || item.is_cosmetic === true,
+        isCosmeticItem: item.is_cosmetic === 1,
       }));
     } catch (err) {
       console.error("Error fetching user inventory:", err);
@@ -411,14 +320,11 @@ class PostgresStorage implements IStorage {
 
   async getUserCurrency(userId: number): Promise<number> {
     try {
-      const result = await this.pool.query(
-        "SELECT gold FROM inventory_items WHERE user_id = $1 LIMIT 1",
+      const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
+        "SELECT gold FROM inventory_items WHERE user_id = ? LIMIT 1",
         [userId]
       );
-      if (result.rows.length > 0) {
-        return result.rows[0].gold || 1000;
-      }
-      return 1000;
+      return rows.length > 0 ? (rows[0].gold || 1000) : 1000;
     } catch (err) {
       console.error("Error fetching user currency:", err);
       return 1000;
@@ -428,7 +334,7 @@ class PostgresStorage implements IStorage {
   async updateUserGold(userId: number, newGold: number): Promise<void> {
     try {
       await this.pool.query(
-        "UPDATE inventory_items SET gold = $1 WHERE user_id = $2",
+        "UPDATE inventory_items SET gold = ? WHERE user_id = ?",
         [newGold, userId]
       );
     } catch (err) {
@@ -439,34 +345,29 @@ class PostgresStorage implements IStorage {
 
   async purchaseItem(userId: number, itemId: number, price: number): Promise<void> {
     try {
-      const goldResult = await this.pool.query(
-        "SELECT gold FROM inventory_items WHERE user_id = $1 LIMIT 1",
+      const [goldRows] = await this.pool.query<mysql.RowDataPacket[]>(
+        "SELECT gold FROM inventory_items WHERE user_id = ? LIMIT 1",
         [userId]
       );
-      let currentGold = goldResult.rows.length > 0 ? (goldResult.rows[0].gold || 1000) : 1000;
+      let currentGold = goldRows.length > 0 ? (goldRows[0].gold || 1000) : 1000;
       const hasUnlimitedGold = currentGold === 67;
 
-      if (!hasUnlimitedGold && currentGold < price) {
-        throw new Error("Insufficient gold");
-      }
+      if (!hasUnlimitedGold && currentGold < price) throw new Error("Insufficient gold");
 
-      const existingResult = await this.pool.query(
-        "SELECT id FROM inventory_items WHERE user_id = $1 AND item_id = $2",
+      const [existingRows] = await this.pool.query<mysql.RowDataPacket[]>(
+        "SELECT id FROM inventory_items WHERE user_id = ? AND item_id = ?",
         [userId, itemId]
       );
-      if (existingResult.rows.length > 0) {
-        throw new Error("Item already owned");
-      }
+      if (existingRows.length > 0) throw new Error("Item already owned");
 
       const newGold = hasUnlimitedGold ? 67 : currentGold - price;
 
       await this.pool.query(
-        "INSERT INTO inventory_items (user_id, item_id, gold) VALUES ($1, $2, $3)",
+        "INSERT INTO inventory_items (user_id, item_id, gold) VALUES (?, ?, ?)",
         [userId, itemId, newGold]
       );
-
       await this.pool.query(
-        "UPDATE inventory_items SET gold = $1 WHERE user_id = $2",
+        "UPDATE inventory_items SET gold = ? WHERE user_id = ?",
         [newGold, userId]
       );
     } catch (err) {
@@ -478,62 +379,53 @@ class PostgresStorage implements IStorage {
   // ---------- User settings ----------
 
   async getUserSettings(userId: number): Promise<any> {
+    const defaults = {
+      mouse_sensitivity: 1.0,
+      move_forward_key: "KeyW",
+      move_backward_key: "KeyS",
+      move_left_key: "KeyA",
+      move_right_key: "KeyD",
+      jump_key: "Space",
+      grenade_key: "KeyQ",
+    };
     try {
-      const result = await this.pool.query(
+      const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
         `SELECT mouse_sensitivity, move_forward_key, move_backward_key,
                 move_left_key, move_right_key, jump_key, grenade_key
-         FROM user_settings WHERE user_id = $1`,
+         FROM user_settings WHERE user_id = ?`,
         [userId]
       );
-      if (result.rows.length > 0) {
-        return result.rows[0];
-      }
-      return {
-        mouse_sensitivity: 1.0,
-        move_forward_key: "KeyW",
-        move_backward_key: "KeyS",
-        move_left_key: "KeyA",
-        move_right_key: "KeyD",
-        jump_key: "Space",
-        grenade_key: "KeyQ",
-      };
+      return rows.length > 0 ? rows[0] : defaults;
     } catch (err) {
       console.error("Error fetching user settings:", err);
-      return {
-        mouse_sensitivity: 1.0,
-        move_forward_key: "KeyW",
-        move_backward_key: "KeyS",
-        move_left_key: "KeyA",
-        move_right_key: "KeyD",
-        jump_key: "Space",
-        grenade_key: "KeyQ",
-      };
+      return defaults;
     }
   }
 
   async saveUserSettings(userId: number, settings: any): Promise<void> {
     try {
       await this.pool.query(
-        `INSERT INTO user_settings (user_id, mouse_sensitivity, move_forward_key,
-          move_backward_key, move_left_key, move_right_key, jump_key, grenade_key)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT (user_id) DO UPDATE SET
-           mouse_sensitivity = EXCLUDED.mouse_sensitivity,
-           move_forward_key = EXCLUDED.move_forward_key,
-           move_backward_key = EXCLUDED.move_backward_key,
-           move_left_key = EXCLUDED.move_left_key,
-           move_right_key = EXCLUDED.move_right_key,
-           jump_key = EXCLUDED.jump_key,
-           grenade_key = EXCLUDED.grenade_key`,
+        `INSERT INTO user_settings
+           (user_id, mouse_sensitivity, move_forward_key, move_backward_key,
+            move_left_key, move_right_key, jump_key, grenade_key)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           mouse_sensitivity   = VALUES(mouse_sensitivity),
+           move_forward_key    = VALUES(move_forward_key),
+           move_backward_key   = VALUES(move_backward_key),
+           move_left_key       = VALUES(move_left_key),
+           move_right_key      = VALUES(move_right_key),
+           jump_key            = VALUES(jump_key),
+           grenade_key         = VALUES(grenade_key)`,
         [
           userId,
-          settings.mouse_sensitivity || 1.0,
-          settings.move_forward_key || "KeyW",
-          settings.move_backward_key || "KeyS",
-          settings.move_left_key || "KeyA",
-          settings.move_right_key || "KeyD",
-          settings.jump_key || "Space",
-          settings.grenade_key || "KeyQ",
+          settings.mouse_sensitivity ?? 1.0,
+          settings.move_forward_key ?? "KeyW",
+          settings.move_backward_key ?? "KeyS",
+          settings.move_left_key ?? "KeyA",
+          settings.move_right_key ?? "KeyD",
+          settings.jump_key ?? "Space",
+          settings.grenade_key ?? "KeyQ",
         ]
       );
     } catch (err) {
@@ -546,16 +438,16 @@ class PostgresStorage implements IStorage {
 
   async getAllUsers(): Promise<any[]> {
     try {
-      const result = await this.pool.query(
+      const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
         `SELECT a.user_id, a.username, a.email, a.created_at, a.last_login,
-                COALESCE((SELECT gold FROM inventory_items WHERE user_id = a.user_id LIMIT 1), 1000) as gold,
-                COALESCE(a.is_banned, 0) as is_banned,
+                COALESCE((SELECT gold FROM inventory_items WHERE user_id = a.user_id LIMIT 1), 1000) AS gold,
+                COALESCE(a.is_banned, 0) AS is_banned,
                 a.ban_reason,
-                COALESCE(a.warning_count, 0) as warning_count
+                COALESCE(a.warning_count, 0) AS warning_count
          FROM accounts a
          ORDER BY a.user_id ASC`
       );
-      return result.rows;
+      return rows;
     } catch (err) {
       console.error("Error fetching all users:", err);
       return [];
@@ -564,10 +456,10 @@ class PostgresStorage implements IStorage {
 
   async getAllItems(): Promise<any[]> {
     try {
-      const result = await this.pool.query(
+      const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
         "SELECT item_id, item_name, item_type, store_price, is_cosmetic FROM items ORDER BY item_id ASC"
       );
-      return result.rows;
+      return rows;
     } catch (err) {
       console.error("Error fetching all items:", err);
       return [];
@@ -576,11 +468,15 @@ class PostgresStorage implements IStorage {
 
   async addItem(name: string, type: string, price: number, isCosmetic: boolean): Promise<any> {
     try {
-      const result = await this.pool.query(
-        "INSERT INTO items (item_name, item_type, store_price, is_cosmetic) VALUES ($1, $2, $3, $4) RETURNING *",
+      const [result] = await this.pool.query<mysql.ResultSetHeader>(
+        "INSERT INTO items (item_name, item_type, store_price, is_cosmetic) VALUES (?, ?, ?, ?)",
         [name, type, price, isCosmetic ? 1 : 0]
       );
-      return result.rows[0];
+      const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
+        "SELECT * FROM items WHERE item_id = ?",
+        [result.insertId]
+      );
+      return rows[0];
     } catch (err) {
       console.error("Error adding item:", err);
       throw err;
@@ -590,7 +486,7 @@ class PostgresStorage implements IStorage {
   async updateItem(itemId: number, name: string, type: string, price: number, isCosmetic: boolean): Promise<void> {
     try {
       await this.pool.query(
-        "UPDATE items SET item_name = $1, item_type = $2, store_price = $3, is_cosmetic = $4 WHERE item_id = $5",
+        "UPDATE items SET item_name = ?, item_type = ?, store_price = ?, is_cosmetic = ? WHERE item_id = ?",
         [name, type, price, isCosmetic ? 1 : 0, itemId]
       );
     } catch (err) {
@@ -601,7 +497,7 @@ class PostgresStorage implements IStorage {
 
   async deleteItem(itemId: number): Promise<void> {
     try {
-      await this.pool.query("DELETE FROM items WHERE item_id = $1", [itemId]);
+      await this.pool.query("DELETE FROM items WHERE item_id = ?", [itemId]);
     } catch (err) {
       console.error("Error deleting item:", err);
       throw err;
@@ -611,7 +507,7 @@ class PostgresStorage implements IStorage {
   async setUserGold(userId: number, gold: number): Promise<void> {
     try {
       await this.pool.query(
-        "UPDATE inventory_items SET gold = $1 WHERE user_id = $2",
+        "UPDATE inventory_items SET gold = ? WHERE user_id = ?",
         [gold, userId]
       );
     } catch (err) {
@@ -622,9 +518,9 @@ class PostgresStorage implements IStorage {
 
   async deleteUser(userId: number): Promise<void> {
     try {
-      await this.pool.query("DELETE FROM inventory_items WHERE user_id = $1", [userId]);
-      await this.pool.query("DELETE FROM user_settings WHERE user_id = $1", [userId]);
-      await this.pool.query("DELETE FROM accounts WHERE user_id = $1", [userId]);
+      await this.pool.query("DELETE FROM inventory_items WHERE user_id = ?", [userId]);
+      await this.pool.query("DELETE FROM user_settings WHERE user_id = ?", [userId]);
+      await this.pool.query("DELETE FROM accounts WHERE user_id = ?", [userId]);
     } catch (err) {
       console.error("Error deleting user:", err);
       throw err;
@@ -634,7 +530,7 @@ class PostgresStorage implements IStorage {
   async banUser(userId: number, reason: string | null): Promise<void> {
     try {
       await this.pool.query(
-        "UPDATE accounts SET is_banned = 1, ban_reason = $1, banned_at = NOW() WHERE user_id = $2",
+        "UPDATE accounts SET is_banned = 1, ban_reason = ?, banned_at = NOW() WHERE user_id = ?",
         [reason, userId]
       );
     } catch (err) {
@@ -646,7 +542,7 @@ class PostgresStorage implements IStorage {
   async unbanUser(userId: number): Promise<void> {
     try {
       await this.pool.query(
-        "UPDATE accounts SET is_banned = 0, ban_reason = NULL, banned_at = NULL WHERE user_id = $1",
+        "UPDATE accounts SET is_banned = 0, ban_reason = NULL, banned_at = NULL WHERE user_id = ?",
         [userId]
       );
     } catch (err) {
@@ -658,7 +554,7 @@ class PostgresStorage implements IStorage {
   async warnUser(userId: number): Promise<void> {
     try {
       await this.pool.query(
-        "UPDATE accounts SET warning_count = COALESCE(warning_count, 0) + 1 WHERE user_id = $1",
+        "UPDATE accounts SET warning_count = COALESCE(warning_count, 0) + 1 WHERE user_id = ?",
         [userId]
       );
     } catch (err) {
@@ -687,17 +583,17 @@ class PostgresStorage implements IStorage {
           break;
       }
 
-      const result = await this.pool.query(
+      const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
         `SELECT lb.leaderboard_id, lb.user_id, a.username, lb.rank, lb.date_recorded,
-                lb.fastest_run_time, COALESCE(lb.total_kills, 0) as total_kills
+                lb.fastest_run_time, COALESCE(lb.total_kills, 0) AS total_kills
          FROM leaderboard_2 lb
          LEFT JOIN accounts a ON lb.user_id = a.user_id
          ${whereClause}
          ORDER BY ${orderBy}
-         LIMIT $1`,
+         LIMIT ?`,
         [limit]
       );
-      return result.rows;
+      return rows;
     } catch (err) {
       console.error("Error fetching leaderboard:", err);
       return [];
@@ -706,40 +602,38 @@ class PostgresStorage implements IStorage {
 
   async saveLeaderboardEntry(userId: number, fastestRunTime: string | null, totalKills: number | null): Promise<void> {
     try {
-      const existing = await this.pool.query(
-        "SELECT leaderboard_id, fastest_run_time, total_kills FROM leaderboard_2 WHERE user_id = $1",
+      const [existing] = await this.pool.query<mysql.RowDataPacket[]>(
+        "SELECT leaderboard_id, fastest_run_time, total_kills FROM leaderboard_2 WHERE user_id = ?",
         [userId]
       );
 
-      if (existing.rows.length > 0) {
-        const currentTime = existing.rows[0].fastest_run_time;
-        const currentKills = existing.rows[0].total_kills || 0;
+      if (existing.length > 0) {
+        const currentTime = existing[0].fastest_run_time;
+        const currentKills = existing[0].total_kills || 0;
 
-        const updates: string[] = [];
+        const setClauses: string[] = [];
         const params: any[] = [];
-        let paramIdx = 1;
 
         if (fastestRunTime && (!currentTime || fastestRunTime < currentTime)) {
-          updates.push(`fastest_run_time = $${paramIdx++}`);
+          setClauses.push("fastest_run_time = ?");
           params.push(fastestRunTime);
         }
-
         if (totalKills !== null && totalKills > currentKills) {
-          updates.push(`total_kills = $${paramIdx++}`);
+          setClauses.push("total_kills = ?");
           params.push(totalKills);
         }
 
-        if (updates.length > 0) {
-          updates.push(`date_recorded = NOW()`);
+        if (setClauses.length > 0) {
+          setClauses.push("date_recorded = NOW()");
           params.push(userId);
           await this.pool.query(
-            `UPDATE leaderboard_2 SET ${updates.join(", ")} WHERE user_id = $${paramIdx}`,
+            `UPDATE leaderboard_2 SET ${setClauses.join(", ")} WHERE user_id = ?`,
             params
           );
         }
       } else {
         await this.pool.query(
-          "INSERT INTO leaderboard_2 (user_id, fastest_run_time, total_kills, date_recorded) VALUES ($1, $2, $3, NOW())",
+          "INSERT INTO leaderboard_2 (user_id, fastest_run_time, total_kills, date_recorded) VALUES (?, ?, ?, NOW())",
           [userId, fastestRunTime, totalKills || 0]
         );
       }
@@ -754,8 +648,7 @@ class PostgresStorage implements IStorage {
   async saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void> {
     try {
       await this.pool.query(
-        `INSERT INTO transactions_v2 (user_id, amount_spent_usd, card_number, currency_purchased, transaction_date)
-         VALUES ($1, $2, $3, $4, NOW())`,
+        "INSERT INTO transactions_v2 (user_id, amount_spent_usd, card_number, currency_purchased, transaction_date) VALUES (?, ?, ?, ?, NOW())",
         [userId, amountUSD, cardNumber, goldAmount]
       );
     } catch (err) {
@@ -771,7 +664,7 @@ class PostgresStorage implements IStorage {
     tierBreakdown: { gold: number; purchases: number; revenue: number }[];
   }> {
     try {
-      const txResult = await this.pool.query(
+      const [txRows] = await this.pool.query<mysql.RowDataPacket[]>(
         `SELECT t.transaction_id, t.user_id, a.username, t.amount_spent_usd,
                 t.card_number, t.currency_purchased, t.transaction_date
          FROM transactions_v2 t
@@ -779,30 +672,29 @@ class PostgresStorage implements IStorage {
          ORDER BY t.transaction_date DESC`
       );
 
-      const aggResult = await this.pool.query(
-        `SELECT currency_purchased AS "mostPurchasedGold", COUNT(*) AS "tierCount"
+      const [aggRows] = await this.pool.query<mysql.RowDataPacket[]>(
+        `SELECT currency_purchased AS mostPurchasedGold, COUNT(*) AS tierCount
          FROM transactions_v2
          GROUP BY currency_purchased
-         ORDER BY "tierCount" DESC
+         ORDER BY tierCount DESC
          LIMIT 1`
       );
 
-      const totalResult = await this.pool.query(
-        `SELECT COUNT(*) AS "transactionCount", COALESCE(SUM(amount_spent_usd), 0) AS "totalRevenue"
-         FROM transactions_v2`
+      const [totalRows] = await this.pool.query<mysql.RowDataPacket[]>(
+        "SELECT COUNT(*) AS transactionCount, COALESCE(SUM(amount_spent_usd), 0) AS totalRevenue FROM transactions_v2"
       );
 
-      const dailyResult = await this.pool.query(
+      const [dailyRows] = await this.pool.query<mysql.RowDataPacket[]>(
         `SELECT DATE(transaction_date) AS day,
                 COALESCE(SUM(amount_spent_usd), 0) AS revenue,
                 COUNT(*) AS purchases
          FROM transactions_v2
-         WHERE transaction_date >= NOW() - INTERVAL '29 days'
+         WHERE transaction_date >= DATE_SUB(NOW(), INTERVAL 29 DAY)
          GROUP BY DATE(transaction_date)
          ORDER BY day ASC`
       );
 
-      const tierResult = await this.pool.query(
+      const [tierRows] = await this.pool.query<mysql.RowDataPacket[]>(
         `SELECT currency_purchased AS gold, COUNT(*) AS purchases,
                 COALESCE(SUM(amount_spent_usd), 0) AS revenue
          FROM transactions_v2
@@ -810,11 +702,11 @@ class PostgresStorage implements IStorage {
          ORDER BY purchases DESC`
       );
 
-      const total = totalResult.rows[0] || { transactionCount: 0, totalRevenue: 0 };
-      const topTier = aggResult.rows[0] || null;
+      const total = totalRows[0] || { transactionCount: 0, totalRevenue: 0 };
+      const topTier = aggRows[0] || null;
 
       return {
-        transactions: txResult.rows,
+        transactions: txRows,
         summary: {
           totalRevenue: parseFloat(total.totalRevenue) || 0,
           transactionCount: parseInt(total.transactionCount) || 0,
@@ -822,12 +714,12 @@ class PostgresStorage implements IStorage {
             ? { goldAmount: topTier.mostPurchasedGold, count: parseInt(topTier.tierCount) }
             : null,
         },
-        earningsByDay: dailyResult.rows.map((r: any) => ({
+        earningsByDay: dailyRows.map((r: any) => ({
           day: String(r.day).slice(0, 10),
           revenue: parseFloat(r.revenue) || 0,
           purchases: parseInt(r.purchases) || 0,
         })),
-        tierBreakdown: tierResult.rows.map((r: any) => ({
+        tierBreakdown: tierRows.map((r: any) => ({
           gold: parseInt(r.gold) || 0,
           purchases: parseInt(r.purchases) || 0,
           revenue: parseFloat(r.revenue) || 0,
@@ -850,11 +742,11 @@ class PostgresStorage implements IStorage {
     try {
       await this.pool.query(
         `INSERT INTO player_stats (user_id, total_shots, shots_hit, deaths, minutes_played)
-         VALUES ($1, $2, $3, $4, 0)
-         ON CONFLICT (user_id) DO UPDATE SET
-           total_shots = player_stats.total_shots + EXCLUDED.total_shots,
-           shots_hit = player_stats.shots_hit + EXCLUDED.shots_hit,
-           deaths = player_stats.deaths + EXCLUDED.deaths`,
+         VALUES (?, ?, ?, ?, 0)
+         ON DUPLICATE KEY UPDATE
+           total_shots = player_stats.total_shots + VALUES(total_shots),
+           shots_hit   = player_stats.shots_hit   + VALUES(shots_hit),
+           deaths      = player_stats.deaths      + VALUES(deaths)`,
         [userId, shots, hits, deaths]
       );
     } catch (err) {
@@ -867,9 +759,9 @@ class PostgresStorage implements IStorage {
     try {
       await this.pool.query(
         `INSERT INTO player_stats (user_id, total_shots, shots_hit, deaths, minutes_played)
-         VALUES ($1, 0, 0, 0, $2)
-         ON CONFLICT (user_id) DO UPDATE SET
-           minutes_played = player_stats.minutes_played + EXCLUDED.minutes_played`,
+         VALUES (?, 0, 0, 0, ?)
+         ON DUPLICATE KEY UPDATE
+           minutes_played = player_stats.minutes_played + VALUES(minutes_played)`,
         [userId, minutes]
       );
     } catch (err) {
@@ -880,14 +772,11 @@ class PostgresStorage implements IStorage {
 
   async getPlayerStats(userId: number): Promise<{ total_shots: number; shots_hit: number; deaths: number; minutes_played: number }> {
     try {
-      const result = await this.pool.query(
-        "SELECT total_shots, shots_hit, deaths, minutes_played FROM player_stats WHERE user_id = $1",
+      const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
+        "SELECT total_shots, shots_hit, deaths, minutes_played FROM player_stats WHERE user_id = ?",
         [userId]
       );
-      if (result.rows.length > 0) {
-        return result.rows[0];
-      }
-      return { total_shots: 0, shots_hit: 0, deaths: 0, minutes_played: 0 };
+      return rows.length > 0 ? rows[0] as any : { total_shots: 0, shots_hit: 0, deaths: 0, minutes_played: 0 };
     } catch (err) {
       console.error("Error fetching player stats:", err);
       return { total_shots: 0, shots_hit: 0, deaths: 0, minutes_played: 0 };
@@ -895,4 +784,4 @@ class PostgresStorage implements IStorage {
   }
 }
 
-export const storage: IStorage = new PostgresStorage();
+export const storage: IStorage = new MySQLStorage();

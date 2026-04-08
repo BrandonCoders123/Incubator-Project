@@ -1,8 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { initAugmentTables, syncExistingUsers } from "./pg-augments";
-import { migrateFromMySQL } from "./migrate-mysql-to-pg";
+import { initAugmentTables } from "./pg-augments";
 import session from 'express-session';
 import createMemoryStore from 'memorystore';
 
@@ -64,20 +63,8 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Initialize PostgreSQL tables for temporary augment/run data only
   await initAugmentTables();
-
-  // Migrate accounts from MySQL → PostgreSQL (safe to run every startup; skips existing rows)
-  const mysqlVars = ["MYSQL_HOST", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE"];
-  if (mysqlVars.every((v) => process.env[v])) {
-    try {
-      await migrateFromMySQL();
-    } catch (err) {
-      console.error("[migrate] MySQL migration failed (non-fatal):", err);
-    }
-  }
-
-  // Seed any existing accounts into player_run_state so no one needs to re-register
-  await syncExistingUsers();
 
   const server = await registerRoutes(app);
 
@@ -98,8 +85,6 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Serve API + client on a network port.
-  // Start with PORT (if provided) or 5000, and retry nearby ports if one is busy.
   const defaultPort = Number(process.env.PORT || 5000);
   const maxPortRetries = 10;
 
@@ -107,25 +92,16 @@ app.use((req, res, next) => {
     server.once("error", (error: any) => {
       if (error?.code === "EADDRINUSE" && attempt < maxPortRetries) {
         const nextPort = port + 1;
-        log(
-          `Port ${port} is already in use, retrying on ${nextPort}...`,
-        );
+        log(`Port ${port} is already in use, retrying on ${nextPort}...`);
         listenWithRetry(nextPort, attempt + 1);
         return;
       }
-
       throw error;
     });
 
-    server.listen(
-      {
-        port,
-        host: "0.0.0.0",
-      },
-      () => {
-        log(`serving on port ${port}`);
-      },
-    );
+    server.listen({ port, host: "0.0.0.0" }, () => {
+      log(`serving on port ${port}`);
+    });
   };
 
   listenWithRetry(defaultPort);

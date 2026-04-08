@@ -126,17 +126,3 @@ export async function resetRunState(userId: number): Promise<void> {
   await pool.query("DELETE FROM player_run_state WHERE user_id = $1", [userId]);
 }
 
-export async function syncExistingUsers(): Promise<void> {
-  const result = await pool.query(`
-    INSERT INTO player_run_state (user_id, story_mode_level, endless_mode_level, updated_at)
-    SELECT user_id, 1, 1, NOW() FROM accounts
-    ON CONFLICT (user_id) DO NOTHING
-  `);
-
-  const count = result.rowCount ?? 0;
-  if (count > 0) {
-    console.log(`[pg-augments] Seeded ${count} existing account(s) into player_run_state`);
-  } else {
-    console.log("[pg-augments] All existing accounts already have a run state row");
-  }
-}
