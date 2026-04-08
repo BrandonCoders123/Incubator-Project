@@ -573,9 +573,13 @@ function getRampSurfaceY(position: THREE.Vector3, ramp: Ramp): number | null {
   }
 
   const progress = (localZ + halfLength) / ramp.length;
-  const [_, ry] = ramp.position;
+  const [, ry] = ramp.position;
 
   return ry - RAMP_HEIGHT_GAIN / 2 + progress * RAMP_HEIGHT_GAIN + RAMP_THICKNESS / 2;
+}
+
+function getRampSlopeRotationX(ramp: Ramp): number {
+  return Math.asin(Math.min(1, RAMP_HEIGHT_GAIN / ramp.length));
 }
 
 // Ramp collision detection helper (solid collision volume for non-player entities)
@@ -893,7 +897,7 @@ function GameEnvironment({ gameState }: { gameState: GameState }) {
         <mesh
           key={`ramp-${index}`}
           position={ramp.position as [number, number, number]}
-          rotation={[Math.PI / 6, ramp.rotation, 0]}
+          rotation={[getRampSlopeRotationX(ramp), ramp.rotation, 0]}
         >
           <boxGeometry args={[ramp.width, 0.5, ramp.length]} />
           <meshLambertMaterial map={asphaltTexture} color="#666666" />
@@ -1374,8 +1378,9 @@ function Player({
       // Wall collision detection
       const walls = getWallsForLevel(gameState.level.currentLevel);
       const ramps = getRampsForLevel(gameState.level.currentLevel);
+      const staticCollision = [...walls, ...getRampCollisionBoxes(ramps)];
 
-      const hasWallCollision = checkWallCollision(newPos, walls, 0.5);
+      const hasWallCollision = checkWallCollision(newPos, staticCollision, 0.5);
 
       if (hasWallCollision) {
         // Collision detected, don't move in that direction
@@ -1385,8 +1390,8 @@ function Player({
         const zOnly = playerRef.current.position.clone();
         zOnly.z = newPos.z;
 
-        const canMoveX = !checkWallCollision(xOnly, walls, 0.5);
-        const canMoveZ = !checkWallCollision(zOnly, walls, 0.5);
+        const canMoveX = !checkWallCollision(xOnly, staticCollision, 0.5);
+        const canMoveZ = !checkWallCollision(zOnly, staticCollision, 0.5);
 
         if (canMoveX) {
           // Can move in X direction
