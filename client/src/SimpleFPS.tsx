@@ -848,6 +848,14 @@ function getWallsForLevel(
       { position: [-10, 5, 0], size: [2, 10, 18] },
       { position: [10, 5, 0], size: [2, 10, 18] },
     ];
+  } else if (level === 8) {
+    return [
+      // Boss arena perimeter only (open interior for boss movement)
+      { position: [50, 6, 0], size: [2, 12, 100] },
+      { position: [-50, 6, 0], size: [2, 12, 100] },
+      { position: [0, 6, 50], size: [100, 12, 2] },
+      { position: [0, 6, -50], size: [100, 12, 2] },
+    ];
   }
   return [];
 }
@@ -871,7 +879,7 @@ function GameEnvironment({ gameState }: { gameState: GameState }) {
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
         <planeGeometry
           args={
-            gameState.level.currentLevel === 7 ? [180, 180] : [100, 100]
+            gameState.level.currentLevel >= 7 ? [180, 180] : [100, 100]
           }
         />
         <meshLambertMaterial map={grassTexture} />
@@ -2030,7 +2038,8 @@ function Enemy({
               e.id === enemy.id
                 ? {
                     ...e,
-                    nextAttackAt: currentTime + BOSS_BEAM_COOLDOWN_MS,
+                    nextAttackAt:
+                      currentTime + BOSS_BEAM_DURATION_MS + BOSS_BEAM_COOLDOWN_MS,
                     bossBeamEndsAt: currentTime + BOSS_BEAM_DURATION_MS,
                   }
                 : e,
