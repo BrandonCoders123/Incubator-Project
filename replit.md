@@ -6,7 +6,8 @@ A full-stack first-person shooter (FPS) browser game built with React, Three.js,
 
 - **Frontend**: React + Three.js via @react-three/fiber, Zustand state management, TailwindCSS
 - **Backend**: Express.js server with session-based authentication
-- **Database**: Replit PostgreSQL (single DB for all data)
+- **Primary Database**: MySQL (phpMyAdmin) — all permanent game data
+- **Secondary Database**: Replit PostgreSQL — temporary/session run data only
 - **Build**: Vite (frontend), esbuild (backend)
 
 ## Project Structure
@@ -14,23 +15,24 @@ A full-stack first-person shooter (FPS) browser game built with React, Three.js,
 ```
 client/          - React frontend
   src/
-    SimpleFPS.tsx      - Core game engine (10k+ lines)
-    App.tsx            - Routing
-    api/components/fps/ - 3D game components
-    lib/stores/        - Zustand stores
+    SimpleFPS.tsx        - Core game engine (10k+ lines)
+    App.tsx              - Routing
+    api/components/fps/  - 3D game components
+    lib/stores/          - Zustand stores
 server/          - Express backend
   index.ts       - Server entry point
   routes.ts      - API routes
-  storage.ts     - PostgreSQL data layer (migrated from MySQL)
-  pg-augments.ts - Augments/run state PostgreSQL storage
+  storage.ts     - MySQL data layer (accounts, items, inventory, leaderboard, etc.)
+  pg-augments.ts - PostgreSQL storage for temporary run/augment data
 shared/          - Shared TypeScript types/schemas
 ```
 
-## Database
+## Databases
 
-Uses Replit's built-in PostgreSQL database (`DATABASE_URL` env var).
+### MySQL (permanent data)
+Requires secrets: `MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
 
-Tables (created automatically on startup):
+Tables (managed externally via phpMyAdmin):
 - `accounts` - User authentication and profiles
 - `items` - Shop items
 - `inventory_items` - User inventory and gold currency
@@ -38,13 +40,18 @@ Tables (created automatically on startup):
 - `leaderboard_2` - Game leaderboard
 - `transactions_v2` - Currency purchase transactions
 - `player_stats` - Shots, hits, deaths, playtime
-- `player_run_state` - Story/endless mode progress
-- `player_augments` - Player upgrade tiers
+
+### PostgreSQL (temporary data only)
+Uses Replit's built-in PostgreSQL (`DATABASE_URL` env var). Tables created automatically on startup.
+
+- `player_run_state` - Story/endless mode level progress (reset per run)
+- `player_augments` - Player upgrade tiers (reset per run)
 - `player_loadout` - Weapon loadout and equipped skins
 
 ## Environment Variables / Secrets
 
-- `SESSION_SECRET` - Express session secret (set as Replit secret)
+- `SESSION_SECRET` - Express session secret
+- `MYSQL_HOST`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE` - MySQL connection
 - `DATABASE_URL` / `PGHOST` / `PGPORT` / `PGUSER` / `PGPASSWORD` / `PGDATABASE` - Managed by Replit PostgreSQL
 
 ## Running
@@ -63,9 +70,3 @@ Tables (created automatically on startup):
 - Player augments/upgrades
 - Weapon loadout system
 - Profile picture upload
-
-## Migration Notes
-
-- Originally used MySQL for main storage; migrated to Replit PostgreSQL for Replit compatibility
-- pg-augments.ts uses the same PostgreSQL database for augment/run state data
-- Session uses in-memory store (MemoryStore) - suitable for single-instance deployment
