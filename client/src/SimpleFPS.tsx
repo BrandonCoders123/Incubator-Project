@@ -6380,6 +6380,44 @@ function HUD({
     gameState.sessionShotsHit,
   ]);
 
+  // Reset run state on death or victory (not on exit to menu)
+  const runResetRef = React.useRef<number | null>(null);
+  useEffect(() => {
+    if (
+      gameState.gamePhase !== "gameover" &&
+      gameState.gamePhase !== "victory"
+    )
+      return;
+    if (gameState.adminLevelTestMode) return;
+    if (gameState.user.isGuest) return;
+    if (runResetRef.current === gameState.gameStartTime) return;
+    runResetRef.current = gameState.gameStartTime;
+
+    fetch("/api/run/reset", {
+      method: "DELETE",
+      credentials: "include",
+    }).catch((err) => console.error("Failed to reset run state:", err));
+  }, [
+    gameState.gamePhase,
+    gameState.gameStartTime,
+    gameState.user.isGuest,
+    gameState.adminLevelTestMode,
+  ]);
+
+  // Reset run state when the browser tab/window is closed
+  useEffect(() => {
+    const handleUnload = () => {
+      if (gameState.user.isGuest) return;
+      fetch("/api/run/reset", {
+        method: "DELETE",
+        credentials: "include",
+        keepalive: true,
+      }).catch(() => {});
+    };
+    window.addEventListener("beforeunload", handleUnload);
+    return () => window.removeEventListener("beforeunload", handleUnload);
+  }, [gameState.user.isGuest]);
+
   // Currency bundle options (mock purchases - no real payment yet)
   const currencyBundles = [
     { id: 1, price: "$1", gold: 100, popular: false },
