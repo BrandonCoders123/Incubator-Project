@@ -2770,7 +2770,6 @@ function IntroCutscene({
             sessionShotsHit: 0,
           };
         });
-        document.body.requestPointerLock();
       }, INTRO_SCENES[currentScene].duration);
 
       return () => clearTimeout(timer);
