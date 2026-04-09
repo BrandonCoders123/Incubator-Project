@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { initAugmentTables } from "./pg-augments";
+import { pgStorage } from "./storage";
 import session from 'express-session';
 import createMemoryStore from 'memorystore';
 
@@ -63,7 +64,8 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Initialize PostgreSQL tables for temporary augment/run data only
+  // Initialize all PostgreSQL tables
+  await pgStorage.initTables();
   await initAugmentTables();
 
   const server = await registerRoutes(app);

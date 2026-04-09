@@ -1,56 +1,71 @@
-# SimpleFPS - 3D Browser First-Person Shooter
+# DOG: THE HOTDOG WARS
 
-## Overview
-A full-stack 3D browser-based FPS game built with React Three Fiber, Three.js, and an Express.js backend. Features multiple levels, weapons, enemy types, a shop system, leaderboard, and admin panel.
+A full-stack first-person shooter (FPS) browser game built with React, Three.js, and Express.
 
 ## Architecture
 
-### Frontend (`client/`)
-- **Framework**: React 18 with TypeScript
-- **3D Engine**: React Three Fiber + Three.js + @react-three/drei
-- **State Management**: Zustand
-- **Routing**: Wouter + React Router DOM
-- **Styling**: Tailwind CSS + Radix UI components
-- **Build**: Vite
+- **Frontend**: React + Three.js via @react-three/fiber, Zustand state management, TailwindCSS
+- **Backend**: Express.js server with session-based authentication
+- **Database**: Replit PostgreSQL (single DB for all data)
+- **Build**: Vite (frontend), esbuild (backend)
 
-### Backend (`server/`)
-- **Framework**: Express.js with TypeScript
-- **Runtime**: `tsx` (TypeScript execution via `./node_modules/.bin/tsx`)
-- **Session**: `express-session` with `memorystore`
-- **Auth**: Passport.js (local strategy) + bcrypt
+## Project Structure
 
-### Database
-- **Provider**: Replit PostgreSQL (via `DATABASE_URL`)
-- **Driver**: `pg` (node-postgres)
-- **Schema**: Custom tables created automatically on startup (see `server/storage.ts`)
-- **Tables**: `accounts`, `items`, `inventory_items`, `user_settings`, `leaderboard_2`, `transactions_v2`, `player_stats`
-
-### Shared (`shared/`)
-- TypeScript types and Drizzle ORM schema definitions
-
-## Key Files
-- `server/index.ts` — Express server entry point, session setup, port binding (5000)
-- `server/routes.ts` — All API routes (auth, shop, admin, leaderboard, etc.)
-- `server/storage.ts` — PostgreSQL data layer (rewritten from MySQL during Replit migration)
-- `server/vite.ts` — Vite dev middleware integration
-- `vite.config.ts` — Vite configuration with GLSL shader support
-- `client/src/SimpleFPS.tsx` — Main game engine component
-
-## Environment Variables / Secrets Required
-- `SESSION_SECRET` — Secret key for session signing (already configured)
-- `DATABASE_URL` — PostgreSQL connection string (Replit-managed)
-- `PGDATABASE`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` — Replit-managed PostgreSQL vars
-
-## Running the App
-```bash
-npm run dev       # Development (tsx + Vite HMR) on port 5000
-npm run build     # Production build
-npm run start     # Production server
+```
+client/          - React frontend
+  src/
+    SimpleFPS.tsx      - Core game engine (10k+ lines)
+    App.tsx            - Routing
+    api/components/fps/ - 3D game components
+    lib/stores/        - Zustand stores
+server/          - Express backend
+  index.ts       - Server entry point
+  routes.ts      - API routes
+  storage.ts     - PostgreSQL data layer (migrated from MySQL)
+  pg-augments.ts - Augments/run state PostgreSQL storage
+shared/          - Shared TypeScript types/schemas
 ```
 
+## Database
+
+Uses Replit's built-in PostgreSQL database (`DATABASE_URL` env var).
+
+Tables (created automatically on startup):
+- `accounts` - User authentication and profiles
+- `items` - Shop items
+- `inventory_items` - User inventory and gold currency
+- `user_settings` - Per-user game settings (keybindings, sensitivity)
+- `leaderboard_2` - Game leaderboard
+- `transactions_v2` - Currency purchase transactions
+- `player_stats` - Shots, hits, deaths, playtime
+- `player_run_state` - Story/endless mode progress
+- `player_augments` - Player upgrade tiers
+- `player_loadout` - Weapon loadout and equipped skins
+
+## Environment Variables / Secrets
+
+- `SESSION_SECRET` - Express session secret (set as Replit secret)
+- `DATABASE_URL` / `PGHOST` / `PGPORT` / `PGUSER` / `PGPASSWORD` / `PGDATABASE` - Managed by Replit PostgreSQL
+
+## Running
+
+- **Development**: `npm run dev` (starts on port 5000)
+- **Build**: `npm run build`
+- **Production**: `npm start`
+
+## Key Features
+
+- 3D FPS gameplay with custom AABB collision
+- User authentication (register/login)
+- Shop system with in-game currency
+- Leaderboard
+- Admin panel
+- Player augments/upgrades
+- Weapon loadout system
+- Profile picture upload
+
 ## Migration Notes
-- Originally used MySQL; migrated to PostgreSQL for Replit compatibility
-- Storage layer (`server/storage.ts`) rewritten to use `pg` (node-postgres) with `$1, $2` placeholders
-- MySQL-specific syntax (`SHOW COLUMNS`, `ON DUPLICATE KEY`, `DATE_SUB`, `NOW()` in MySQL style) replaced with PostgreSQL equivalents
-- All database tables are auto-created on server startup via `initTables()`
-- Dev script uses `./node_modules/.bin/tsx` instead of global `tsx` for Replit compatibility
+
+- Originally used MySQL for main storage; migrated to Replit PostgreSQL for Replit compatibility
+- pg-augments.ts uses the same PostgreSQL database for augment/run state data
+- Session uses in-memory store (MemoryStore) - suitable for single-instance deployment
