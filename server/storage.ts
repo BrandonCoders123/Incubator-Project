@@ -70,6 +70,7 @@ export interface IStorage {
 
 class MySQLStorage implements IStorage {
   private pool: mysql.Pool;
+  private userSettingsSchemaReady: Promise<void> | null = null;
 
   constructor() {
     const required = ["MYSQL_HOST", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE"];
@@ -378,6 +379,53 @@ class MySQLStorage implements IStorage {
 
   // ---------- User settings ----------
 
+  private async ensureUserSettingsSchema(): Promise<void> {
+    if (!this.userSettingsSchemaReady) {
+      this.userSettingsSchemaReady = (async () => {
+        await this.pool.query(`
+          CREATE TABLE IF NOT EXISTS user_settings (
+            user_id INT NOT NULL,
+            mouse_sensitivity FLOAT NOT NULL DEFAULT 1.0,
+            move_forward_key VARCHAR(50) NOT NULL DEFAULT 'KeyW',
+            move_backward_key VARCHAR(50) NOT NULL DEFAULT 'KeyS',
+            move_left_key VARCHAR(50) NOT NULL DEFAULT 'KeyA',
+            move_right_key VARCHAR(50) NOT NULL DEFAULT 'KeyD',
+            jump_key VARCHAR(50) NOT NULL DEFAULT 'Space',
+            grenade_key VARCHAR(50) NOT NULL DEFAULT 'KeyQ',
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_user_settings_user_id (user_id)
+          )
+        `);
+
+        const [columnRows] = await this.pool.query<mysql.RowDataPacket[]>(
+          `SELECT COLUMN_NAME
+           FROM INFORMATION_SCHEMA.COLUMNS
+           WHERE TABLE_SCHEMA = DATABASE()
+             AND TABLE_NAME = 'user_settings'`
+        );
+
+        const columns = new Set(columnRows.map((row) => String(row.COLUMN_NAME)));
+
+        if (!columns.has("grenade_key")) {
+          await this.pool.query(
+            "ALTER TABLE user_settings ADD COLUMN grenade_key VARCHAR(50) NOT NULL DEFAULT 'KeyQ'"
+          );
+        }
+
+        if (!columns.has("updated_at")) {
+          await this.pool.query(
+            "ALTER TABLE user_settings ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+          );
+        }
+      })().catch((err) => {
+        this.userSettingsSchemaReady = null;
+        throw err;
+      });
+    }
+
+    await this.userSettingsSchemaReady;
+  }
+
   async getUserSettings(userId: number): Promise<any> {
     const defaults = {
       mouse_sensitivity: 1.0,
@@ -389,11 +437,14 @@ class MySQLStorage implements IStorage {
       grenade_key: "KeyQ",
     };
     try {
+      await this.ensureUserSettingsSchema();
+
       const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
         `SELECT mouse_sensitivity, move_forward_key, move_backward_key,
                 move_left_key, move_right_key, jump_key, grenade_key
          FROM user_settings
          WHERE user_id = ?
+         ORDER BY updated_at DESC
          LIMIT 1`,
         [userId]
       );
@@ -406,6 +457,8 @@ class MySQLStorage implements IStorage {
 
   async saveUserSettings(userId: number, settings: any): Promise<void> {
     try {
+      await this.ensureUserSettingsSchema();
+
       const normalizedSettings = {
         mouse_sensitivity: settings.mouse_sensitivity ?? 1.0,
         move_forward_key: settings.move_forward_key ?? "KeyW",
