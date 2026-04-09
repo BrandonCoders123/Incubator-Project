@@ -1,6 +1,8 @@
 import type { User, InsertUser } from "@shared/schema";
 import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
+import pg from "pg";
+const { Pool: PgPool } = pg;
 
 // All storage operations the rest of the app expects
 export interface IStorage {
@@ -70,6 +72,7 @@ export interface IStorage {
 
 class MySQLStorage implements IStorage {
   private pool: mysql.Pool;
+  private pgPool: PgPool;
 
   constructor() {
     const required = ["MYSQL_HOST", "MYSQL_USER", "MYSQL_PASSWORD", "MYSQL_DATABASE"];
@@ -87,16 +90,8 @@ class MySQLStorage implements IStorage {
       connectionLimit: 10,
       queueLimit: 0,
     });
-  }
 
-  private async ensureUserSettingsSchema(): Promise<void> {
-    // Keep settings storage backwards-compatible with older table versions.
-    await this.pool.query(
-      "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS grenade_key VARCHAR(50) NOT NULL DEFAULT 'KeyQ'"
-    );
-    await this.pool.query(
-      "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS crouch_key VARCHAR(50) NOT NULL DEFAULT 'ControlLeft'"
-    );
+    this.pgPool = new PgPool({ connectionString: process.env.DATABASE_URL });
   }
 
   // ---------- User lookups ----------
@@ -386,7 +381,7 @@ class MySQLStorage implements IStorage {
     }
   }
 
-  // ---------- User settings ----------
+  // ---------- User settings (stored in Replit PostgreSQL) ----------
 
   async getUserSettings(userId: number): Promise<any> {
     const defaults = {
@@ -400,14 +395,13 @@ class MySQLStorage implements IStorage {
       grenade_key: "KeyQ",
     };
     try {
-      await this.ensureUserSettingsSchema();
-      const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
+      const result = await this.pgPool.query(
         `SELECT mouse_sensitivity, move_forward_key, move_backward_key,
                 move_left_key, move_right_key, jump_key, crouch_key, grenade_key
-         FROM user_settings WHERE user_id = ?`,
+         FROM user_settings WHERE user_id = $1`,
         [userId]
       );
-      return rows.length > 0 ? rows[0] : defaults;
+      return result.rows.length > 0 ? result.rows[0] : defaults;
     } catch (err) {
       console.error("Error fetching user settings:", err);
       return defaults;
@@ -416,41 +410,32 @@ class MySQLStorage implements IStorage {
 
   async saveUserSettings(userId: number, settings: any): Promise<void> {
     try {
-      await this.ensureUserSettingsSchema();
-      const values = [
-        settings.mouse_sensitivity ?? 1.0,
-        settings.move_forward_key ?? "KeyW",
-        settings.move_backward_key ?? "KeyS",
-        settings.move_left_key ?? "KeyA",
-        settings.move_right_key ?? "KeyD",
-        settings.jump_key ?? "Space",
-        settings.crouch_key ?? "ControlLeft",
-        settings.grenade_key ?? "KeyQ",
-      ];
-
-      const [updateResult] = await this.pool.query<mysql.ResultSetHeader>(
-        `UPDATE user_settings
-         SET mouse_sensitivity = ?,
-             move_forward_key = ?,
-             move_backward_key = ?,
-             move_left_key = ?,
-             move_right_key = ?,
-             jump_key = ?,
-             crouch_key = ?,
-             grenade_key = ?
-         WHERE user_id = ?`,
-        [...values, userId]
+      await this.pgPool.query(
+        `INSERT INTO user_settings
+           (user_id, mouse_sensitivity, move_forward_key, move_backward_key,
+            move_left_key, move_right_key, jump_key, crouch_key, grenade_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (user_id) DO UPDATE SET
+           mouse_sensitivity  = EXCLUDED.mouse_sensitivity,
+           move_forward_key   = EXCLUDED.move_forward_key,
+           move_backward_key  = EXCLUDED.move_backward_key,
+           move_left_key      = EXCLUDED.move_left_key,
+           move_right_key     = EXCLUDED.move_right_key,
+           jump_key           = EXCLUDED.jump_key,
+           crouch_key         = EXCLUDED.crouch_key,
+           grenade_key        = EXCLUDED.grenade_key`,
+        [
+          userId,
+          settings.mouse_sensitivity ?? 1.0,
+          settings.move_forward_key ?? "KeyW",
+          settings.move_backward_key ?? "KeyS",
+          settings.move_left_key ?? "KeyA",
+          settings.move_right_key ?? "KeyD",
+          settings.jump_key ?? "Space",
+          settings.crouch_key ?? "ControlLeft",
+          settings.grenade_key ?? "KeyQ",
+        ]
       );
-
-      if (updateResult.affectedRows === 0) {
-        await this.pool.query(
-          `INSERT INTO user_settings
-             (user_id, mouse_sensitivity, move_forward_key, move_backward_key,
-              move_left_key, move_right_key, jump_key, crouch_key, grenade_key)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [userId, ...values]
-        );
-      }
     } catch (err) {
       console.error("Error saving user settings:", err);
       throw err;
@@ -542,8 +527,8 @@ class MySQLStorage implements IStorage {
   async deleteUser(userId: number): Promise<void> {
     try {
       await this.pool.query("DELETE FROM inventory_items WHERE user_id = ?", [userId]);
-      await this.pool.query("DELETE FROM user_settings WHERE user_id = ?", [userId]);
       await this.pool.query("DELETE FROM accounts WHERE user_id = ?", [userId]);
+      await this.pgPool.query("DELETE FROM user_settings WHERE user_id = $1", [userId]);
     } catch (err) {
       console.error("Error deleting user:", err);
       throw err;
