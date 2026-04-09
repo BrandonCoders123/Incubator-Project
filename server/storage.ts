@@ -89,6 +89,16 @@ class MySQLStorage implements IStorage {
     });
   }
 
+  private async ensureUserSettingsSchema(): Promise<void> {
+    // Keep settings storage backwards-compatible with older table versions.
+    await this.pool.query(
+      "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS grenade_key VARCHAR(50) NOT NULL DEFAULT 'KeyQ'"
+    );
+    await this.pool.query(
+      "ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS crouch_key VARCHAR(50) NOT NULL DEFAULT 'ControlLeft'"
+    );
+  }
+
   // ---------- User lookups ----------
 
   async getUser(id: number): Promise<User | undefined> {
@@ -386,12 +396,14 @@ class MySQLStorage implements IStorage {
       move_left_key: "KeyA",
       move_right_key: "KeyD",
       jump_key: "Space",
+      crouch_key: "ControlLeft",
       grenade_key: "KeyQ",
     };
     try {
+      await this.ensureUserSettingsSchema();
       const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
         `SELECT mouse_sensitivity, move_forward_key, move_backward_key,
-                move_left_key, move_right_key, jump_key, grenade_key
+                move_left_key, move_right_key, jump_key, crouch_key, grenade_key
          FROM user_settings WHERE user_id = ?`,
         [userId]
       );
@@ -404,30 +416,41 @@ class MySQLStorage implements IStorage {
 
   async saveUserSettings(userId: number, settings: any): Promise<void> {
     try {
-      await this.pool.query(
-        `INSERT INTO user_settings
-           (user_id, mouse_sensitivity, move_forward_key, move_backward_key,
-            move_left_key, move_right_key, jump_key, grenade_key)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE
-           mouse_sensitivity   = VALUES(mouse_sensitivity),
-           move_forward_key    = VALUES(move_forward_key),
-           move_backward_key   = VALUES(move_backward_key),
-           move_left_key       = VALUES(move_left_key),
-           move_right_key      = VALUES(move_right_key),
-           jump_key            = VALUES(jump_key),
-           grenade_key         = VALUES(grenade_key)`,
-        [
-          userId,
-          settings.mouse_sensitivity ?? 1.0,
-          settings.move_forward_key ?? "KeyW",
-          settings.move_backward_key ?? "KeyS",
-          settings.move_left_key ?? "KeyA",
-          settings.move_right_key ?? "KeyD",
-          settings.jump_key ?? "Space",
-          settings.grenade_key ?? "KeyQ",
-        ]
+      await this.ensureUserSettingsSchema();
+      const values = [
+        settings.mouse_sensitivity ?? 1.0,
+        settings.move_forward_key ?? "KeyW",
+        settings.move_backward_key ?? "KeyS",
+        settings.move_left_key ?? "KeyA",
+        settings.move_right_key ?? "KeyD",
+        settings.jump_key ?? "Space",
+        settings.crouch_key ?? "ControlLeft",
+        settings.grenade_key ?? "KeyQ",
+      ];
+
+      const [updateResult] = await this.pool.query<mysql.ResultSetHeader>(
+        `UPDATE user_settings
+         SET mouse_sensitivity = ?,
+             move_forward_key = ?,
+             move_backward_key = ?,
+             move_left_key = ?,
+             move_right_key = ?,
+             jump_key = ?,
+             crouch_key = ?,
+             grenade_key = ?
+         WHERE user_id = ?`,
+        [...values, userId]
       );
+
+      if (updateResult.affectedRows === 0) {
+        await this.pool.query(
+          `INSERT INTO user_settings
+             (user_id, mouse_sensitivity, move_forward_key, move_backward_key,
+              move_left_key, move_right_key, jump_key, crouch_key, grenade_key)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [userId, ...values]
+        );
+      }
     } catch (err) {
       console.error("Error saving user settings:", err);
       throw err;
