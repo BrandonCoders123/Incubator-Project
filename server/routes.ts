@@ -716,6 +716,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/leaderboard", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId!;
+      const username = req.session.username!;
       const { fastestRunTime, totalKills } = req.body;
       
       // At least one stat must be provided
@@ -723,7 +724,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "At least fastestRunTime or totalKills is required" });
       }
       
-      await storage.saveLeaderboardEntry(userId, fastestRunTime || null, totalKills ?? null);
+      await storage.saveLeaderboardEntry(userId, username, fastestRunTime || null, totalKills ?? null);
       res.json({ success: true, message: "Leaderboard entry saved" });
     } catch (error) {
       console.error("Leaderboard save error:", error);

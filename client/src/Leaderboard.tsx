@@ -1,22 +1,20 @@
 import { useState, useEffect } from "react";
 
 interface LeaderboardEntry {
-  leaderboard_id: number;
+  id: number;
   user_id: number;
   username: string;
-  time_played: number; // in seconds
   total_kills: number;
-  gold_collected: number;
-  rank: number | null;
+  fastest_run_time: string | null;
   date_recorded: string;
 }
 
-type LeaderboardCategory = "time_played" | "kills" | "gold";
+type LeaderboardCategory = "kills" | "fastest_time";
 
 export default function Leaderboard() {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [category, setCategory] = useState<LeaderboardCategory>("time_played");
+  const [category, setCategory] = useState<LeaderboardCategory>("kills");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -39,13 +37,6 @@ export default function Leaderboard() {
     }
   };
 
-  const formatTime = (seconds: number): string => {
-    if (!seconds) return "0h 0m";
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours}h ${minutes}m`;
-  };
-
   const formatNumber = (num: number): string => {
     if (!num) return "0";
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
@@ -55,25 +46,22 @@ export default function Leaderboard() {
 
   const getCategoryLabel = (): string => {
     switch (category) {
-      case "time_played": return "Time Played";
       case "kills": return "Total Kills";
-      case "gold": return "Gold Collected";
+      case "fastest_time": return "Fastest Run";
     }
   };
 
   const getCategoryValue = (entry: LeaderboardEntry): string => {
     switch (category) {
-      case "time_played": return formatTime(entry.time_played);
       case "kills": return formatNumber(entry.total_kills);
-      case "gold": return formatNumber(entry.gold_collected);
+      case "fastest_time": return entry.fastest_run_time || "--:--:--";
     }
   };
 
   const getCategoryIcon = (): string => {
     switch (category) {
-      case "time_played": return "⏱️";
       case "kills": return "💀";
-      case "gold": return "💰";
+      case "fastest_time": return "⏱️";
     }
   };
 
@@ -88,7 +76,6 @@ export default function Leaderboard() {
       fontWeight: "bold",
       fontSize: "18px",
     };
-    
     if (index === 0) return { ...baseStyle, background: "linear-gradient(135deg, #FFD700, #FFA500)", color: "#000" };
     if (index === 1) return { ...baseStyle, background: "linear-gradient(135deg, #C0C0C0, #A0A0A0)", color: "#000" };
     if (index === 2) return { ...baseStyle, background: "linear-gradient(135deg, #CD7F32, #8B4513)", color: "#fff" };
@@ -135,16 +122,15 @@ export default function Leaderboard() {
         padding: "30px 20px",
       }}>
         {[
-          { key: "time_played" as LeaderboardCategory, label: "⏱️ Most Time Played" },
           { key: "kills" as LeaderboardCategory, label: "💀 Most Kills" },
-          { key: "gold" as LeaderboardCategory, label: "💰 Most Gold Collected" },
+          { key: "fastest_time" as LeaderboardCategory, label: "⏱️ Fastest Run" },
         ].map((tab) => (
           <button
             key={tab.key}
             onClick={() => setCategory(tab.key)}
             style={{
               padding: "15px 30px",
-              background: category === tab.key 
+              background: category === tab.key
                 ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
                 : "rgba(255,255,255,0.1)",
               border: "none",
@@ -191,7 +177,6 @@ export default function Leaderboard() {
             <span style={{ textAlign: "right" }}>{getCategoryIcon()} {getCategoryLabel()}</span>
           </div>
 
-          {/* Loading State */}
           {loading && (
             <div style={{ padding: "60px 20px", textAlign: "center", color: "#888" }}>
               <div style={{ fontSize: "24px", marginBottom: "10px" }}>⏳</div>
@@ -199,7 +184,6 @@ export default function Leaderboard() {
             </div>
           )}
 
-          {/* Error State */}
           {error && !loading && (
             <div style={{ padding: "60px 20px", textAlign: "center", color: "#e74c3c" }}>
               <div style={{ fontSize: "24px", marginBottom: "10px" }}>⚠️</div>
@@ -207,7 +191,6 @@ export default function Leaderboard() {
             </div>
           )}
 
-          {/* Empty State */}
           {!loading && !error && entries.length === 0 && (
             <div style={{ padding: "60px 20px", textAlign: "center", color: "#888" }}>
               <div style={{ fontSize: "48px", marginBottom: "15px" }}>🏆</div>
@@ -218,10 +201,9 @@ export default function Leaderboard() {
             </div>
           )}
 
-          {/* Leaderboard Entries */}
           {!loading && !error && entries.map((entry, index) => (
             <div
-              key={entry.leaderboard_id}
+              key={entry.id}
               style={{
                 display: "grid",
                 gridTemplateColumns: "80px 1fr 150px",
@@ -234,19 +216,11 @@ export default function Leaderboard() {
               onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.08)"}
               onMouseLeave={(e) => e.currentTarget.style.background = index < 3 ? `rgba(255,255,255,${0.05 - index * 0.015})` : "transparent"}
             >
-              {/* Rank */}
               <div style={{ display: "flex", justifyContent: "center" }}>
-                <div style={getRankStyle(index)}>
-                  {index + 1}
-                </div>
+                <div style={getRankStyle(index)}>{index + 1}</div>
               </div>
 
-              {/* Player Name */}
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-              }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <div style={{
                   width: "45px",
                   height: "45px",
@@ -265,12 +239,11 @@ export default function Leaderboard() {
                     {entry.username || `Player #${entry.user_id}`}
                   </div>
                   <div style={{ fontSize: "12px", color: "#888" }}>
-                    ID: {entry.user_id}
+                    {new Date(entry.date_recorded).toLocaleDateString()}
                   </div>
                 </div>
               </div>
 
-              {/* Score */}
               <div style={{
                 textAlign: "right",
                 fontSize: "20px",
@@ -283,7 +256,6 @@ export default function Leaderboard() {
           ))}
         </div>
 
-        {/* Info Footer */}
         <div style={{
           marginTop: "30px",
           padding: "20px",

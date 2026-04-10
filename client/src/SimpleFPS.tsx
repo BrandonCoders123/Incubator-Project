@@ -4179,7 +4179,7 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
           {!loading &&
             entries.map((entry, index) => (
               <div
-                key={entry.leaderboard_id || index}
+                key={entry.id || index}
                 style={{
                   display: "grid",
                   gridTemplateColumns: "60px 1fr 120px",

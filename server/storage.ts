@@ -53,7 +53,7 @@ export interface IStorage {
 
   // Leaderboard methods
   getLeaderboard(category: string, limit?: number): Promise<any[]>;
-  saveLeaderboardEntry(userId: number, fastestRunTime: string | null, totalKills: number | null): Promise<void>;
+  saveLeaderboardEntry(userId: number, username: string, fastestRunTime: string | null, totalKills: number | null): Promise<void>;
 
   // Currency purchase transactions
   saveCurrencyTransaction(userId: number, amountUSD: number, cardNumber: string, goldAmount: number): Promise<void>;
@@ -571,7 +571,7 @@ class MySQLStorage implements IStorage {
     }
   }
 
-  // ---------- Leaderboard ----------
+  // ---------- Leaderboard (stored in Replit PostgreSQL) ----------
 
   async getLeaderboard(category: string, limit: number = 50): Promise<any[]> {
     try {
@@ -583,68 +583,51 @@ class MySQLStorage implements IStorage {
           orderBy = "total_kills DESC";
           break;
         case "fastest_time":
-          orderBy = "lb.fastest_run_time ASC";
-          whereClause = "WHERE lb.fastest_run_time IS NOT NULL";
+          orderBy = "fastest_run_time ASC";
+          whereClause = "WHERE fastest_run_time IS NOT NULL";
           break;
         default:
           orderBy = "total_kills DESC";
           break;
       }
 
-      const [rows] = await this.pool.query<mysql.RowDataPacket[]>(
-        `SELECT lb.leaderboard_id, lb.user_id, a.username, lb.rank, lb.date_recorded,
-                lb.fastest_run_time, COALESCE(lb.total_kills, 0) AS total_kills
-         FROM leaderboard_2 lb
-         LEFT JOIN accounts a ON lb.user_id = a.user_id
+      const result = await this.pgPool.query(
+        `SELECT id, user_id, username, date_recorded,
+                fastest_run_time, COALESCE(total_kills, 0) AS total_kills
+         FROM leaderboard
          ${whereClause}
          ORDER BY ${orderBy}
-         LIMIT ?`,
+         LIMIT $1`,
         [limit]
       );
-      return rows;
+      return result.rows;
     } catch (err) {
       console.error("Error fetching leaderboard:", err);
       return [];
     }
   }
 
-  async saveLeaderboardEntry(userId: number, fastestRunTime: string | null, totalKills: number | null): Promise<void> {
+  async saveLeaderboardEntry(userId: number, username: string, fastestRunTime: string | null, totalKills: number | null): Promise<void> {
     try {
-      const [existing] = await this.pool.query<mysql.RowDataPacket[]>(
-        "SELECT leaderboard_id, fastest_run_time, total_kills FROM leaderboard_2 WHERE user_id = ?",
-        [userId]
+      await this.pgPool.query(
+        `INSERT INTO leaderboard (user_id, username, fastest_run_time, total_kills, date_recorded)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET
+           username         = EXCLUDED.username,
+           fastest_run_time = CASE
+             WHEN EXCLUDED.fastest_run_time IS NOT NULL
+              AND (leaderboard.fastest_run_time IS NULL OR EXCLUDED.fastest_run_time < leaderboard.fastest_run_time)
+             THEN EXCLUDED.fastest_run_time
+             ELSE leaderboard.fastest_run_time
+           END,
+           total_kills      = CASE
+             WHEN EXCLUDED.total_kills > leaderboard.total_kills
+             THEN EXCLUDED.total_kills
+             ELSE leaderboard.total_kills
+           END,
+           date_recorded    = NOW()`,
+        [userId, username, fastestRunTime, totalKills ?? 0]
       );
-
-      if (existing.length > 0) {
-        const currentTime = existing[0].fastest_run_time;
-        const currentKills = existing[0].total_kills || 0;
-
-        const setClauses: string[] = [];
-        const params: any[] = [];
-
-        if (fastestRunTime && (!currentTime || fastestRunTime < currentTime)) {
-          setClauses.push("fastest_run_time = ?");
-          params.push(fastestRunTime);
-        }
-        if (totalKills !== null && totalKills > currentKills) {
-          setClauses.push("total_kills = ?");
-          params.push(totalKills);
-        }
-
-        if (setClauses.length > 0) {
-          setClauses.push("date_recorded = NOW()");
-          params.push(userId);
-          await this.pool.query(
-            `UPDATE leaderboard_2 SET ${setClauses.join(", ")} WHERE user_id = ?`,
-            params
-          );
-        }
-      } else {
-        await this.pool.query(
-          "INSERT INTO leaderboard_2 (user_id, fastest_run_time, total_kills, date_recorded) VALUES (?, ?, ?, NOW())",
-          [userId, fastestRunTime, totalKills || 0]
-        );
-      }
     } catch (err) {
       console.error("Error saving leaderboard entry:", err);
       throw err;
