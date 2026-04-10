@@ -41,7 +41,61 @@ export async function initAugmentTables(): Promise<void> {
     );
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS multiplayer_games (
+      game_id         VARCHAR(16) PRIMARY KEY,
+      owner_user_id   INTEGER NOT NULL,
+      difficulty      VARCHAR(16) NOT NULL,
+      current_level   INTEGER NOT NULL DEFAULT 1,
+      created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+
   console.log("[pg-augments] Tables ready");
+}
+
+export type MultiplayerDifficulty = "normal" | "hard" | "extreme";
+
+export interface MultiplayerGameRecord {
+  gameId: string;
+  ownerUserId: number;
+  difficulty: MultiplayerDifficulty;
+  currentLevel: number;
+}
+
+export async function saveMultiplayerGame(record: MultiplayerGameRecord): Promise<void> {
+  await pool.query(
+    `INSERT INTO multiplayer_games (game_id, owner_user_id, difficulty, current_level, updated_at)
+     VALUES ($1, $2, $3, $4, NOW())
+     ON CONFLICT (game_id) DO UPDATE
+       SET owner_user_id = EXCLUDED.owner_user_id,
+           difficulty    = EXCLUDED.difficulty,
+           current_level = EXCLUDED.current_level,
+           updated_at    = NOW()`,
+    [record.gameId, record.ownerUserId, record.difficulty, record.currentLevel]
+  );
+}
+
+export async function getMultiplayerGameById(gameId: string): Promise<MultiplayerGameRecord | null> {
+  const res = await pool.query<{
+    game_id: string;
+    owner_user_id: number;
+    difficulty: MultiplayerDifficulty;
+    current_level: number;
+  }>(
+    "SELECT game_id, owner_user_id, difficulty, current_level FROM multiplayer_games WHERE game_id = $1",
+    [gameId]
+  );
+
+  if (res.rows.length === 0) return null;
+
+  return {
+    gameId: res.rows[0].game_id,
+    ownerUserId: res.rows[0].owner_user_id,
+    difficulty: res.rows[0].difficulty,
+    currentLevel: res.rows[0].current_level,
+  };
 }
 
 export type AugmentType =
@@ -178,4 +232,3 @@ export async function saveLoadout(
     [userId, JSON.stringify(loadout), JSON.stringify(equippedSkins)]
   );
 }
-

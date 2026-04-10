@@ -1,7 +1,15 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { getRunState, saveRunState, resetRunState, getLoadout, saveLoadout } from "./pg-augments";
+import {
+  getRunState,
+  saveRunState,
+  resetRunState,
+  getLoadout,
+  saveLoadout,
+  saveMultiplayerGame,
+  getMultiplayerGameById,
+} from "./pg-augments";
 import bcrypt from "bcrypt";
 import multer from "multer";
 import path from "path";
@@ -220,7 +228,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ error: "Not authenticated" });
     }
     try {
-      const userData = await storage.getUserData(req.session.username);
+      const userData = await storage.getUserData(req.session.username!);
       const isAdmin = await storage.isUserAdmin(req.session.userId);
       return res.json({
         user: { username: req.session.username, id: req.session.userId },
@@ -231,6 +239,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (err) {
       console.error("Session check error:", err);
       return res.status(500).json({ error: "Session check failed" });
+    }
+  });
+
+  app.get("/api/multiplayer/create-id", requireAuth, async (_req, res) => {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let generatedId = "";
+
+    for (let i = 0; i < 6; i += 1) {
+      generatedId += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+
+    res.json({ gameId: generatedId });
+  });
+
+  app.post("/api/multiplayer/save", requireAuth, async (req, res) => {
+    try {
+      const { gameId, difficulty, currentLevel } = req.body as {
+        gameId?: string;
+        difficulty?: "normal" | "hard" | "extreme";
+        currentLevel?: number;
+      };
+
+      if (!gameId || typeof gameId !== "string" || gameId.trim().length < 4) {
+        return res.status(400).json({ error: "A valid game ID is required" });
+      }
+
+      if (!difficulty || !["normal", "hard", "extreme"].includes(difficulty)) {
+        return res.status(400).json({ error: "Difficulty must be normal, hard, or extreme" });
+      }
+
+      const parsedLevel = Number(currentLevel);
+      if (!Number.isInteger(parsedLevel) || parsedLevel < 1) {
+        return res.status(400).json({ error: "Current level must be a positive integer" });
+      }
+
+      await saveMultiplayerGame({
+        gameId: gameId.toUpperCase(),
+        ownerUserId: req.session.userId!,
+        difficulty,
+        currentLevel: parsedLevel,
+      });
+
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to save multiplayer game:", error);
+      return res.status(500).json({ error: "Failed to save multiplayer game" });
+    }
+  });
+
+  app.get("/api/multiplayer/:gameId", requireAuth, async (req, res) => {
+    try {
+      const gameId = req.params.gameId?.toUpperCase();
+      if (!gameId) {
+        return res.status(400).json({ error: "Game ID is required" });
+      }
+
+      const game = await getMultiplayerGameById(gameId);
+      if (!game) {
+        return res.status(404).json({ error: "Game not found" });
+      }
+
+      return res.json({ game });
+    } catch (error) {
+      console.error("Failed to fetch multiplayer game:", error);
+      return res.status(500).json({ error: "Failed to fetch multiplayer game" });
     }
   });
 
