@@ -37,7 +37,7 @@ Tables (managed externally via phpMyAdmin):
 - `items` - Shop items
 - `inventory_items` - User inventory and gold currency
 - `user_settings` - Per-user game settings (keybindings, sensitivity)
-- `leaderboard_2` - Game leaderboard
+- `leaderboard` - Game leaderboard (total_kills updated after every level; fastest_run_time only on full campaign completion)
 - `transactions_v2` - Currency purchase transactions
 - `player_stats` - Shots, hits, deaths, playtime
 

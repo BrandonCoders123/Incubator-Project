@@ -6232,12 +6232,13 @@ function HUD({
       .catch((err) => console.error("Error saving leaderboard:", err));
   }, [gameState.gamePhase, gameState.gameStartTime, gameState.user.isGuest]);
 
-  // Save total kills to localStorage after every wave (level transition)
+  // Save total kills to leaderboard after every level transition
   const levelTransitionSavedRef = React.useRef<number>(-1);
 
   useEffect(() => {
     if (gameState.gamePhase !== "levelTransition") return;
     if (gameState.adminLevelTestMode) return;
+    if (gameState.user.isGuest) return;
 
     // Prevent duplicate saves for the same level
     if (levelTransitionSavedRef.current === gameState.level.currentLevel)
@@ -6245,17 +6246,23 @@ function HUD({
     levelTransitionSavedRef.current = gameState.level.currentLevel;
 
     const totalKills = gameState.story.totalKills;
-    const savedKills = getLocalStorage("savedTotalKills") || 0;
 
-    // Only save if current kills are higher
-    if (totalKills > savedKills) {
-      setLocalStorage("savedTotalKills", totalKills);
-      console.log(`Saved total kills after wave: ${totalKills}`);
-    }
+    fetch("/api/leaderboard", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ totalKills }),
+    })
+      .then((res) => {
+        if (res.ok) console.log(`Kills saved to leaderboard after level: ${totalKills}`);
+        else res.text().then((t) => console.error("Failed to save kills:", t));
+      })
+      .catch((err) => console.error("Error saving kills:", err));
   }, [
     gameState.gamePhase,
     gameState.level.currentLevel,
     gameState.story.totalKills,
+    gameState.user.isGuest,
   ]);
 
   // Save fastest time to localStorage when completing the whole game (victory)
@@ -9063,27 +9070,6 @@ function HUD({
                     console.error("Failed to save currency:", error);
                   }
 
-                  // Save run time to leaderboard
-                  if (gameState.gameStartTime) {
-                    const runTimeMs = Date.now() - gameState.gameStartTime;
-                    const totalSeconds = Math.floor(runTimeMs / 1000);
-                    const hours = Math.floor(totalSeconds / 3600);
-                    const minutes = Math.floor((totalSeconds % 3600) / 60);
-                    const seconds = totalSeconds % 60;
-                    const fastestRunTime = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-
-                    try {
-                      await fetch("/api/leaderboard", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        credentials: "include",
-                        body: JSON.stringify({ fastestRunTime }),
-                      });
-                      console.log("Leaderboard entry saved:", fastestRunTime);
-                    } catch (error) {
-                      console.error("Failed to save leaderboard entry:", error);
-                    }
-                  }
                 }
 
                 setGameState((prev) => ({
@@ -9172,27 +9158,6 @@ function HUD({
                     console.error("Failed to save currency:", error);
                   }
 
-                  // Save run time to leaderboard
-                  if (gameState.gameStartTime) {
-                    const runTimeMs = Date.now() - gameState.gameStartTime;
-                    const totalSeconds = Math.floor(runTimeMs / 1000);
-                    const hours = Math.floor(totalSeconds / 3600);
-                    const minutes = Math.floor((totalSeconds % 3600) / 60);
-                    const seconds = totalSeconds % 60;
-                    const fastestRunTime = `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-
-                    try {
-                      await fetch("/api/leaderboard", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        credentials: "include",
-                        body: JSON.stringify({ fastestRunTime }),
-                      });
-                      console.log("Leaderboard entry saved:", fastestRunTime);
-                    } catch (error) {
-                      console.error("Failed to save leaderboard entry:", error);
-                    }
-                  }
                 }
 
                 setGameState((prev) => ({

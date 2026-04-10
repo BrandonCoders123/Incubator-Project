@@ -571,7 +571,7 @@ class MySQLStorage implements IStorage {
     }
   }
 
-  // ---------- Leaderboard (stored in Replit PostgreSQL) ----------
+  // ---------- Leaderboard (stored in MySQL / PHPMyAdmin) ----------
 
   async getLeaderboard(category: string, limit: number = 50): Promise<any[]> {
     try {
@@ -591,16 +591,16 @@ class MySQLStorage implements IStorage {
           break;
       }
 
-      const result = await this.pgPool.query(
+      const [rows] = await this.pool.execute(
         `SELECT id, user_id, username, date_recorded,
                 fastest_run_time, COALESCE(total_kills, 0) AS total_kills
          FROM leaderboard
          ${whereClause}
          ORDER BY ${orderBy}
-         LIMIT $1`,
+         LIMIT ?`,
         [limit]
       );
-      return result.rows;
+      return rows as any[];
     } catch (err) {
       console.error("Error fetching leaderboard:", err);
       return [];
@@ -609,21 +609,21 @@ class MySQLStorage implements IStorage {
 
   async saveLeaderboardEntry(userId: number, username: string, fastestRunTime: string | null, totalKills: number | null): Promise<void> {
     try {
-      await this.pgPool.query(
+      await this.pool.execute(
         `INSERT INTO leaderboard (user_id, username, fastest_run_time, total_kills, date_recorded)
-         VALUES ($1, $2, $3, $4, NOW())
-         ON CONFLICT (user_id) DO UPDATE SET
-           username         = EXCLUDED.username,
+         VALUES (?, ?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE
+           username         = VALUES(username),
            fastest_run_time = CASE
-             WHEN EXCLUDED.fastest_run_time IS NOT NULL
-              AND (leaderboard.fastest_run_time IS NULL OR EXCLUDED.fastest_run_time < leaderboard.fastest_run_time)
-             THEN EXCLUDED.fastest_run_time
-             ELSE leaderboard.fastest_run_time
+             WHEN VALUES(fastest_run_time) IS NOT NULL
+              AND (fastest_run_time IS NULL OR VALUES(fastest_run_time) < fastest_run_time)
+             THEN VALUES(fastest_run_time)
+             ELSE fastest_run_time
            END,
            total_kills      = CASE
-             WHEN EXCLUDED.total_kills > leaderboard.total_kills
-             THEN EXCLUDED.total_kills
-             ELSE leaderboard.total_kills
+             WHEN VALUES(total_kills) > total_kills
+             THEN VALUES(total_kills)
+             ELSE total_kills
            END,
            date_recorded    = NOW()`,
         [userId, username, fastestRunTime, totalKills ?? 0]
