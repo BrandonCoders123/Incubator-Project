@@ -45,11 +45,23 @@ export async function initAugmentTables(): Promise<void> {
     CREATE TABLE IF NOT EXISTS multiplayer_games (
       game_id         VARCHAR(16) PRIMARY KEY,
       owner_user_id   INTEGER NOT NULL,
+      slot_index      INTEGER NOT NULL DEFAULT 1,
       difficulty      VARCHAR(16) NOT NULL,
       current_level   INTEGER NOT NULL DEFAULT 1,
       created_at      TIMESTAMP NOT NULL DEFAULT NOW(),
-      updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
+      updated_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+      UNIQUE (owner_user_id, slot_index)
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE multiplayer_games
+    ADD COLUMN IF NOT EXISTS slot_index INTEGER NOT NULL DEFAULT 1;
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS multiplayer_games_owner_slot_idx
+    ON multiplayer_games (owner_user_id, slot_index);
   `);
 
   console.log("[pg-augments] Tables ready");
@@ -60,20 +72,27 @@ export type MultiplayerDifficulty = "normal" | "hard" | "extreme";
 export interface MultiplayerGameRecord {
   gameId: string;
   ownerUserId: number;
+  slotIndex: number;
   difficulty: MultiplayerDifficulty;
   currentLevel: number;
 }
 
 export async function saveMultiplayerGame(record: MultiplayerGameRecord): Promise<void> {
   await pool.query(
-    `INSERT INTO multiplayer_games (game_id, owner_user_id, difficulty, current_level, updated_at)
-     VALUES ($1, $2, $3, $4, NOW())
-     ON CONFLICT (game_id) DO UPDATE
-       SET owner_user_id = EXCLUDED.owner_user_id,
-           difficulty    = EXCLUDED.difficulty,
-           current_level = EXCLUDED.current_level,
+    `INSERT INTO multiplayer_games (game_id, owner_user_id, slot_index, difficulty, current_level, updated_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())
+     ON CONFLICT (owner_user_id, slot_index) DO UPDATE
+       SET game_id        = EXCLUDED.game_id,
+           difficulty     = EXCLUDED.difficulty,
+           current_level  = EXCLUDED.current_level,
            updated_at    = NOW()`,
-    [record.gameId, record.ownerUserId, record.difficulty, record.currentLevel]
+    [
+      record.gameId,
+      record.ownerUserId,
+      record.slotIndex,
+      record.difficulty,
+      record.currentLevel,
+    ]
   );
 }
 
@@ -81,10 +100,11 @@ export async function getMultiplayerGameById(gameId: string): Promise<Multiplaye
   const res = await pool.query<{
     game_id: string;
     owner_user_id: number;
+    slot_index: number;
     difficulty: MultiplayerDifficulty;
     current_level: number;
   }>(
-    "SELECT game_id, owner_user_id, difficulty, current_level FROM multiplayer_games WHERE game_id = $1",
+    "SELECT game_id, owner_user_id, slot_index, difficulty, current_level FROM multiplayer_games WHERE game_id = $1",
     [gameId]
   );
 
@@ -93,9 +113,44 @@ export async function getMultiplayerGameById(gameId: string): Promise<Multiplaye
   return {
     gameId: res.rows[0].game_id,
     ownerUserId: res.rows[0].owner_user_id,
+    slotIndex: res.rows[0].slot_index,
     difficulty: res.rows[0].difficulty,
     currentLevel: res.rows[0].current_level,
   };
+}
+
+export async function getMultiplayerGamesByOwner(ownerUserId: number): Promise<MultiplayerGameRecord[]> {
+  const res = await pool.query<{
+    game_id: string;
+    owner_user_id: number;
+    slot_index: number;
+    difficulty: MultiplayerDifficulty;
+    current_level: number;
+  }>(
+    `SELECT game_id, owner_user_id, slot_index, difficulty, current_level
+     FROM multiplayer_games
+     WHERE owner_user_id = $1
+     ORDER BY slot_index ASC`,
+    [ownerUserId]
+  );
+
+  return res.rows.map((row) => ({
+    gameId: row.game_id,
+    ownerUserId: row.owner_user_id,
+    slotIndex: row.slot_index,
+    difficulty: row.difficulty,
+    currentLevel: row.current_level,
+  }));
+}
+
+export async function deleteMultiplayerGameByOwnerSlot(
+  ownerUserId: number,
+  slotIndex: number
+): Promise<void> {
+  await pool.query(
+    "DELETE FROM multiplayer_games WHERE owner_user_id = $1 AND slot_index = $2",
+    [ownerUserId, slotIndex]
+  );
 }
 
 export type AugmentType =

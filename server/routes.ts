@@ -9,6 +9,8 @@ import {
   saveLoadout,
   saveMultiplayerGame,
   getMultiplayerGameById,
+  getMultiplayerGamesByOwner,
+  deleteMultiplayerGameByOwnerSlot,
 } from "./pg-augments";
 import bcrypt from "bcrypt";
 import multer from "multer";
@@ -255,10 +257,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/multiplayer/save", requireAuth, async (req, res) => {
     try {
-      const { gameId, difficulty, currentLevel } = req.body as {
+      const { gameId, difficulty, currentLevel, slotIndex } = req.body as {
         gameId?: string;
         difficulty?: "normal" | "hard" | "extreme";
         currentLevel?: number;
+        slotIndex?: number;
       };
 
       if (!gameId || typeof gameId !== "string" || gameId.trim().length < 4) {
@@ -274,9 +277,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Current level must be a positive integer" });
       }
 
+      const parsedSlotIndex = Number(slotIndex);
+      if (!Number.isInteger(parsedSlotIndex) || parsedSlotIndex < 1 || parsedSlotIndex > 3) {
+        return res.status(400).json({ error: "Slot index must be 1, 2, or 3" });
+      }
+
       await saveMultiplayerGame({
         gameId: gameId.toUpperCase(),
         ownerUserId: req.session.userId!,
+        slotIndex: parsedSlotIndex,
         difficulty,
         currentLevel: parsedLevel,
       });
@@ -285,6 +294,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to save multiplayer game:", error);
       return res.status(500).json({ error: "Failed to save multiplayer game" });
+    }
+  });
+
+  app.get("/api/multiplayer/slots/list", requireAuth, async (req, res) => {
+    try {
+      const games = await getMultiplayerGamesByOwner(req.session.userId!);
+      return res.json({ games });
+    } catch (error) {
+      console.error("Failed to fetch multiplayer slots:", error);
+      return res.status(500).json({ error: "Failed to fetch multiplayer slots" });
+    }
+  });
+
+  app.delete("/api/multiplayer/slots/:slotIndex", requireAuth, async (req, res) => {
+    try {
+      const parsedSlotIndex = Number(req.params.slotIndex);
+      if (!Number.isInteger(parsedSlotIndex) || parsedSlotIndex < 1 || parsedSlotIndex > 3) {
+        return res.status(400).json({ error: "Slot index must be 1, 2, or 3" });
+      }
+
+      await deleteMultiplayerGameByOwnerSlot(req.session.userId!, parsedSlotIndex);
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete multiplayer slot:", error);
+      return res.status(500).json({ error: "Failed to delete multiplayer slot" });
     }
   });
 
