@@ -354,6 +354,11 @@ interface GameState {
     | "login"
     | "register"
     | "menu"
+    | "multiplayerMenu"
+    | "multiplayerSlots"
+    | "multiplayerCreate"
+    | "multiplayerCreateId"
+    | "multiplayerJoin"
     | "difficultySelect"
     | "leaderboard"
     | "settings"
@@ -6120,6 +6125,69 @@ function HUD({
   const [selectedAugmentCategory, setSelectedAugmentCategory] = useState<
     "weapons" | "user" | null
   >(null);
+  const [multiplayerGameId, setMultiplayerGameId] = useState("");
+  const [multiplayerJoinId, setMultiplayerJoinId] = useState("");
+  const [multiplayerDifficulty, setMultiplayerDifficulty] =
+    useState<Difficulty>("normal");
+  const [multiplayerLevel, setMultiplayerLevel] = useState(1);
+  const [multiplayerStatus, setMultiplayerStatus] = useState("");
+  const [selectedMultiplayerSlot, setSelectedMultiplayerSlot] = useState<
+    1 | 2 | 3 | null
+  >(null);
+  const [deleteArmedSlot, setDeleteArmedSlot] = useState<1 | 2 | 3 | null>(null);
+  const [multiplayerSlots, setMultiplayerSlots] = useState<
+    Array<{
+      slotIndex: number;
+      gameId: string;
+      difficulty: Difficulty;
+      currentLevel: number;
+    }>
+  >([]);
+
+  const startEndlessMode = useCallback(() => {
+    setGameState((prev) => ({
+      ...prev,
+      gamePhase: "playing",
+      gameMode: "endless",
+      gameStartTime: Date.now(),
+      health: prev.maxHealth,
+      ammo: weapons[1].maxAmmo,
+      reserveAmmo: getStartingReserveAmmo(1),
+      grenades: 3,
+      maxGrenades: 6,
+      coins: 0,
+      enemies: [],
+      bullets: [],
+      grenadeProjectiles: [],
+      explosions: [],
+      enemyProjectiles: [],
+      story: {
+        currentSettlement: 0,
+        alliesRescued: 0,
+        settlementsConquered: [],
+        totalKills: 0,
+      },
+      sessionShotsFired: 0,
+      sessionShotsHit: 0,
+      level: {
+        currentLevel: 1,
+        killsThisLevel: 0,
+        giantsSpawnedThisLevel: 0,
+      },
+    }));
+    document.body.requestPointerLock();
+  }, [setGameState]);
+
+  const loadMultiplayerSlots = useCallback(async () => {
+    const response = await fetch("/api/multiplayer/slots/list", {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new Error("Failed to load multiplayer slots");
+    }
+    const data = await response.json();
+    setMultiplayerSlots(data.games ?? []);
+  }, []);
 
   // Reset augment modal when leaving level transition (prevents UI from persisting between waves)
   useEffect(() => {
@@ -7042,37 +7110,15 @@ function HUD({
         label: "Endless Wave",
         onClick: () => {
           playClick();
-          setGameState((prev) => ({
-            ...prev,
-            gamePhase: "playing",
-            gameMode: "endless",
-            gameStartTime: Date.now(),
-            health: prev.maxHealth,
-            ammo: weapons[1].maxAmmo,
-            reserveAmmo: getStartingReserveAmmo(1),
-            grenades: 3,
-            maxGrenades: 6,
-            coins: 0,
-            enemies: [],
-            bullets: [],
-            grenadeProjectiles: [],
-            explosions: [],
-            enemyProjectiles: [],
-            story: {
-              currentSettlement: 0,
-              alliesRescued: 0,
-              settlementsConquered: [],
-              totalKills: 0,
-            },
-            sessionShotsFired: 0,
-            sessionShotsHit: 0,
-            level: {
-              currentLevel: 1,
-              killsThisLevel: 0,
-              giantsSpawnedThisLevel: 0,
-            },
-          }));
-          document.body.requestPointerLock();
+          startEndlessMode();
+        },
+      },
+      {
+        label: "Multiplayer",
+        onClick: () => {
+          playClick();
+          setMultiplayerStatus("");
+          setGameState((prev) => ({ ...prev, gamePhase: "multiplayerMenu" }));
         },
       },
       {
@@ -7211,6 +7257,295 @@ function HUD({
               />
             ))}
           </nav>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState.gamePhase === "multiplayerMenu") {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", display: "grid", placeItems: "center", zIndex: 1000 }}>
+        <div style={{ width: "min(680px, 92vw)", padding: "24px", border: "1px solid rgba(232,160,32,0.35)", background: "rgba(14,9,4,0.95)", color: "white" }}>
+          <h2 style={{ marginTop: 0, color: "#e8c96a", textTransform: "uppercase", letterSpacing: "2px" }}>Multiplayer</h2>
+          <p>Create a game ID or join an existing multiplayer campaign game.</p>
+          <div style={{ display: "grid", gap: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", marginBottom: "16px" }}>
+            <button
+              onClick={async () => {
+                setMultiplayerStatus("");
+                setDeleteArmedSlot(null);
+                try {
+                  await loadMultiplayerSlots();
+                  setGameState((prev) => ({ ...prev, gamePhase: "multiplayerSlots" }));
+                } catch (_error) {
+                  setMultiplayerStatus("Could not load your multiplayer save slots.");
+                }
+              }}
+              style={{ padding: "14px", cursor: "pointer", background: "#2e7d32", color: "white", border: "none" }}
+            >
+              Create Game
+            </button>
+            <button onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "multiplayerJoin" }))} style={{ padding: "14px", cursor: "pointer", background: "#1565c0", color: "white", border: "none" }}>
+              Join Game
+            </button>
+          </div>
+          {multiplayerStatus && <div style={{ color: "#ffb4b4", marginBottom: "12px" }}>{multiplayerStatus}</div>}
+          <button onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "menu" }))} style={{ padding: "10px 16px", cursor: "pointer" }}>
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState.gamePhase === "multiplayerCreate") {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", display: "grid", placeItems: "center", zIndex: 1000 }}>
+        <div style={{ width: "min(760px, 94vw)", padding: "24px", border: "1px solid rgba(232,160,32,0.35)", background: "rgba(14,9,4,0.95)", color: "white" }}>
+          <h2 style={{ marginTop: 0, color: "#e8c96a", textTransform: "uppercase", letterSpacing: "2px" }}>Create Multiplayer Game</h2>
+          <p style={{ marginTop: 0, opacity: 0.9 }}>
+            Select your campaign setup, then press <strong>Next</strong> to generate a join code.
+          </p>
+          <div style={{ marginBottom: "12px", opacity: 0.9 }}>
+            Save Slot: <strong>{selectedMultiplayerSlot ?? "-"}</strong>
+          </div>
+          <div style={{ marginBottom: "16px" }}>
+            <div style={{ marginBottom: "8px" }}>Difficulty</div>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              {(["normal", "hard", "extreme"] as Difficulty[]).map((level) => (
+                <button
+                  key={level}
+                  onClick={() => setMultiplayerDifficulty(level)}
+                  style={{ padding: "10px 16px", border: "1px solid #555", background: multiplayerDifficulty === level ? "#e8a020" : "#2a2a2a", color: "white", cursor: "pointer", textTransform: "capitalize" }}
+                >
+                  {level}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label style={{ display: "block", marginBottom: "16px" }}>
+            Starting level
+            <input type="number" min={1} value={multiplayerLevel} onChange={(event) => setMultiplayerLevel(Math.max(1, Number(event.target.value) || 1))} style={{ display: "block", marginTop: "6px", padding: "10px", width: "180px" }} />
+          </label>
+          {multiplayerStatus && <div style={{ color: "#ffb4b4", marginBottom: "12px" }}>{multiplayerStatus}</div>}
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={async () => {
+                setMultiplayerStatus("");
+                if (!selectedMultiplayerSlot) {
+                  setMultiplayerStatus("Pick a save slot first.");
+                  return;
+                }
+                const idResponse = await fetch("/api/multiplayer/create-id", { credentials: "include" });
+                if (!idResponse.ok) {
+                  setMultiplayerStatus("Could not generate a multiplayer game ID.");
+                  return;
+                }
+                const idData = await idResponse.json();
+                const generatedGameId = idData.gameId as string;
+                setMultiplayerGameId(generatedGameId);
+
+                const saveResponse = await fetch("/api/multiplayer/save", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "include",
+                  body: JSON.stringify({
+                    gameId: generatedGameId,
+                    slotIndex: selectedMultiplayerSlot,
+                    difficulty: multiplayerDifficulty,
+                    currentLevel: multiplayerLevel,
+                  }),
+                });
+
+                if (!saveResponse.ok) {
+                  setMultiplayerStatus("Could not save multiplayer game settings.");
+                  return;
+                }
+
+                setGameState((prev) => ({ ...prev, gamePhase: "multiplayerCreateId" }));
+              }}
+              style={{ padding: "10px 16px", cursor: "pointer", background: "#2e7d32", color: "white", border: "none" }}
+            >
+              Next
+            </button>
+            <button onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "multiplayerMenu" }))} style={{ padding: "10px 16px", cursor: "pointer" }}>
+              Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState.gamePhase === "multiplayerSlots") {
+    const slotCards = [1, 2, 3].map((slotNumber) => {
+      const slotData = multiplayerSlots.find((slot) => slot.slotIndex === slotNumber);
+      return { slotNumber: slotNumber as 1 | 2 | 3, slotData };
+    });
+
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", display: "grid", placeItems: "center", zIndex: 1000 }}>
+        <div style={{ width: "min(900px, 94vw)", padding: "24px", border: "1px solid rgba(232,160,32,0.35)", background: "rgba(14,9,4,0.95)", color: "white" }}>
+          <h2 style={{ marginTop: 0, color: "#e8c96a", textTransform: "uppercase", letterSpacing: "2px" }}>Multiplayer Save Slots</h2>
+          <p style={{ opacity: 0.9 }}>
+            You have 3 save slots. Click a blank slot to create a new multiplayer game.
+          </p>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px", marginBottom: "16px" }}>
+            {slotCards.map(({ slotNumber, slotData }) => (
+              <div
+                key={slotNumber}
+                style={{
+                  border: "1px solid rgba(232,160,32,0.35)",
+                  background: "rgba(35,20,8,0.95)",
+                  padding: "14px",
+                }}
+              >
+                <div style={{ fontSize: "18px", marginBottom: "8px" }}>Slot {slotNumber}</div>
+                {!slotData ? (
+                  <button
+                    onClick={() => {
+                      setSelectedMultiplayerSlot(slotNumber);
+                      setMultiplayerDifficulty("normal");
+                      setMultiplayerLevel(1);
+                      setMultiplayerStatus("");
+                      setGameState((prev) => ({ ...prev, gamePhase: "multiplayerCreate" }));
+                    }}
+                    style={{ padding: "10px 12px", width: "100%", cursor: "pointer", background: "#2e7d32", color: "white", border: "none" }}
+                  >
+                    Empty Slot - Create
+                  </button>
+                ) : (
+                  <>
+                    <div style={{ fontSize: "13px", opacity: 0.9, marginBottom: "4px" }}>
+                      ID: <strong>{slotData.gameId}</strong>
+                    </div>
+                    <div style={{ fontSize: "13px", opacity: 0.9, marginBottom: "10px", textTransform: "capitalize" }}>
+                      {slotData.difficulty} · Level {slotData.currentLevel}
+                    </div>
+                    <div style={{ display: "grid", gap: "8px" }}>
+                      <button
+                        onClick={() => {
+                          setMultiplayerStatus(`Slot ${slotNumber} selected. Rejoin logic is reserved for next step.`);
+                        }}
+                        style={{ padding: "9px 10px", cursor: "pointer", background: "#1565c0", color: "white", border: "none" }}
+                      >
+                        Open Slot
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDeleteArmedSlot((prev) => (prev === slotNumber ? null : slotNumber));
+                        }}
+                        style={{ padding: "9px 10px", cursor: "pointer", background: "#5a5a5a", color: "white", border: "none" }}
+                      >
+                        Select
+                      </button>
+                      {deleteArmedSlot === slotNumber && (
+                        <button
+                          onClick={async () => {
+                            setMultiplayerStatus("");
+                            const response = await fetch(`/api/multiplayer/slots/${slotNumber}`, {
+                              method: "DELETE",
+                              credentials: "include",
+                            });
+                            if (!response.ok) {
+                              setMultiplayerStatus("Failed to delete multiplayer slot.");
+                              return;
+                            }
+                            setDeleteArmedSlot(null);
+                            await loadMultiplayerSlots();
+                          }}
+                          style={{ padding: "9px 10px", cursor: "pointer", background: "#9b1c1c", color: "white", border: "none" }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {multiplayerStatus && <div style={{ color: "#ffb4b4", marginBottom: "12px" }}>{multiplayerStatus}</div>}
+          <button onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "multiplayerMenu" }))} style={{ padding: "10px 16px", cursor: "pointer" }}>
+            Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState.gamePhase === "multiplayerCreateId") {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", display: "grid", placeItems: "center", zIndex: 1000 }}>
+        <div style={{ width: "min(760px, 94vw)", padding: "24px", border: "1px solid rgba(232,160,32,0.35)", background: "rgba(14,9,4,0.95)", color: "white" }}>
+          <h2 style={{ marginTop: 0, color: "#e8c96a", textTransform: "uppercase", letterSpacing: "2px" }}>Multiplayer Game Ready</h2>
+          <div style={{ opacity: 0.85, marginBottom: "8px" }}>Share this join ID:</div>
+          <div style={{ fontSize: "34px", letterSpacing: "5px", color: "#f3dca2", marginBottom: "16px" }}>
+            {multiplayerGameId || "------"}
+          </div>
+          <div style={{ marginBottom: "18px", opacity: 0.92 }}>
+            Difficulty: <strong style={{ textTransform: "capitalize" }}>{multiplayerDifficulty}</strong> · Level:{" "}
+            <strong>{multiplayerLevel}</strong>
+          </div>
+          <button
+            onClick={async () => {
+              await loadMultiplayerSlots();
+              setGameState((prev) => ({ ...prev, gamePhase: "multiplayerSlots" }));
+            }}
+            style={{ padding: "10px 16px", cursor: "pointer" }}
+          >
+            Back to Slots
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (gameState.gamePhase === "multiplayerJoin") {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", display: "grid", placeItems: "center", zIndex: 1000 }}>
+        <div style={{ width: "min(760px, 94vw)", padding: "24px", border: "1px solid rgba(232,160,32,0.35)", background: "rgba(14,9,4,0.95)", color: "white" }}>
+          <h2 style={{ marginTop: 0, color: "#e8c96a", textTransform: "uppercase", letterSpacing: "2px" }}>Join Multiplayer Game</h2>
+          <label style={{ display: "block", marginBottom: "12px" }}>
+            Enter game ID
+            <input value={multiplayerJoinId} onChange={(event) => setMultiplayerJoinId(event.target.value.toUpperCase())} placeholder="ABC123" style={{ display: "block", marginTop: "6px", padding: "10px", width: "220px", letterSpacing: "2px" }} />
+          </label>
+          {multiplayerStatus && <div style={{ color: "#ffb4b4", marginBottom: "12px" }}>{multiplayerStatus}</div>}
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={async () => {
+                setMultiplayerStatus("");
+                const response = await fetch(`/api/multiplayer/${encodeURIComponent(multiplayerJoinId.trim())}`, {
+                  credentials: "include",
+                });
+                if (!response.ok) {
+                  setMultiplayerStatus("Game ID not found.");
+                  return;
+                }
+                const data = await response.json();
+                const game = data.game as { difficulty: Difficulty; currentLevel: number };
+                setMultiplayerStatus(`Connected! Starting campaign on ${game.difficulty.toUpperCase()} at level ${game.currentLevel}.`);
+                setGameState((prev) => ({
+                  ...prev,
+                  difficulty: game.difficulty,
+                  gamePhase: "introCutscene",
+                  gameMode: "story",
+                  level: {
+                    currentLevel: Math.max(0, Number(game.currentLevel) - 1),
+                    killsThisLevel: 0,
+                    giantsSpawnedThisLevel: 0,
+                  },
+                }));
+              }}
+              style={{ padding: "10px 16px", cursor: "pointer", background: "#1565c0", color: "white", border: "none" }}
+            >
+              Join
+            </button>
+            <button onClick={() => setGameState((prev) => ({ ...prev, gamePhase: "multiplayerMenu" }))} style={{ padding: "10px 16px", cursor: "pointer" }}>
+              Back
+            </button>
+          </div>
         </div>
       </div>
     );
