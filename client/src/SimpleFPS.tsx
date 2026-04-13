@@ -1335,6 +1335,7 @@ function Player({
               position: [bulletPos.x, bulletPos.y, bulletPos.z],
               direction: [direction.x, direction.y, direction.z],
               damage: currentWeapon.damage + gameState.augmentLevels.weaponDamage * 5,
+              weaponId: gameState.currentWeapon,
               burnDamagePerTick: currentWeapon.burnDamagePerTick,
               burnDurationMs: currentWeapon.burnDurationMs,
               burnTickMs: currentWeapon.burnTickMs,
@@ -1622,24 +1623,36 @@ function Player({
       });
 
       const survivingBullets = movedBullets.filter((bullet) => {
-        const inBounds =
+        const withinXZ =
           Math.abs(bullet.position[0]) < 30 &&
-          Math.abs(bullet.position[2]) < 30 &&
-          bullet.position[1] > 0 &&
-          bullet.position[1] < 20;
-        if (!inBounds && bullet.weaponId === 6) {
-          newPuddles.push({
-            id: `puddle_${now}_${Math.random().toString(36).slice(2, 8)}`,
-            position: [
-              bullet.position[0],
-              Math.max(0.05, bullet.position[1]),
-              bullet.position[2],
-            ] as [number, number, number],
-            createdAt: now,
-            duration: 7000,
-          });
+          Math.abs(bullet.position[2]) < 30;
+        const hitFloor = bullet.position[1] <= 0;
+        const hitCeiling = bullet.position[1] >= 20;
+        const hitWall = !withinXZ;
+
+        if (bullet.weaponId === 6) {
+          if (hitFloor && withinXZ) {
+            // Flame hit floor — spawn puddle at exact XZ, clamped to ground
+            newPuddles.push({
+              id: `puddle_${now}_${Math.random().toString(36).slice(2, 8)}`,
+              position: [
+                bullet.position[0],
+                0.05,
+                bullet.position[2],
+              ] as [number, number, number],
+              createdAt: now,
+              duration: 15000,
+            });
+            return false;
+          }
+          if (hitWall || hitCeiling) {
+            return false; // Flame hit wall/ceiling — just remove, no puddle
+          }
+          return true;
         }
-        return inBounds;
+
+        // Regular bullet — standard bounds check
+        return withinXZ && !hitFloor && !hitCeiling;
       });
 
       const activePuddles = prev.firePuddles.filter(
@@ -2327,7 +2340,7 @@ function Enemy({
                       enemy.position[2],
                     ] as [number, number, number],
                     createdAt: nowHit,
-                    duration: 7000,
+                    duration: 15000,
                   },
                 ]
               : [];
@@ -2594,10 +2607,6 @@ function Bullet({
     weaponId?: number;
   };
 }) {
-  if (bullet.weaponId === 6) {
-    return <FlameBullet bullet={bullet} />;
-  }
-
   const tailLength = 5;
   const tailSegments = useMemo(() => {
     const segments = [];
@@ -2611,6 +2620,10 @@ function Bullet({
     }
     return segments;
   }, []);
+
+  if (bullet.weaponId === 6) {
+    return <FlameBullet bullet={bullet} />;
+  }
 
   return (
     <group position={bullet.position}>
