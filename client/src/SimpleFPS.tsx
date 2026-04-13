@@ -51,7 +51,7 @@ const weapons: Record<number, Weapon> = {
     name: "Ketchup Squirter",
     maxAmmo: 12,
     reserveAmmoCap: 48,
-    damage: 34,
+    damage: 35,
     reloadTime: 2000,
     fireRate: 0, // semi-auto
     bulletsPerKill: 1,
@@ -108,8 +108,8 @@ const weapons: Record<number, Weapon> = {
     fireRate: 18,
     bulletsPerKill: 8,
     tier: 5,
-    burnDamagePerTick: 3,
-    burnDurationMs: 2500,
+    burnDamagePerTick: 2,
+    burnDurationMs: 10000,
     burnTickMs: 400,
   },
 };
@@ -372,9 +372,16 @@ interface GameState {
     position: [number, number, number];
     direction: [number, number, number];
     damage: number;
+    weaponId?: number;
     burnDamagePerTick?: number;
     burnDurationMs?: number;
     burnTickMs?: number;
+  }>;
+  firePuddles: Array<{
+    id: string;
+    position: [number, number, number];
+    createdAt: number;
+    duration: number;
   }>;
   grenadeProjectiles: Array<{
     id: string;
@@ -1145,6 +1152,7 @@ function Player({
                   position: [bulletPos.x, bulletPos.y, bulletPos.z],
                   direction: [spreadDir.x, spreadDir.y, spreadDir.z],
                   damage: currentWeapon.damage + gameStateRef.current.augmentLevels.weaponDamage * 5,
+                  weaponId: currentState.currentWeapon,
                   burnDamagePerTick: currentWeapon.burnDamagePerTick,
                   burnDurationMs: currentWeapon.burnDurationMs,
                   burnTickMs: currentWeapon.burnTickMs,
@@ -1157,6 +1165,7 @@ function Player({
                 position: [bulletPos.x, bulletPos.y, bulletPos.z],
                 direction: [baseDirection.x, baseDirection.y, baseDirection.z],
                 damage: currentWeapon.damage + gameStateRef.current.augmentLevels.weaponDamage * 5,
+                weaponId: currentState.currentWeapon,
                 burnDamagePerTick: currentWeapon.burnDamagePerTick,
                 burnDurationMs: currentWeapon.burnDurationMs,
                 burnTickMs: currentWeapon.burnTickMs,
@@ -1593,26 +1602,56 @@ function Player({
       document.exitPointerLock();
     }
 
-    // Update bullets
-    setGameState((prev) => ({
-      ...prev,
-      bullets: prev.bullets
-        .map((bullet) => ({
+    // Update bullets — flamethrower bullets spawn fire puddles on impact
+    setGameState((prev) => {
+      const now = Date.now();
+      const FLAME_SPEED = 18;
+      const REGULAR_SPEED = 120;
+      const newPuddles: typeof prev.firePuddles = [];
+
+      const movedBullets = prev.bullets.map((bullet) => {
+        const speed = bullet.weaponId === 6 ? FLAME_SPEED : REGULAR_SPEED;
+        return {
           ...bullet,
           position: [
-            bullet.position[0] + bullet.direction[0] * 120 * deltaTime,
-            bullet.position[1] + bullet.direction[1] * 120 * deltaTime,
-            bullet.position[2] + bullet.direction[2] * 120 * deltaTime,
+            bullet.position[0] + bullet.direction[0] * speed * deltaTime,
+            bullet.position[1] + bullet.direction[1] * speed * deltaTime,
+            bullet.position[2] + bullet.direction[2] * speed * deltaTime,
           ] as [number, number, number],
-        }))
-        .filter(
-          (bullet) =>
-            Math.abs(bullet.position[0]) < 30 &&
-            Math.abs(bullet.position[2]) < 30 &&
-            bullet.position[1] > 0 &&
-            bullet.position[1] < 20,
-        ),
-    }));
+        };
+      });
+
+      const survivingBullets = movedBullets.filter((bullet) => {
+        const inBounds =
+          Math.abs(bullet.position[0]) < 30 &&
+          Math.abs(bullet.position[2]) < 30 &&
+          bullet.position[1] > 0 &&
+          bullet.position[1] < 20;
+        if (!inBounds && bullet.weaponId === 6) {
+          newPuddles.push({
+            id: `puddle_${now}_${Math.random().toString(36).slice(2, 8)}`,
+            position: [
+              bullet.position[0],
+              Math.max(0.05, bullet.position[1]),
+              bullet.position[2],
+            ] as [number, number, number],
+            createdAt: now,
+            duration: 7000,
+          });
+        }
+        return inBounds;
+      });
+
+      const activePuddles = prev.firePuddles.filter(
+        (p) => now - p.createdAt < p.duration,
+      );
+
+      return {
+        ...prev,
+        bullets: survivingBullets,
+        firePuddles: [...activePuddles, ...newPuddles],
+      };
+    });
 
     if (gameState.grenadeProjectiles.length > 0 || gameState.explosions.length > 0) {
       setGameState((prev) => {
@@ -1934,6 +1973,32 @@ function Enemy({
         }));
       }
 
+      // Fire puddle — ignite enemy if standing in one
+      if ((enemy.burningUntil ?? 0) <= currentTime) {
+        const activePuddle = gameState.firePuddles.find((p) => {
+          if (currentTime - p.createdAt >= p.duration) return false;
+          const dx = enemy.position[0] - p.position[0];
+          const dz = enemy.position[2] - p.position[2];
+          return Math.sqrt(dx * dx + dz * dz) < 1.5;
+        });
+        if (activePuddle) {
+          setGameState((prev) => ({
+            ...prev,
+            enemies: prev.enemies.map((e) =>
+              e.id === enemy.id
+                ? {
+                    ...e,
+                    burningUntil: currentTime + 5000,
+                    nextBurnTickAt: currentTime + 400,
+                    burnDamagePerTick: 2,
+                    burnTickMs: 400,
+                  }
+                : e,
+            ),
+          }));
+        }
+      }
+
       const currentFacingDirection = new THREE.Vector3(
         enemy.movementDirection[0],
         enemy.movementDirection[1],
@@ -2250,9 +2315,26 @@ function Enemy({
             nextPhase = "levelTransition";
           }
 
+          const nowHit = Date.now();
+          const flamePuddleOnHit =
+            bullet.weaponId === 6
+              ? [
+                  {
+                    id: `puddle_${nowHit}_${Math.random().toString(36).slice(2, 8)}`,
+                    position: [
+                      enemy.position[0],
+                      0.05,
+                      enemy.position[2],
+                    ] as [number, number, number],
+                    createdAt: nowHit,
+                    duration: 7000,
+                  },
+                ]
+              : [];
           return {
             ...prev,
             bullets: prev.bullets.filter((b) => b.id !== bullet.id),
+            firePuddles: [...prev.firePuddles, ...flamePuddleOnHit],
             enemies: prev.enemies
               .map((e) =>
                 e.id === enemy.id
@@ -2261,11 +2343,11 @@ function Enemy({
                       health: e.health - bullet.damage,
                       burningUntil:
                         bullet.burnDamagePerTick && bullet.burnDurationMs
-                          ? Date.now() + bullet.burnDurationMs
+                          ? nowHit + bullet.burnDurationMs
                           : e.burningUntil,
                       nextBurnTickAt:
                         bullet.burnDamagePerTick && bullet.burnTickMs
-                          ? Date.now() + bullet.burnTickMs
+                          ? nowHit + bullet.burnTickMs
                           : e.nextBurnTickAt,
                       burnDamagePerTick:
                         bullet.burnDamagePerTick ?? e.burnDamagePerTick,
@@ -2368,11 +2450,140 @@ function Enemy({
           />
         </group>
       )}
+      {/* Fire overlay when burning */}
+      {(enemy.burningUntil ?? 0) > Date.now() && (
+        <BurningOverlay size={enemySize} />
+      )}
+    </group>
+  );
+}
+
+function BurningOverlay({ size }: { size: number }) {
+  const ref = useRef<THREE.Group>(null);
+  const t = useRef(0);
+  useFrame((_, dt) => {
+    t.current += dt;
+    if (ref.current) {
+      ref.current.rotation.y = t.current * 3;
+    }
+  });
+  const firePoints = useMemo(() => {
+    const pts: { x: number; z: number; h: number }[] = [];
+    const xs = [-0.25, 0, 0.25, -0.15, 0.15, 0, -0.3, 0.3];
+    const zs = [0, -0.25, 0, 0.25, -0.15, 0.15, 0.1, -0.1];
+    const hs = [0.8, 1.1, 0.7, 1.0, 0.9, 1.2, 0.75, 0.85];
+    for (let i = 0; i < 8; i++) {
+      pts.push({ x: xs[i] * size, z: zs[i] * size, h: hs[i] * size });
+    }
+    return pts;
+  }, [size]);
+  return (
+    <group ref={ref} position={[0, 0, 0]}>
+      {firePoints.map((p, i) => (
+        <mesh key={i} position={[p.x, p.h * 0.5, p.z]}>
+          <coneGeometry args={[0.1 * size, p.h, 6]} />
+          <meshBasicMaterial
+            color={i % 3 === 0 ? "#ff6600" : i % 3 === 1 ? "#ff2200" : "#ffaa00"}
+            transparent
+            opacity={0.75}
+          />
+        </mesh>
+      ))}
+      <pointLight color="#ff4400" intensity={0.8} distance={3} />
     </group>
   );
 }
 
 // Bullet Component with comet tail effect
+function FlameBullet({ bullet }: { bullet: { id: string; position: [number, number, number]; direction: [number, number, number] } }) {
+  const ref = useRef<THREE.Group>(null);
+  const timeRef = useRef(0);
+  useFrame((_, dt) => {
+    timeRef.current += dt;
+    if (ref.current) {
+      ref.current.rotation.z = timeRef.current * 8;
+    }
+  });
+  const trailColors = ["#ff6600", "#ff4400", "#ffaa00", "#ff2200"];
+  return (
+    <group ref={ref} position={bullet.position}>
+      <mesh>
+        <sphereGeometry args={[0.14, 8, 8]} />
+        <meshBasicMaterial color="#ff6600" />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[0.22, 8, 8]} />
+        <meshBasicMaterial color="#ff9900" transparent opacity={0.35} />
+      </mesh>
+      {[0.18, 0.32, 0.46, 0.6].map((offset, i) => (
+        <mesh
+          key={i}
+          position={[
+            -bullet.direction[0] * offset,
+            -bullet.direction[1] * offset,
+            -bullet.direction[2] * offset,
+          ]}
+        >
+          <sphereGeometry args={[0.12 * (1 - i * 0.2), 6, 6]} />
+          <meshBasicMaterial color={trailColors[i]} transparent opacity={0.7 - i * 0.15} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function FirePuddle({ puddle }: { puddle: { id: string; position: [number, number, number]; createdAt: number; duration: number } }) {
+  const ref = useRef<THREE.Group>(null);
+  const timeRef = useRef(0);
+  useFrame((_, dt) => {
+    timeRef.current += dt;
+    if (ref.current) {
+      const age = (Date.now() - puddle.createdAt) / puddle.duration;
+      const flicker = 0.9 + Math.sin(timeRef.current * 14) * 0.1;
+      ref.current.scale.setScalar(flicker * (1 - age * 0.4));
+      ref.current.rotation.y = timeRef.current * 1.5;
+    }
+  });
+  const flames = useMemo(() => {
+    const pts: { x: number; z: number; s: number }[] = [];
+    const seed = [0.3, 0.7, 0.15, 0.55, 0.9, 0.42, 0.68, 0.22];
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const r = 0.4 + seed[i] * 0.6;
+      pts.push({ x: Math.cos(angle) * r, z: Math.sin(angle) * r, s: 0.15 + seed[i] * 0.15 });
+    }
+    return pts;
+  }, []);
+
+  return (
+    <group ref={ref} position={puddle.position}>
+      {/* Ground disc */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[1.2, 16]} />
+        <meshBasicMaterial color="#cc2200" transparent opacity={0.45} />
+      </mesh>
+      {/* Centre core flame */}
+      <mesh position={[0, 0.3, 0]}>
+        <sphereGeometry args={[0.28, 8, 8]} />
+        <meshBasicMaterial color="#ff6600" transparent opacity={0.9} />
+      </mesh>
+      <mesh position={[0, 0.55, 0]}>
+        <coneGeometry args={[0.22, 0.7, 8]} />
+        <meshBasicMaterial color="#ff9900" transparent opacity={0.75} />
+      </mesh>
+      {/* Scattered flames */}
+      {flames.map((f, i) => (
+        <group key={i} position={[f.x, 0.15, f.z]}>
+          <mesh position={[0, 0.2, 0]}>
+            <coneGeometry args={[f.s, 0.5, 6]} />
+            <meshBasicMaterial color={i % 2 === 0 ? "#ff5500" : "#ffaa00"} transparent opacity={0.7} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
 function Bullet({
   bullet,
 }: {
@@ -2380,8 +2591,13 @@ function Bullet({
     id: string;
     position: [number, number, number];
     direction: [number, number, number];
+    weaponId?: number;
   };
 }) {
+  if (bullet.weaponId === 6) {
+    return <FlameBullet bullet={bullet} />;
+  }
+
   const tailLength = 5;
   const tailSegments = useMemo(() => {
     const segments = [];
@@ -7058,6 +7274,7 @@ function HUD({
             grenadeProjectiles: [],
             explosions: [],
             enemyProjectiles: [],
+            firePuddles: [],
             story: {
               currentSettlement: 0,
               alliesRescued: 0,
@@ -7235,6 +7452,7 @@ function HUD({
         grenadeProjectiles: [],
         explosions: [],
         enemyProjectiles: [],
+        firePuddles: [],
         story: {
           currentSettlement: 0,
           alliesRescued: 0,
@@ -8918,6 +9136,7 @@ function HUD({
                   grenadeProjectiles: [],
                   explosions: [],
                   enemyProjectiles: [],
+                  firePuddles: [],
                   level: {
                     currentLevel: prev.level.currentLevel + 1,
                     killsThisLevel: 0,
@@ -9086,6 +9305,7 @@ function HUD({
                   grenadeProjectiles: [],
                   explosions: [],
                   enemyProjectiles: [],
+                  firePuddles: [],
                   lastDamageTime: 0,
                   story: {
                     currentSettlement: 0,
@@ -9174,6 +9394,7 @@ function HUD({
                   grenadeProjectiles: [],
                   explosions: [],
                   enemyProjectiles: [],
+                  firePuddles: [],
                   lastDamageTime: 0,
                   gameStartTime: null,
                   story: {
@@ -9326,6 +9547,7 @@ function HUD({
                   grenadeProjectiles: [],
                   explosions: [],
                   enemyProjectiles: [],
+                  firePuddles: [],
                   lastDamageTime: 0,
                   story: {
                     currentSettlement: 0,
@@ -9403,6 +9625,7 @@ function HUD({
                   grenadeProjectiles: [],
                   explosions: [],
                   enemyProjectiles: [],
+                  firePuddles: [],
                   lastDamageTime: 0,
                   story: {
                     currentSettlement: 0,
@@ -9558,6 +9781,7 @@ function HUD({
                   grenadeProjectiles: [],
                   explosions: [],
                   enemyProjectiles: [],
+                  firePuddles: [],
                   lastDamageTime: 0,
                   gameStartTime: null,
                   story: {
@@ -10068,6 +10292,7 @@ function Game() {
     grenadeProjectiles: [],
     explosions: [],
     enemyProjectiles: [],
+    firePuddles: [],
     pickups: [],
     walls: [],
     ramps: [],
@@ -10179,6 +10404,7 @@ function Game() {
             grenadeProjectiles: [],
             explosions: [],
             enemyProjectiles: [],
+            firePuddles: [],
             story: {
               currentSettlement: 0,
               alliesRescued: 0,
@@ -10435,6 +10661,10 @@ function Game() {
 
           {gameState.bullets.map((bullet) => (
             <Bullet key={bullet.id} bullet={bullet} />
+          ))}
+
+          {gameState.firePuddles.map((puddle) => (
+            <FirePuddle key={puddle.id} puddle={puddle} />
           ))}
 
           {gameState.grenadeProjectiles.map((grenade) => (
