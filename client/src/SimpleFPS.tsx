@@ -4472,10 +4472,7 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
                   </div>
                   <div>
                     <div style={{ fontWeight: "600" }}>
-                      {entry.username || `Player #${entry.user_id}`}
-                    </div>
-                    <div style={{ fontSize: "11px", color: "#888" }}>
-                      ID: {entry.user_id}
+                      {entry.username || "Unknown Player"}
                     </div>
                   </div>
                 </div>
@@ -6461,38 +6458,7 @@ function HUD({
       .catch((err) => console.error("Error saving leaderboard:", err));
   }, [gameState.gamePhase, gameState.gameStartTime, gameState.user.isGuest]);
 
-  // Save total kills to leaderboard after every level transition
-  const levelTransitionSavedRef = React.useRef<number>(-1);
-
-  useEffect(() => {
-    if (gameState.gamePhase !== "levelTransition") return;
-    if (gameState.adminLevelTestMode) return;
-    if (gameState.user.isGuest) return;
-
-    // Prevent duplicate saves for the same level
-    if (levelTransitionSavedRef.current === gameState.level.currentLevel)
-      return;
-    levelTransitionSavedRef.current = gameState.level.currentLevel;
-
-    const totalKills = gameState.story.totalKills;
-
-    fetch("/api/leaderboard", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ totalKills }),
-    })
-      .then((res) => {
-        if (res.ok) console.log(`Kills saved to leaderboard after level: ${totalKills}`);
-        else res.text().then((t) => console.error("Failed to save kills:", t));
-      })
-      .catch((err) => console.error("Error saving kills:", err));
-  }, [
-    gameState.gamePhase,
-    gameState.level.currentLevel,
-    gameState.story.totalKills,
-    gameState.user.isGuest,
-  ]);
+  // Kills leaderboard is only saved from endless mode (see endless death save below)
 
   // Save fastest time to localStorage when completing the whole game (victory)
   const fastestTimeSavedRef = React.useRef<number | null>(null);
