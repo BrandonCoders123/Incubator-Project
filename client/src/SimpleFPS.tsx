@@ -1970,20 +1970,77 @@ function Enemy({
         currentTime >= (enemy.nextBurnTickAt ?? 0) &&
         (enemy.burnDamagePerTick ?? 0) > 0
       ) {
-        setGameState((prev) => ({
-          ...prev,
-          enemies: prev.enemies
-            .map((e) =>
-              e.id === enemy.id
-                ? {
-                    ...e,
-                    health: e.health - (e.burnDamagePerTick ?? 0),
-                    nextBurnTickAt: currentTime + (e.burnTickMs ?? 400),
-                  }
-                : e,
-            )
-            .filter((e) => e.health > 0),
-        }));
+        setGameState((prev) => {
+          const burnDmg = enemy.burnDamagePerTick ?? 0;
+          const currentEnemy = prev.enemies.find((e) => e.id === enemy.id);
+          if (!currentEnemy) return prev;
+
+          const burnKilled = currentEnemy.health > 0 && currentEnemy.health - burnDmg <= 0;
+
+          if (!burnKilled) {
+            // Enemy survives this tick — just apply damage and schedule next tick
+            return {
+              ...prev,
+              enemies: prev.enemies.map((e) =>
+                e.id === enemy.id
+                  ? { ...e, health: e.health - burnDmg, nextBurnTickAt: currentTime + (e.burnTickMs ?? 400) }
+                  : e,
+              ),
+            };
+          }
+
+          // Enemy dies from burn — run full kill counting logic
+          const newKills = prev.story.totalKills + 1;
+          const newLevelKills = prev.level.killsThisLevel + 1;
+          const newCoins = prev.coins + 1;
+          const newSettlementIndex = Math.floor(newKills / 10);
+          const newAlliesRescued = Math.floor(newKills / 3);
+
+          let newSettlementsConquered = prev.story.settlementsConquered;
+          if (
+            newSettlementIndex > prev.story.currentSettlement &&
+            newSettlementIndex <= SETTLEMENTS.length
+          ) {
+            const settlementName = SETTLEMENTS[newSettlementIndex - 1];
+            if (!prev.story.settlementsConquered.includes(settlementName)) {
+              newSettlementsConquered = [...prev.story.settlementsConquered, settlementName];
+            }
+          }
+
+          const currentLevelData = LEVELS[prev.level.currentLevel];
+          const shouldLevelUp = currentLevelData && newLevelKills >= currentLevelData.killsRequired;
+          const nextLevel = prev.level.currentLevel + 1;
+          const hasNextLevel = nextLevel < LEVELS.length;
+          const completedFinalLevel = shouldLevelUp && !hasNextLevel;
+          const isEndless = prev.gameMode === "endless";
+
+          let nextPhase = prev.gamePhase;
+          if (completedFinalLevel && !isEndless) {
+            nextPhase = "victory";
+          } else if (completedFinalLevel && isEndless) {
+            nextPhase = prev.gamePhase;
+          } else if (shouldLevelUp && hasNextLevel) {
+            nextPhase = "levelTransition";
+          }
+
+          return {
+            ...prev,
+            coins: newCoins,
+            enemies: prev.enemies.filter((e) => e.id !== enemy.id),
+            story: {
+              currentSettlement: Math.min(newSettlementIndex, SETTLEMENTS.length - 1),
+              alliesRescued: newAlliesRescued,
+              settlementsConquered: newSettlementsConquered,
+              totalKills: newKills,
+            },
+            level: {
+              currentLevel: prev.level.currentLevel,
+              killsThisLevel: completedFinalLevel && isEndless ? 0 : newLevelKills,
+              giantsSpawnedThisLevel: prev.level.giantsSpawnedThisLevel,
+            },
+            gamePhase: nextPhase,
+          };
+        });
       }
 
       // Fire puddle — ignite enemy if standing in one
