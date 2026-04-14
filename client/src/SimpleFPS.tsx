@@ -130,6 +130,11 @@ function getFullReserveByWeapon(): Record<number, number> {
   ) as Record<number, number>;
 }
 
+// Monotonically increasing counter for bullet IDs — prevents duplicate keys
+// when high-fire-rate weapons fire multiple bullets in the same millisecond.
+let _bulletCounter = 0;
+const newBulletId = () => `b_${++_bulletCounter}`;
+
 // Story elements
 const SETTLEMENTS = [
   "Bun Valley Outpost",
@@ -1148,7 +1153,7 @@ function Player({
                 spreadDir.normalize();
 
                 newBullets.push({
-                  id: `bullet_${Date.now()}_${i}`,
+                  id: newBulletId(),
                   position: [bulletPos.x, bulletPos.y, bulletPos.z],
                   direction: [spreadDir.x, spreadDir.y, spreadDir.z],
                   damage: currentWeapon.damage + gameStateRef.current.augmentLevels.weaponDamage * 5,
@@ -1161,7 +1166,7 @@ function Player({
             } else {
               // Regular single bullet
               newBullets.push({
-                id: `bullet_${Date.now()}`,
+                id: newBulletId(),
                 position: [bulletPos.x, bulletPos.y, bulletPos.z],
                 direction: [baseDirection.x, baseDirection.y, baseDirection.z],
                 damage: currentWeapon.damage + gameStateRef.current.augmentLevels.weaponDamage * 5,
@@ -1331,7 +1336,7 @@ function Player({
           bullets: [
             ...prev.bullets,
             {
-              id: `bullet_${Date.now()}`,
+              id: newBulletId(),
               position: [bulletPos.x, bulletPos.y, bulletPos.z],
               direction: [direction.x, direction.y, direction.z],
               damage: currentWeapon.damage + gameState.augmentLevels.weaponDamage * 5,
