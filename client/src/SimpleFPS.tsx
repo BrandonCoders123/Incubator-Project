@@ -135,6 +135,21 @@ function getFullReserveByWeapon(): Record<number, number> {
 let _bulletCounter = 0;
 const newBulletId = () => `b_${++_bulletCounter}`;
 
+// Shared input style used in the payment modal form
+const inputStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  marginTop: "5px",
+  padding: "9px 11px",
+  borderRadius: "7px",
+  border: "1px solid #444",
+  background: "#0f1a30",
+  color: "white",
+  fontSize: "14px",
+  boxSizing: "border-box",
+  fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+};
+
 // Story elements
 const SETTLEMENTS = [
   "Bun Valley Outpost",
@@ -6400,6 +6415,12 @@ function HUD({
   const [payCardNumber, setPayCardNumber] = useState("");
   const [payExpiry, setPayExpiry] = useState("");
   const [payCVC, setPayCVC] = useState("");
+  const [payFirstName, setPayFirstName] = useState("");
+  const [payLastName, setPayLastName] = useState("");
+  const [payAddress, setPayAddress] = useState("");
+  const [payCity, setPayCity] = useState("");
+  const [payState, setPayState] = useState("");
+  const [payZip, setPayZip] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [ownedItemIds, setOwnedItemIds] = useState<number[]>([]);
@@ -6710,6 +6731,12 @@ function HUD({
     setPayCardNumber("");
     setPayExpiry("");
     setPayCVC("");
+    setPayFirstName("");
+    setPayLastName("");
+    setPayAddress("");
+    setPayCity("");
+    setPayState("");
+    setPayZip("");
     setPaymentError("");
   };
 
@@ -6731,6 +6758,15 @@ function HUD({
     if (!paymentModal) return;
     setPaymentError("");
 
+    if (!payFirstName.trim()) { setPaymentError("First name is required."); return; }
+    if (!payLastName.trim()) { setPaymentError("Last name is required."); return; }
+    if (!payAddress.trim()) { setPaymentError("Address is required."); return; }
+    if (!payCity.trim()) { setPaymentError("City is required."); return; }
+    if (!payState.trim()) { setPaymentError("State is required."); return; }
+    if (!/^\d{5}(-\d{4})?$/.test(payZip.trim())) {
+      setPaymentError("ZIP code must be 5 digits (or ZIP+4 format).");
+      return;
+    }
     const rawCard = payCardNumber.replace(/\s/g, "");
     if (rawCard.length !== 16) {
       setPaymentError("Card number must be 16 digits.");
@@ -6752,6 +6788,12 @@ function HUD({
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          firstName: payFirstName.trim(),
+          lastName: payLastName.trim(),
+          address: payAddress.trim(),
+          city: payCity.trim(),
+          state: payState.trim(),
+          zip: payZip.trim(),
           cardNumber: rawCard,
           cardExpiry: payExpiry,
           cardCVC: payCVC,
@@ -8036,35 +8078,29 @@ function HUD({
                 background: "#1a1a2e",
                 border: "1px solid #333",
                 borderRadius: "14px",
-                padding: "32px",
+                padding: "28px 32px",
                 width: "100%",
-                maxWidth: "420px",
+                maxWidth: "460px",
+                maxHeight: "90vh",
+                overflowY: "auto",
                 color: "white",
                 fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
                 boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
               }}
             >
-              <h2 style={{ margin: "0 0 6px 0", fontSize: "22px" }}>
+              <h2 style={{ margin: "0 0 4px 0", fontSize: "22px" }}>
                 💳 Purchase Gold
               </h2>
-              <p
-                style={{
-                  margin: "0 0 20px 0",
-                  color: "#aaa",
-                  fontSize: "14px",
-                }}
-              >
+              <p style={{ margin: "0 0 16px 0", color: "#aaa", fontSize: "14px" }}>
                 {paymentModal.gold.toLocaleString()} 💰 for{" "}
-                <strong style={{ color: "#f39c12" }}>
-                  {paymentModal.price}
-                </strong>
+                <strong style={{ color: "#f39c12" }}>{paymentModal.price}</strong>
               </p>
               <p
                 style={{
                   margin: "0 0 20px 0",
-                  padding: "10px",
+                  padding: "9px 12px",
                   borderRadius: "8px",
-                  background: "rgba(255,193,7,0.15)",
+                  background: "rgba(255,193,7,0.12)",
                   border: "1px solid rgba(255,193,7,0.3)",
                   color: "#ffc107",
                   fontSize: "12px",
@@ -8073,82 +8109,109 @@ function HUD({
               >
                 ⚠️ Test mode — no real charges will be made
               </p>
-              <label style={{ display: "block", marginBottom: "14px" }}>
-                <span style={{ fontSize: "13px", color: "#aaa" }}>
-                  Card Number
-                </span>
+
+              {/* Billing Information */}
+              <div style={{ fontSize: "11px", color: "#e8a020", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "12px", fontWeight: "700" }}>
+                Billing Information
+              </div>
+              <div style={{ display: "flex", gap: "12px", marginBottom: "12px" }}>
+                {([
+                  { label: "First Name", placeholder: "Jane", value: payFirstName, set: setPayFirstName },
+                  { label: "Last Name", placeholder: "Smith", value: payLastName, set: setPayLastName },
+                ] as const).map((f) => (
+                  <label key={f.label} style={{ flex: 1 }}>
+                    <span style={{ fontSize: "12px", color: "#aaa" }}>{f.label} <span style={{ color: "#e74c3c" }}>*</span></span>
+                    <input
+                      type="text"
+                      placeholder={f.placeholder}
+                      value={f.value}
+                      onChange={(e) => (f.set as (v: string) => void)(e.target.value)}
+                      style={inputStyle}
+                    />
+                  </label>
+                ))}
+              </div>
+              <label style={{ display: "block", marginBottom: "12px" }}>
+                <span style={{ fontSize: "12px", color: "#aaa" }}>Street Address <span style={{ color: "#e74c3c" }}>*</span></span>
+                <input
+                  type="text"
+                  placeholder="123 Hotdog Lane"
+                  value={payAddress}
+                  onChange={(e) => setPayAddress(e.target.value)}
+                  style={inputStyle}
+                />
+              </label>
+              <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+                <label style={{ flex: 2 }}>
+                  <span style={{ fontSize: "12px", color: "#aaa" }}>City <span style={{ color: "#e74c3c" }}>*</span></span>
+                  <input
+                    type="text"
+                    placeholder="Springfield"
+                    value={payCity}
+                    onChange={(e) => setPayCity(e.target.value)}
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={{ flex: 1 }}>
+                  <span style={{ fontSize: "12px", color: "#aaa" }}>State <span style={{ color: "#e74c3c" }}>*</span></span>
+                  <input
+                    type="text"
+                    placeholder="IL"
+                    value={payState}
+                    onChange={(e) => setPayState(e.target.value.toUpperCase().slice(0, 2))}
+                    maxLength={2}
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={{ flex: 1 }}>
+                  <span style={{ fontSize: "12px", color: "#aaa" }}>ZIP <span style={{ color: "#e74c3c" }}>*</span></span>
+                  <input
+                    type="text"
+                    placeholder="62701"
+                    value={payZip}
+                    onChange={(e) => setPayZip(e.target.value.replace(/[^\d-]/g, "").slice(0, 10))}
+                    maxLength={10}
+                    style={inputStyle}
+                  />
+                </label>
+              </div>
+
+              {/* Card Information */}
+              <div style={{ fontSize: "11px", color: "#e8a020", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "12px", fontWeight: "700" }}>
+                Card Details
+              </div>
+              <label style={{ display: "block", marginBottom: "12px" }}>
+                <span style={{ fontSize: "12px", color: "#aaa" }}>Card Number <span style={{ color: "#e74c3c" }}>*</span></span>
                 <input
                   type="text"
                   placeholder="1234 5678 9012 3456"
                   value={payCardNumber}
-                  onChange={(e) =>
-                    setPayCardNumber(formatCardNumber(e.target.value))
-                  }
+                  onChange={(e) => setPayCardNumber(formatCardNumber(e.target.value))}
                   maxLength={19}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    marginTop: "6px",
-                    padding: "10px 12px",
-                    borderRadius: "7px",
-                    border: "1px solid #444",
-                    background: "#0f1a30",
-                    color: "white",
-                    fontSize: "16px",
-                    letterSpacing: "2px",
-                    boxSizing: "border-box",
-                  }}
+                  style={{ ...inputStyle, fontSize: "16px", letterSpacing: "2px" }}
                 />
               </label>
-              <div
-                style={{ display: "flex", gap: "12px", marginBottom: "14px" }}
-              >
+              <div style={{ display: "flex", gap: "12px", marginBottom: "14px" }}>
                 <label style={{ flex: 1 }}>
-                  <span style={{ fontSize: "13px", color: "#aaa" }}>
-                    Expiry (MM/YY)
-                  </span>
+                  <span style={{ fontSize: "12px", color: "#aaa" }}>Expiry (MM/YY) <span style={{ color: "#e74c3c" }}>*</span></span>
                   <input
                     type="text"
                     placeholder="MM/YY"
                     value={payExpiry}
                     onChange={(e) => setPayExpiry(formatExpiry(e.target.value))}
                     maxLength={5}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      marginTop: "6px",
-                      padding: "10px 12px",
-                      borderRadius: "7px",
-                      border: "1px solid #444",
-                      background: "#0f1a30",
-                      color: "white",
-                      fontSize: "15px",
-                      boxSizing: "border-box",
-                    }}
+                    style={inputStyle}
                   />
                 </label>
                 <label style={{ flex: 1 }}>
-                  <span style={{ fontSize: "13px", color: "#aaa" }}>CVC</span>
+                  <span style={{ fontSize: "12px", color: "#aaa" }}>CVC <span style={{ color: "#e74c3c" }}>*</span></span>
                   <input
                     type="text"
                     placeholder="123"
                     value={payCVC}
-                    onChange={(e) =>
-                      setPayCVC(e.target.value.replace(/\D/g, "").slice(0, 4))
-                    }
+                    onChange={(e) => setPayCVC(e.target.value.replace(/\D/g, "").slice(0, 4))}
                     maxLength={4}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      marginTop: "6px",
-                      padding: "10px 12px",
-                      borderRadius: "7px",
-                      border: "1px solid #444",
-                      background: "#0f1a30",
-                      color: "white",
-                      fontSize: "15px",
-                      boxSizing: "border-box",
-                    }}
+                    style={inputStyle}
                   />
                 </label>
               </div>
