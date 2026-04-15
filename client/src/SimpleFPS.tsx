@@ -8116,8 +8116,8 @@ function HUD({
               </div>
               <div style={{ display: "flex", gap: "12px", marginBottom: "12px" }}>
                 {([
-                  { label: "First Name", placeholder: "Jane", value: payFirstName, set: setPayFirstName },
-                  { label: "Last Name", placeholder: "Smith", value: payLastName, set: setPayLastName },
+                  { label: "First Name", placeholder: "", value: payFirstName, set: setPayFirstName },
+                  { label: "Last Name", placeholder: "", value: payLastName, set: setPayLastName },
                 ] as const).map((f) => (
                   <label key={f.label} style={{ flex: 1 }}>
                     <span style={{ fontSize: "12px", color: "#aaa" }}>{f.label} <span style={{ color: "#e74c3c" }}>*</span></span>
