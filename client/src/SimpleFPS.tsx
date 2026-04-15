@@ -6390,12 +6390,36 @@ function MenuButton({
 }
 
 // HUD Component
+interface SavedRunStateProps {
+  storyModeLevel: number;
+  endlessModeLevel: number;
+  storyDifficulty: string | null;
+  savedHealth: number | null;
+  savedCoins: number | null;
+  savedWeapons: {
+    currentWeapon: number;
+    ammo: number;
+    reserveAmmo: number;
+    unlockedWeapons: number[];
+  } | null;
+  savedGameMode: string | null;
+  augments: Record<string, number>;
+}
+
 function HUD({
   gameState,
   setGameState,
+  savedRunState,
+  setSavedRunState,
+  continueModalMode,
+  setContinueModalMode,
 }: {
   gameState: GameState;
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
+  savedRunState: SavedRunStateProps | null;
+  setSavedRunState: React.Dispatch<React.SetStateAction<SavedRunStateProps | null>>;
+  continueModalMode: "story" | "endless" | null;
+  setContinueModalMode: React.Dispatch<React.SetStateAction<"story" | "endless" | null>>;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -6682,6 +6706,7 @@ function HUD({
       method: "DELETE",
       credentials: "include",
     }).catch((err) => console.error("Failed to reset run state:", err));
+    setSavedRunState(null);
   }, [
     gameState.gamePhase,
     gameState.gameStartTime,
@@ -7028,6 +7053,27 @@ function HUD({
                     } catch (e) {
                       console.error("Failed to load settings:", e);
                     }
+
+                    // Fetch saved run state for Continue / New Game prompt
+                    setSavedRunState(null);
+                    try {
+                      const runRes = await fetch("/api/run/state", { credentials: "include" });
+                      if (runRes.ok) {
+                        const runData = await runRes.json();
+                        if (runData.savedGameMode) {
+                          setSavedRunState({
+                            storyModeLevel: runData.storyModeLevel ?? 1,
+                            endlessModeLevel: runData.endlessModeLevel ?? 1,
+                            storyDifficulty: runData.storyDifficulty ?? null,
+                            savedHealth: runData.savedHealth ?? null,
+                            savedCoins: runData.savedCoins ?? null,
+                            savedWeapons: runData.savedWeapons ?? null,
+                            savedGameMode: runData.savedGameMode ?? null,
+                            augments: runData.augments ?? {},
+                          });
+                        }
+                      }
+                    } catch (_) {}
                   } else {
                     const error = await response.json();
                     if (error.banned) {
@@ -7231,6 +7277,7 @@ function HUD({
 
                   if (response.ok) {
                     // Auto-login after successful registration
+                    setSavedRunState(null);
                     setGameState((prev) => ({
                       ...prev,
                       gamePhase: "menu",
@@ -7331,48 +7378,56 @@ function HUD({
         label: "Story Mode",
         onClick: () => {
           playClick();
-          setGameState((prev) => ({
-            ...prev,
-            gamePhase: "difficultySelect",
-          }));
+          if (savedRunState && savedRunState.savedGameMode === "story") {
+            setContinueModalMode("story");
+          } else {
+            setGameState((prev) => ({
+              ...prev,
+              gamePhase: "difficultySelect",
+            }));
+          }
         },
       },
       {
         label: "Endless Wave",
         onClick: () => {
           playClick();
-          setGameState((prev) => ({
-            ...prev,
-            gamePhase: "playing",
-            gameMode: "endless",
-            gameStartTime: Date.now(),
-            health: prev.maxHealth,
-            ammo: weapons[1].maxAmmo,
-            reserveAmmo: getStartingReserveAmmo(1),
-            grenades: 3,
-            maxGrenades: 6,
-            coins: 0,
-            enemies: [],
-            bullets: [],
-            grenadeProjectiles: [],
-            explosions: [],
-            enemyProjectiles: [],
-            firePuddles: [],
-            story: {
-              currentSettlement: 0,
-              alliesRescued: 0,
-              settlementsConquered: [],
-              totalKills: 0,
-            },
-            sessionShotsFired: 0,
-            sessionShotsHit: 0,
-            level: {
-              currentLevel: 1,
-              killsThisLevel: 0,
-              giantsSpawnedThisLevel: 0,
-            },
-          }));
-          document.body.requestPointerLock();
+          if (savedRunState && savedRunState.savedGameMode === "endless") {
+            setContinueModalMode("endless");
+          } else {
+            setGameState((prev) => ({
+              ...prev,
+              gamePhase: "playing",
+              gameMode: "endless",
+              gameStartTime: Date.now(),
+              health: prev.maxHealth,
+              ammo: weapons[1].maxAmmo,
+              reserveAmmo: getStartingReserveAmmo(1),
+              grenades: 3,
+              maxGrenades: 6,
+              coins: 0,
+              enemies: [],
+              bullets: [],
+              grenadeProjectiles: [],
+              explosions: [],
+              enemyProjectiles: [],
+              firePuddles: [],
+              story: {
+                currentSettlement: 0,
+                alliesRescued: 0,
+                settlementsConquered: [],
+                totalKills: 0,
+              },
+              sessionShotsFired: 0,
+              sessionShotsHit: 0,
+              level: {
+                currentLevel: 1,
+                killsThisLevel: 0,
+                giantsSpawnedThisLevel: 0,
+              },
+            }));
+            document.body.requestPointerLock();
+          }
         },
       },
       {
@@ -7512,6 +7567,248 @@ function HUD({
             ))}
           </nav>
         </div>
+
+        {/* Continue / New Game modal */}
+        {continueModalMode && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.82)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 2000,
+              fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+            }}
+          >
+            <div
+              style={{
+                background: "rgba(14,9,4,0.97)",
+                border: "1px solid rgba(232,160,32,0.4)",
+                padding: "40px 48px",
+                maxWidth: "420px",
+                width: "90vw",
+                textAlign: "center",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.9)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "11px",
+                  color: "#c8a84b",
+                  letterSpacing: "3px",
+                  textTransform: "uppercase",
+                  marginBottom: "8px",
+                }}
+              >
+                {continueModalMode === "story" ? "Story Mode" : "Endless Wave"}
+              </div>
+              <h2
+                style={{
+                  fontSize: "26px",
+                  fontWeight: "700",
+                  color: "#e8a020",
+                  letterSpacing: "3px",
+                  textTransform: "uppercase",
+                  marginBottom: "12px",
+                }}
+              >
+                Saved Run Found
+              </h2>
+              {savedRunState && (
+                <div
+                  style={{
+                    fontSize: "13px",
+                    color: "rgba(200,168,75,0.8)",
+                    marginBottom: "24px",
+                    lineHeight: "1.6",
+                  }}
+                >
+                  {continueModalMode === "story" && (
+                    <>
+                      Level {savedRunState.storyModeLevel} &nbsp;·&nbsp;{" "}
+                      {savedRunState.storyDifficulty
+                        ? savedRunState.storyDifficulty.charAt(0).toUpperCase() +
+                          savedRunState.storyDifficulty.slice(1)
+                        : "Normal"}{" "}
+                      difficulty
+                      <br />
+                      HP: {savedRunState.savedHealth ?? "?"} &nbsp;·&nbsp; Coins:{" "}
+                      {savedRunState.savedCoins ?? "?"}
+                    </>
+                  )}
+                  {continueModalMode === "endless" && (
+                    <>
+                      Wave {savedRunState.endlessModeLevel}
+                      <br />
+                      HP: {savedRunState.savedHealth ?? "?"} &nbsp;·&nbsp; Coins:{" "}
+                      {savedRunState.savedCoins ?? "?"}
+                    </>
+                  )}
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <button
+                  onClick={() => {
+                    if (!savedRunState) return;
+                    setContinueModalMode(null);
+                    const sw = savedRunState.savedWeapons;
+                    setGameState((prev) => ({
+                      ...prev,
+                      gamePhase: "playing",
+                      gameMode: continueModalMode,
+                      gameStartTime: Date.now(),
+                      health: savedRunState.savedHealth ?? prev.maxHealth,
+                      coins: savedRunState.savedCoins ?? 0,
+                      ammo: sw ? sw.ammo : weapons[1].maxAmmo,
+                      reserveAmmo: sw ? sw.reserveAmmo : getStartingReserveAmmo(1),
+                      currentWeapon: sw ? sw.currentWeapon : 1,
+                      unlockedWeapons: sw ? sw.unlockedWeapons : prev.unlockedWeapons,
+                      difficulty:
+                        continueModalMode === "story" && savedRunState.storyDifficulty
+                          ? (savedRunState.storyDifficulty as "normal" | "hard" | "extreme")
+                          : prev.difficulty,
+                      augmentLevels: {
+                        weaponDamage: savedRunState.augments.weaponDamage ?? 0,
+                        weaponFireRate: savedRunState.augments.weaponFireRate ?? 0,
+                        weaponReloadSpeed: savedRunState.augments.weaponReloadSpeed ?? 0,
+                        weaponSpreadControl: savedRunState.augments.weaponSpreadControl ?? 0,
+                        userMaxHealth: savedRunState.augments.userMaxHealth ?? 0,
+                        userMoveSpeed: savedRunState.augments.userMoveSpeed ?? 0,
+                        userRegen: savedRunState.augments.userRegen ?? 0,
+                        userDamageResist: savedRunState.augments.userDamageResist ?? 0,
+                      },
+                      level: {
+                        currentLevel:
+                          continueModalMode === "story"
+                            ? savedRunState.storyModeLevel
+                            : savedRunState.endlessModeLevel,
+                        killsThisLevel: 0,
+                        giantsSpawnedThisLevel: 0,
+                      },
+                      grenades: 3,
+                      maxGrenades: 6,
+                      enemies: [],
+                      bullets: [],
+                      grenadeProjectiles: [],
+                      explosions: [],
+                      enemyProjectiles: [],
+                      firePuddles: [],
+                      story: {
+                        currentSettlement: 0,
+                        alliesRescued: 0,
+                        settlementsConquered: [],
+                        totalKills: 0,
+                      },
+                      sessionShotsFired: 0,
+                      sessionShotsHit: 0,
+                    }));
+                    document.body.requestPointerLock();
+                  }}
+                  style={{
+                    padding: "14px 30px",
+                    fontSize: "15px",
+                    fontWeight: "700",
+                    background: "rgba(232,160,32,0.9)",
+                    color: "#0d0a05",
+                    border: "none",
+                    cursor: "pointer",
+                    letterSpacing: "2px",
+                    textTransform: "uppercase",
+                    fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                    width: "100%",
+                  }}
+                >
+                  Continue
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await fetch("/api/run/reset", {
+                        method: "DELETE",
+                        credentials: "include",
+                      });
+                    } catch (err) {
+                      console.error("Failed to reset run:", err);
+                    }
+                    setSavedRunState(null);
+                    setContinueModalMode(null);
+                    if (continueModalMode === "story") {
+                      setGameState((prev) => ({ ...prev, gamePhase: "difficultySelect" }));
+                    } else {
+                      setGameState((prev) => ({
+                        ...prev,
+                        gamePhase: "playing",
+                        gameMode: "endless",
+                        gameStartTime: Date.now(),
+                        health: prev.maxHealth,
+                        ammo: weapons[1].maxAmmo,
+                        reserveAmmo: getStartingReserveAmmo(1),
+                        grenades: 3,
+                        maxGrenades: 6,
+                        coins: 0,
+                        enemies: [],
+                        bullets: [],
+                        grenadeProjectiles: [],
+                        explosions: [],
+                        enemyProjectiles: [],
+                        firePuddles: [],
+                        story: {
+                          currentSettlement: 0,
+                          alliesRescued: 0,
+                          settlementsConquered: [],
+                          totalKills: 0,
+                        },
+                        sessionShotsFired: 0,
+                        sessionShotsHit: 0,
+                        level: {
+                          currentLevel: 1,
+                          killsThisLevel: 0,
+                          giantsSpawnedThisLevel: 0,
+                        },
+                      }));
+                      document.body.requestPointerLock();
+                    }
+                  }}
+                  style={{
+                    padding: "12px 30px",
+                    fontSize: "13px",
+                    fontWeight: "500",
+                    background: "transparent",
+                    color: "rgba(200,140,80,0.8)",
+                    border: "1px solid rgba(200,100,60,0.3)",
+                    cursor: "pointer",
+                    letterSpacing: "1px",
+                    textTransform: "uppercase",
+                    fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                    width: "100%",
+                  }}
+                >
+                  New Game (replaces saved run)
+                </button>
+                <button
+                  onClick={() => setContinueModalMode(null)}
+                  style={{
+                    padding: "10px 30px",
+                    fontSize: "12px",
+                    fontWeight: "400",
+                    background: "transparent",
+                    color: "rgba(180,160,140,0.55)",
+                    border: "1px solid rgba(180,160,140,0.15)",
+                    cursor: "pointer",
+                    letterSpacing: "1px",
+                    textTransform: "uppercase",
+                    fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                    width: "100%",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -9870,7 +10167,47 @@ function HUD({
               SETTINGS
             </button>
             <button
-              onClick={() => {
+              onClick={async () => {
+                if (!gameState.user.isGuest) {
+                  const savedWeapons = {
+                    currentWeapon: gameState.currentWeapon,
+                    ammo: gameState.ammo,
+                    reserveAmmo: gameState.reserveAmmo,
+                    unlockedWeapons: gameState.unlockedWeapons,
+                  };
+                  const storyModeLevel = gameState.gameMode === "story" ? gameState.level.currentLevel : 1;
+                  const endlessModeLevel = gameState.gameMode === "endless" ? gameState.level.currentLevel : 1;
+                  const snapshot: SavedRunStateProps = {
+                    storyModeLevel,
+                    endlessModeLevel,
+                    storyDifficulty: gameState.gameMode === "story" ? gameState.difficulty : null,
+                    savedHealth: gameState.health,
+                    savedCoins: gameState.coins,
+                    savedWeapons,
+                    savedGameMode: gameState.gameMode,
+                    augments: gameState.augmentLevels,
+                  };
+                  try {
+                    await fetch("/api/run/state", {
+                      method: "POST",
+                      credentials: "include",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        storyModeLevel,
+                        endlessModeLevel,
+                        augments: gameState.augmentLevels,
+                        storyDifficulty: snapshot.storyDifficulty,
+                        savedHealth: gameState.health,
+                        savedCoins: gameState.coins,
+                        savedWeapons,
+                        savedGameMode: gameState.gameMode,
+                      }),
+                    });
+                    setSavedRunState(snapshot);
+                  } catch (err) {
+                    console.error("Failed to save run state on exit:", err);
+                  }
+                }
                 setGameState((prev) => ({
                   ...prev,
                   gamePhase: "menu",
@@ -10459,6 +10796,10 @@ function Game() {
 
   // On mount, check if the user already has an active session
   const [sessionChecking, setSessionChecking] = useState(true);
+
+  const [savedRunState, setSavedRunState] = useState<SavedRunStateProps | null>(null);
+  const [continueModalMode, setContinueModalMode] = useState<"story" | "endless" | null>(null);
+
   useEffect(() => {
     const { setKeybinding, setNormalSensitivity } = useSettings.getState();
     fetch("/api/session", { credentials: "include" })
@@ -10549,6 +10890,26 @@ function Game() {
               setKeybinding("grenade", s.grenade_key || "KeyQ");
               const sens = parseFloat(s.mouse_sensitivity);
               setNormalSensitivity(isNaN(sens) ? 1 : sens);
+            }
+          } catch (_) {}
+
+          // Fetch saved run state for Continue / New Game prompt
+          try {
+            const runRes = await fetch("/api/run/state", { credentials: "include" });
+            if (runRes.ok) {
+              const runData = await runRes.json();
+              if (runData.savedGameMode) {
+                setSavedRunState({
+                  storyModeLevel: runData.storyModeLevel ?? 1,
+                  endlessModeLevel: runData.endlessModeLevel ?? 1,
+                  storyDifficulty: runData.storyDifficulty ?? null,
+                  savedHealth: runData.savedHealth ?? null,
+                  savedCoins: runData.savedCoins ?? null,
+                  savedWeapons: runData.savedWeapons ?? null,
+                  savedGameMode: runData.savedGameMode ?? null,
+                  augments: runData.augments ?? {},
+                });
+              }
             }
           } catch (_) {}
         }
@@ -10725,7 +11086,16 @@ function Game() {
     gameState.gamePhase !== "paused" &&
     gameState.gamePhase !== "levelTransition"
   ) {
-    return <HUD gameState={gameState} setGameState={setGameState} />;
+    return (
+      <HUD
+        gameState={gameState}
+        setGameState={setGameState}
+        savedRunState={savedRunState}
+        setSavedRunState={setSavedRunState}
+        continueModalMode={continueModalMode}
+        setContinueModalMode={setContinueModalMode}
+      />
+    );
   }
 
   return (
@@ -10792,7 +11162,14 @@ function Game() {
         </Suspense>
       </Canvas>
 
-      <HUD gameState={gameState} setGameState={setGameState} />
+      <HUD
+        gameState={gameState}
+        setGameState={setGameState}
+        savedRunState={savedRunState}
+        setSavedRunState={setSavedRunState}
+        continueModalMode={continueModalMode}
+        setContinueModalMode={setContinueModalMode}
+      />
     </>
   );
 }
