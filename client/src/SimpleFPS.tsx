@@ -7566,6 +7566,36 @@ function HUD({
               />
             ))}
           </nav>
+
+          {/* Log Out — separated from nav items */}
+          <button
+            onClick={async () => {
+              playClick();
+              await fetch("/api/logout", { method: "POST" });
+              setGameState((prev) => ({ ...prev, gamePhase: "login" }));
+            }}
+            onMouseEnter={playHover}
+            style={{
+              marginTop: "18px",
+              background: "none",
+              border: "none",
+              borderTop: "1px solid rgba(180,100,60,0.25)",
+              paddingTop: "14px",
+              color: "rgba(180,130,100,0.7)",
+              fontSize: "13px",
+              fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+              letterSpacing: "1.5px",
+              textTransform: "uppercase",
+              cursor: "pointer",
+              textAlign: "left",
+              width: "100%",
+              transition: "color 0.12s ease",
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.color = "rgba(230,160,100,1)")}
+            onMouseOut={(e) => (e.currentTarget.style.color = "rgba(180,130,100,0.7)")}
+          >
+            ⇠ Log Out
+          </button>
         </div>
 
         {/* Continue / New Game modal */}
