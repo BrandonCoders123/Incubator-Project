@@ -538,18 +538,18 @@ export default function AdminPanel() {
 
             {showAddItem && (
               <div style={{ background: "#16213e", padding: "20px", borderRadius: "10px", marginBottom: "15px" }}>
-                <h3 style={{ marginTop: 0 }}>Add New Item</h3>
-                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <h3 style={{ marginTop: 0, color: "#e0e0e0" }}>Add New Item</h3>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
                   <input
                     placeholder="Item Name"
                     value={newItem.name}
                     onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                    style={{ padding: "8px", borderRadius: "5px", border: "none" }}
+                    style={{ padding: "8px 10px", borderRadius: "5px", border: "1px solid #2a3a5e", background: "#0f1928", color: "#e0e0e0" }}
                   />
                   <select
                     value={newItem.type}
                     onChange={(e) => setNewItem({ ...newItem, type: e.target.value })}
-                    style={{ padding: "8px", borderRadius: "5px", border: "none" }}
+                    style={{ padding: "8px 10px", borderRadius: "5px", border: "1px solid #2a3a5e", background: "#0f1928", color: "#e0e0e0" }}
                   >
                     <option value="weapon_skin">Weapon Skin</option>
                     <option value="powerup">Powerup</option>
@@ -560,9 +560,9 @@ export default function AdminPanel() {
                     placeholder="Price"
                     value={newItem.price}
                     onChange={(e) => setNewItem({ ...newItem, price: parseInt(e.target.value) || 0 })}
-                    style={{ padding: "8px", borderRadius: "5px", border: "none", width: "80px" }}
+                    style={{ padding: "8px 10px", borderRadius: "5px", border: "1px solid #2a3a5e", background: "#0f1928", color: "#e0e0e0", width: "90px" }}
                   />
-                  <label style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "5px", color: "#e0e0e0" }}>
                     <input
                       type="checkbox"
                       checked={newItem.isCosmetic}
@@ -743,8 +743,18 @@ export default function AdminPanel() {
                         innerRadius={55}
                         outerRadius={85}
                         paddingAngle={3}
-                        label={({ gold, purchases }) => `${Number(gold).toLocaleString()}🪙 (${purchases})`}
-                        labelLine={{ stroke: "#555" }}
+                        label={({ cx, cy, midAngle, outerRadius, gold, purchases }: any) => {
+                          const RADIAN = Math.PI / 180;
+                          const radius = outerRadius + 34;
+                          const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                          const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                          return (
+                            <text x={x} y={y} fill="#e8e8e8" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={500}>
+                              {`${Number(gold).toLocaleString()}🪙 (${purchases})`}
+                            </text>
+                          );
+                        }}
+                        labelLine={{ stroke: "#8899bb" }}
                       >
                         {tierBreakdown.map((_entry, index) => (
                           <Cell key={index} fill={["#f0c040", "#4CAF50", "#5b9bd5", "#e67e22", "#9b59b6"][index % 5]} />

@@ -21,6 +21,12 @@ export async function initAugmentTables(): Promise<void> {
     );
   `);
 
+  await pool.query(`ALTER TABLE player_run_state ADD COLUMN IF NOT EXISTS story_difficulty VARCHAR(16)`);
+  await pool.query(`ALTER TABLE player_run_state ADD COLUMN IF NOT EXISTS saved_health INTEGER`);
+  await pool.query(`ALTER TABLE player_run_state ADD COLUMN IF NOT EXISTS saved_coins INTEGER`);
+  await pool.query(`ALTER TABLE player_run_state ADD COLUMN IF NOT EXISTS saved_weapons JSONB`);
+  await pool.query(`ALTER TABLE player_run_state ADD COLUMN IF NOT EXISTS saved_game_mode VARCHAR(16)`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS player_augments (
       id           SERIAL PRIMARY KEY,
@@ -54,10 +60,22 @@ export type AugmentType =
   | "userRegen"
   | "userDamageResist";
 
+export interface SavedWeapons {
+  currentWeapon: number;
+  ammo: number;
+  reserveAmmo: number;
+  unlockedWeapons: number[];
+}
+
 export interface RunState {
   storyModeLevel: number;
   endlessModeLevel: number;
   augments: Record<AugmentType, number>;
+  storyDifficulty: string | null;
+  savedHealth: number | null;
+  savedCoins: number | null;
+  savedWeapons: SavedWeapons | null;
+  savedGameMode: string | null;
 }
 
 const DEFAULT_AUGMENTS: Record<AugmentType, number> = {
@@ -75,8 +93,13 @@ export async function getRunState(userId: number): Promise<RunState> {
   const stateRes = await pool.query<{
     story_mode_level: number;
     endless_mode_level: number;
+    story_difficulty: string | null;
+    saved_health: number | null;
+    saved_coins: number | null;
+    saved_weapons: SavedWeapons | null;
+    saved_game_mode: string | null;
   }>(
-    "SELECT story_mode_level, endless_mode_level FROM player_run_state WHERE user_id = $1",
+    "SELECT story_mode_level, endless_mode_level, story_difficulty, saved_health, saved_coins, saved_weapons, saved_game_mode FROM player_run_state WHERE user_id = $1",
     [userId]
   );
 
@@ -91,13 +114,28 @@ export async function getRunState(userId: number): Promise<RunState> {
   }
 
   if (stateRes.rows.length === 0) {
-    return { storyModeLevel: 1, endlessModeLevel: 1, augments };
+    return {
+      storyModeLevel: 1,
+      endlessModeLevel: 1,
+      augments,
+      storyDifficulty: null,
+      savedHealth: null,
+      savedCoins: null,
+      savedWeapons: null,
+      savedGameMode: null,
+    };
   }
 
+  const row = stateRes.rows[0];
   return {
-    storyModeLevel: stateRes.rows[0].story_mode_level,
-    endlessModeLevel: stateRes.rows[0].endless_mode_level,
+    storyModeLevel: row.story_mode_level,
+    endlessModeLevel: row.endless_mode_level,
     augments,
+    storyDifficulty: row.story_difficulty ?? null,
+    savedHealth: row.saved_health ?? null,
+    savedCoins: row.saved_coins ?? null,
+    savedWeapons: row.saved_weapons ?? null,
+    savedGameMode: row.saved_game_mode ?? null,
   };
 }
 
@@ -105,16 +143,37 @@ export async function saveRunState(
   userId: number,
   storyModeLevel: number,
   endlessModeLevel: number,
-  augments: Partial<Record<AugmentType, number>>
+  augments: Partial<Record<AugmentType, number>>,
+  extra?: {
+    storyDifficulty?: string | null;
+    savedHealth?: number | null;
+    savedCoins?: number | null;
+    savedWeapons?: SavedWeapons | null;
+    savedGameMode?: string | null;
+  }
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO player_run_state (user_id, story_mode_level, endless_mode_level, updated_at)
-     VALUES ($1, $2, $3, NOW())
+    `INSERT INTO player_run_state (user_id, story_mode_level, endless_mode_level, story_difficulty, saved_health, saved_coins, saved_weapons, saved_game_mode, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
      ON CONFLICT (user_id) DO UPDATE
        SET story_mode_level   = EXCLUDED.story_mode_level,
            endless_mode_level = EXCLUDED.endless_mode_level,
+           story_difficulty   = EXCLUDED.story_difficulty,
+           saved_health       = EXCLUDED.saved_health,
+           saved_coins        = EXCLUDED.saved_coins,
+           saved_weapons      = EXCLUDED.saved_weapons,
+           saved_game_mode    = EXCLUDED.saved_game_mode,
            updated_at         = NOW()`,
-    [userId, storyModeLevel, endlessModeLevel]
+    [
+      userId,
+      storyModeLevel,
+      endlessModeLevel,
+      extra?.storyDifficulty ?? null,
+      extra?.savedHealth ?? null,
+      extra?.savedCoins ?? null,
+      extra?.savedWeapons ? JSON.stringify(extra.savedWeapons) : null,
+      extra?.savedGameMode ?? null,
+    ]
   );
 
   for (const [augType, tier] of Object.entries(augments)) {

@@ -130,6 +130,26 @@ function getFullReserveByWeapon(): Record<number, number> {
   ) as Record<number, number>;
 }
 
+// Monotonically increasing counter for bullet IDs — prevents duplicate keys
+// when high-fire-rate weapons fire multiple bullets in the same millisecond.
+let _bulletCounter = 0;
+const newBulletId = () => `b_${++_bulletCounter}`;
+
+// Shared input style used in the payment modal form
+const inputStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  marginTop: "5px",
+  padding: "9px 11px",
+  borderRadius: "7px",
+  border: "1px solid #444",
+  background: "#0f1a30",
+  color: "white",
+  fontSize: "14px",
+  boxSizing: "border-box",
+  fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+};
+
 // Story elements
 const SETTLEMENTS = [
   "Bun Valley Outpost",
@@ -1148,7 +1168,7 @@ function Player({
                 spreadDir.normalize();
 
                 newBullets.push({
-                  id: `bullet_${Date.now()}_${i}`,
+                  id: newBulletId(),
                   position: [bulletPos.x, bulletPos.y, bulletPos.z],
                   direction: [spreadDir.x, spreadDir.y, spreadDir.z],
                   damage: currentWeapon.damage + gameStateRef.current.augmentLevels.weaponDamage * 5,
@@ -1161,7 +1181,7 @@ function Player({
             } else {
               // Regular single bullet
               newBullets.push({
-                id: `bullet_${Date.now()}`,
+                id: newBulletId(),
                 position: [bulletPos.x, bulletPos.y, bulletPos.z],
                 direction: [baseDirection.x, baseDirection.y, baseDirection.z],
                 damage: currentWeapon.damage + gameStateRef.current.augmentLevels.weaponDamage * 5,
@@ -1331,7 +1351,7 @@ function Player({
           bullets: [
             ...prev.bullets,
             {
-              id: `bullet_${Date.now()}`,
+              id: newBulletId(),
               position: [bulletPos.x, bulletPos.y, bulletPos.z],
               direction: [direction.x, direction.y, direction.z],
               damage: currentWeapon.damage + gameState.augmentLevels.weaponDamage * 5,
@@ -1970,20 +1990,77 @@ function Enemy({
         currentTime >= (enemy.nextBurnTickAt ?? 0) &&
         (enemy.burnDamagePerTick ?? 0) > 0
       ) {
-        setGameState((prev) => ({
-          ...prev,
-          enemies: prev.enemies
-            .map((e) =>
-              e.id === enemy.id
-                ? {
-                    ...e,
-                    health: e.health - (e.burnDamagePerTick ?? 0),
-                    nextBurnTickAt: currentTime + (e.burnTickMs ?? 400),
-                  }
-                : e,
-            )
-            .filter((e) => e.health > 0),
-        }));
+        setGameState((prev) => {
+          const burnDmg = enemy.burnDamagePerTick ?? 0;
+          const currentEnemy = prev.enemies.find((e) => e.id === enemy.id);
+          if (!currentEnemy) return prev;
+
+          const burnKilled = currentEnemy.health > 0 && currentEnemy.health - burnDmg <= 0;
+
+          if (!burnKilled) {
+            // Enemy survives this tick — just apply damage and schedule next tick
+            return {
+              ...prev,
+              enemies: prev.enemies.map((e) =>
+                e.id === enemy.id
+                  ? { ...e, health: e.health - burnDmg, nextBurnTickAt: currentTime + (e.burnTickMs ?? 400) }
+                  : e,
+              ),
+            };
+          }
+
+          // Enemy dies from burn — run full kill counting logic
+          const newKills = prev.story.totalKills + 1;
+          const newLevelKills = prev.level.killsThisLevel + 1;
+          const newCoins = prev.coins + 1;
+          const newSettlementIndex = Math.floor(newKills / 10);
+          const newAlliesRescued = Math.floor(newKills / 3);
+
+          let newSettlementsConquered = prev.story.settlementsConquered;
+          if (
+            newSettlementIndex > prev.story.currentSettlement &&
+            newSettlementIndex <= SETTLEMENTS.length
+          ) {
+            const settlementName = SETTLEMENTS[newSettlementIndex - 1];
+            if (!prev.story.settlementsConquered.includes(settlementName)) {
+              newSettlementsConquered = [...prev.story.settlementsConquered, settlementName];
+            }
+          }
+
+          const currentLevelData = LEVELS[prev.level.currentLevel];
+          const shouldLevelUp = currentLevelData && newLevelKills >= currentLevelData.killsRequired;
+          const nextLevel = prev.level.currentLevel + 1;
+          const hasNextLevel = nextLevel < LEVELS.length;
+          const completedFinalLevel = shouldLevelUp && !hasNextLevel;
+          const isEndless = prev.gameMode === "endless";
+
+          let nextPhase = prev.gamePhase;
+          if (completedFinalLevel && !isEndless) {
+            nextPhase = "victory";
+          } else if (completedFinalLevel && isEndless) {
+            nextPhase = prev.gamePhase;
+          } else if (shouldLevelUp && hasNextLevel) {
+            nextPhase = "levelTransition";
+          }
+
+          return {
+            ...prev,
+            coins: newCoins,
+            enemies: prev.enemies.filter((e) => e.id !== enemy.id),
+            story: {
+              currentSettlement: Math.min(newSettlementIndex, SETTLEMENTS.length - 1),
+              alliesRescued: newAlliesRescued,
+              settlementsConquered: newSettlementsConquered,
+              totalKills: newKills,
+            },
+            level: {
+              currentLevel: prev.level.currentLevel,
+              killsThisLevel: completedFinalLevel && isEndless ? 0 : newLevelKills,
+              giantsSpawnedThisLevel: prev.level.giantsSpawnedThisLevel,
+            },
+            gamePhase: nextPhase,
+          };
+        });
       }
 
       // Fire puddle — ignite enemy if standing in one
@@ -4472,10 +4549,7 @@ function LeaderboardPage({ onBack }: { onBack: () => void }) {
                   </div>
                   <div>
                     <div style={{ fontWeight: "600" }}>
-                      {entry.username || `Player #${entry.user_id}`}
-                    </div>
-                    <div style={{ fontSize: "11px", color: "#888" }}>
-                      ID: {entry.user_id}
+                      {entry.username || "Unknown Player"}
                     </div>
                   </div>
                 </div>
@@ -6316,12 +6390,36 @@ function MenuButton({
 }
 
 // HUD Component
+interface SavedRunStateProps {
+  storyModeLevel: number;
+  endlessModeLevel: number;
+  storyDifficulty: string | null;
+  savedHealth: number | null;
+  savedCoins: number | null;
+  savedWeapons: {
+    currentWeapon: number;
+    ammo: number;
+    reserveAmmo: number;
+    unlockedWeapons: number[];
+  } | null;
+  savedGameMode: string | null;
+  augments: Record<string, number>;
+}
+
 function HUD({
   gameState,
   setGameState,
+  savedRunState,
+  setSavedRunState,
+  continueModalMode,
+  setContinueModalMode,
 }: {
   gameState: GameState;
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
+  savedRunState: SavedRunStateProps | null;
+  setSavedRunState: React.Dispatch<React.SetStateAction<SavedRunStateProps | null>>;
+  continueModalMode: "story" | "endless" | null;
+  setContinueModalMode: React.Dispatch<React.SetStateAction<"story" | "endless" | null>>;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -6341,6 +6439,12 @@ function HUD({
   const [payCardNumber, setPayCardNumber] = useState("");
   const [payExpiry, setPayExpiry] = useState("");
   const [payCVC, setPayCVC] = useState("");
+  const [payFirstName, setPayFirstName] = useState("");
+  const [payLastName, setPayLastName] = useState("");
+  const [payAddress, setPayAddress] = useState("");
+  const [payCity, setPayCity] = useState("");
+  const [payState, setPayState] = useState("");
+  const [payZip, setPayZip] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [ownedItemIds, setOwnedItemIds] = useState<number[]>([]);
@@ -6461,38 +6565,7 @@ function HUD({
       .catch((err) => console.error("Error saving leaderboard:", err));
   }, [gameState.gamePhase, gameState.gameStartTime, gameState.user.isGuest]);
 
-  // Save total kills to leaderboard after every level transition
-  const levelTransitionSavedRef = React.useRef<number>(-1);
-
-  useEffect(() => {
-    if (gameState.gamePhase !== "levelTransition") return;
-    if (gameState.adminLevelTestMode) return;
-    if (gameState.user.isGuest) return;
-
-    // Prevent duplicate saves for the same level
-    if (levelTransitionSavedRef.current === gameState.level.currentLevel)
-      return;
-    levelTransitionSavedRef.current = gameState.level.currentLevel;
-
-    const totalKills = gameState.story.totalKills;
-
-    fetch("/api/leaderboard", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ totalKills }),
-    })
-      .then((res) => {
-        if (res.ok) console.log(`Kills saved to leaderboard after level: ${totalKills}`);
-        else res.text().then((t) => console.error("Failed to save kills:", t));
-      })
-      .catch((err) => console.error("Error saving kills:", err));
-  }, [
-    gameState.gamePhase,
-    gameState.level.currentLevel,
-    gameState.story.totalKills,
-    gameState.user.isGuest,
-  ]);
+  // Kills leaderboard is only saved from endless mode (see endless death save below)
 
   // Save fastest time to localStorage when completing the whole game (victory)
   const fastestTimeSavedRef = React.useRef<number | null>(null);
@@ -6633,6 +6706,7 @@ function HUD({
       method: "DELETE",
       credentials: "include",
     }).catch((err) => console.error("Failed to reset run state:", err));
+    setSavedRunState(null);
   }, [
     gameState.gamePhase,
     gameState.gameStartTime,
@@ -6682,6 +6756,12 @@ function HUD({
     setPayCardNumber("");
     setPayExpiry("");
     setPayCVC("");
+    setPayFirstName("");
+    setPayLastName("");
+    setPayAddress("");
+    setPayCity("");
+    setPayState("");
+    setPayZip("");
     setPaymentError("");
   };
 
@@ -6703,6 +6783,15 @@ function HUD({
     if (!paymentModal) return;
     setPaymentError("");
 
+    if (!payFirstName.trim()) { setPaymentError("First name is required."); return; }
+    if (!payLastName.trim()) { setPaymentError("Last name is required."); return; }
+    if (!payAddress.trim()) { setPaymentError("Address is required."); return; }
+    if (!payCity.trim()) { setPaymentError("City is required."); return; }
+    if (!payState.trim()) { setPaymentError("State is required."); return; }
+    if (!/^\d{5}(-\d{4})?$/.test(payZip.trim())) {
+      setPaymentError("ZIP code must be 5 digits (or ZIP+4 format).");
+      return;
+    }
     const rawCard = payCardNumber.replace(/\s/g, "");
     if (rawCard.length !== 16) {
       setPaymentError("Card number must be 16 digits.");
@@ -6724,6 +6813,12 @@ function HUD({
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          firstName: payFirstName.trim(),
+          lastName: payLastName.trim(),
+          address: payAddress.trim(),
+          city: payCity.trim(),
+          state: payState.trim(),
+          zip: payZip.trim(),
           cardNumber: rawCard,
           cardExpiry: payExpiry,
           cardCVC: payCVC,
@@ -6958,6 +7053,27 @@ function HUD({
                     } catch (e) {
                       console.error("Failed to load settings:", e);
                     }
+
+                    // Fetch saved run state for Continue / New Game prompt
+                    setSavedRunState(null);
+                    try {
+                      const runRes = await fetch("/api/run/state", { credentials: "include" });
+                      if (runRes.ok) {
+                        const runData = await runRes.json();
+                        if (runData.savedGameMode) {
+                          setSavedRunState({
+                            storyModeLevel: runData.storyModeLevel ?? 1,
+                            endlessModeLevel: runData.endlessModeLevel ?? 1,
+                            storyDifficulty: runData.storyDifficulty ?? null,
+                            savedHealth: runData.savedHealth ?? null,
+                            savedCoins: runData.savedCoins ?? null,
+                            savedWeapons: runData.savedWeapons ?? null,
+                            savedGameMode: runData.savedGameMode ?? null,
+                            augments: runData.augments ?? {},
+                          });
+                        }
+                      }
+                    } catch (_) {}
                   } else {
                     const error = await response.json();
                     if (error.banned) {
@@ -7161,6 +7277,7 @@ function HUD({
 
                   if (response.ok) {
                     // Auto-login after successful registration
+                    setSavedRunState(null);
                     setGameState((prev) => ({
                       ...prev,
                       gamePhase: "menu",
@@ -7261,48 +7378,56 @@ function HUD({
         label: "Story Mode",
         onClick: () => {
           playClick();
-          setGameState((prev) => ({
-            ...prev,
-            gamePhase: "difficultySelect",
-          }));
+          if (savedRunState && savedRunState.savedGameMode === "story") {
+            setContinueModalMode("story");
+          } else {
+            setGameState((prev) => ({
+              ...prev,
+              gamePhase: "difficultySelect",
+            }));
+          }
         },
       },
       {
         label: "Endless Wave",
         onClick: () => {
           playClick();
-          setGameState((prev) => ({
-            ...prev,
-            gamePhase: "playing",
-            gameMode: "endless",
-            gameStartTime: Date.now(),
-            health: prev.maxHealth,
-            ammo: weapons[1].maxAmmo,
-            reserveAmmo: getStartingReserveAmmo(1),
-            grenades: 3,
-            maxGrenades: 6,
-            coins: 0,
-            enemies: [],
-            bullets: [],
-            grenadeProjectiles: [],
-            explosions: [],
-            enemyProjectiles: [],
-            firePuddles: [],
-            story: {
-              currentSettlement: 0,
-              alliesRescued: 0,
-              settlementsConquered: [],
-              totalKills: 0,
-            },
-            sessionShotsFired: 0,
-            sessionShotsHit: 0,
-            level: {
-              currentLevel: 1,
-              killsThisLevel: 0,
-              giantsSpawnedThisLevel: 0,
-            },
-          }));
-          document.body.requestPointerLock();
+          if (savedRunState && savedRunState.savedGameMode === "endless") {
+            setContinueModalMode("endless");
+          } else {
+            setGameState((prev) => ({
+              ...prev,
+              gamePhase: "playing",
+              gameMode: "endless",
+              gameStartTime: Date.now(),
+              health: prev.maxHealth,
+              ammo: weapons[1].maxAmmo,
+              reserveAmmo: getStartingReserveAmmo(1),
+              grenades: 3,
+              maxGrenades: 6,
+              coins: 0,
+              enemies: [],
+              bullets: [],
+              grenadeProjectiles: [],
+              explosions: [],
+              enemyProjectiles: [],
+              firePuddles: [],
+              story: {
+                currentSettlement: 0,
+                alliesRescued: 0,
+                settlementsConquered: [],
+                totalKills: 0,
+              },
+              sessionShotsFired: 0,
+              sessionShotsHit: 0,
+              level: {
+                currentLevel: 1,
+                killsThisLevel: 0,
+                giantsSpawnedThisLevel: 0,
+              },
+            }));
+            document.body.requestPointerLock();
+          }
         },
       },
       {
@@ -7442,6 +7567,248 @@ function HUD({
             ))}
           </nav>
         </div>
+
+        {/* Continue / New Game modal */}
+        {continueModalMode && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.82)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 2000,
+              fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+            }}
+          >
+            <div
+              style={{
+                background: "rgba(14,9,4,0.97)",
+                border: "1px solid rgba(232,160,32,0.4)",
+                padding: "40px 48px",
+                maxWidth: "420px",
+                width: "90vw",
+                textAlign: "center",
+                boxShadow: "0 20px 60px rgba(0,0,0,0.9)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "11px",
+                  color: "#c8a84b",
+                  letterSpacing: "3px",
+                  textTransform: "uppercase",
+                  marginBottom: "8px",
+                }}
+              >
+                {continueModalMode === "story" ? "Story Mode" : "Endless Wave"}
+              </div>
+              <h2
+                style={{
+                  fontSize: "26px",
+                  fontWeight: "700",
+                  color: "#e8a020",
+                  letterSpacing: "3px",
+                  textTransform: "uppercase",
+                  marginBottom: "12px",
+                }}
+              >
+                Saved Run Found
+              </h2>
+              {savedRunState && (
+                <div
+                  style={{
+                    fontSize: "13px",
+                    color: "rgba(200,168,75,0.8)",
+                    marginBottom: "24px",
+                    lineHeight: "1.6",
+                  }}
+                >
+                  {continueModalMode === "story" && (
+                    <>
+                      Level {savedRunState.storyModeLevel} &nbsp;·&nbsp;{" "}
+                      {savedRunState.storyDifficulty
+                        ? savedRunState.storyDifficulty.charAt(0).toUpperCase() +
+                          savedRunState.storyDifficulty.slice(1)
+                        : "Normal"}{" "}
+                      difficulty
+                      <br />
+                      HP: {savedRunState.savedHealth ?? "?"} &nbsp;·&nbsp; Coins:{" "}
+                      {savedRunState.savedCoins ?? "?"}
+                    </>
+                  )}
+                  {continueModalMode === "endless" && (
+                    <>
+                      Wave {savedRunState.endlessModeLevel}
+                      <br />
+                      HP: {savedRunState.savedHealth ?? "?"} &nbsp;·&nbsp; Coins:{" "}
+                      {savedRunState.savedCoins ?? "?"}
+                    </>
+                  )}
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <button
+                  onClick={() => {
+                    if (!savedRunState) return;
+                    setContinueModalMode(null);
+                    const sw = savedRunState.savedWeapons;
+                    setGameState((prev) => ({
+                      ...prev,
+                      gamePhase: "playing",
+                      gameMode: continueModalMode,
+                      gameStartTime: Date.now(),
+                      health: savedRunState.savedHealth ?? prev.maxHealth,
+                      coins: savedRunState.savedCoins ?? 0,
+                      ammo: sw ? sw.ammo : weapons[1].maxAmmo,
+                      reserveAmmo: sw ? sw.reserveAmmo : getStartingReserveAmmo(1),
+                      currentWeapon: sw ? sw.currentWeapon : 1,
+                      unlockedWeapons: sw ? sw.unlockedWeapons : prev.unlockedWeapons,
+                      difficulty:
+                        continueModalMode === "story" && savedRunState.storyDifficulty
+                          ? (savedRunState.storyDifficulty as "normal" | "hard" | "extreme")
+                          : prev.difficulty,
+                      augmentLevels: {
+                        weaponDamage: savedRunState.augments.weaponDamage ?? 0,
+                        weaponFireRate: savedRunState.augments.weaponFireRate ?? 0,
+                        weaponReloadSpeed: savedRunState.augments.weaponReloadSpeed ?? 0,
+                        weaponSpreadControl: savedRunState.augments.weaponSpreadControl ?? 0,
+                        userMaxHealth: savedRunState.augments.userMaxHealth ?? 0,
+                        userMoveSpeed: savedRunState.augments.userMoveSpeed ?? 0,
+                        userRegen: savedRunState.augments.userRegen ?? 0,
+                        userDamageResist: savedRunState.augments.userDamageResist ?? 0,
+                      },
+                      level: {
+                        currentLevel:
+                          continueModalMode === "story"
+                            ? savedRunState.storyModeLevel
+                            : savedRunState.endlessModeLevel,
+                        killsThisLevel: 0,
+                        giantsSpawnedThisLevel: 0,
+                      },
+                      grenades: 3,
+                      maxGrenades: 6,
+                      enemies: [],
+                      bullets: [],
+                      grenadeProjectiles: [],
+                      explosions: [],
+                      enemyProjectiles: [],
+                      firePuddles: [],
+                      story: {
+                        currentSettlement: 0,
+                        alliesRescued: 0,
+                        settlementsConquered: [],
+                        totalKills: 0,
+                      },
+                      sessionShotsFired: 0,
+                      sessionShotsHit: 0,
+                    }));
+                    document.body.requestPointerLock();
+                  }}
+                  style={{
+                    padding: "14px 30px",
+                    fontSize: "15px",
+                    fontWeight: "700",
+                    background: "rgba(232,160,32,0.9)",
+                    color: "#0d0a05",
+                    border: "none",
+                    cursor: "pointer",
+                    letterSpacing: "2px",
+                    textTransform: "uppercase",
+                    fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                    width: "100%",
+                  }}
+                >
+                  Continue
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await fetch("/api/run/reset", {
+                        method: "DELETE",
+                        credentials: "include",
+                      });
+                    } catch (err) {
+                      console.error("Failed to reset run:", err);
+                    }
+                    setSavedRunState(null);
+                    setContinueModalMode(null);
+                    if (continueModalMode === "story") {
+                      setGameState((prev) => ({ ...prev, gamePhase: "difficultySelect" }));
+                    } else {
+                      setGameState((prev) => ({
+                        ...prev,
+                        gamePhase: "playing",
+                        gameMode: "endless",
+                        gameStartTime: Date.now(),
+                        health: prev.maxHealth,
+                        ammo: weapons[1].maxAmmo,
+                        reserveAmmo: getStartingReserveAmmo(1),
+                        grenades: 3,
+                        maxGrenades: 6,
+                        coins: 0,
+                        enemies: [],
+                        bullets: [],
+                        grenadeProjectiles: [],
+                        explosions: [],
+                        enemyProjectiles: [],
+                        firePuddles: [],
+                        story: {
+                          currentSettlement: 0,
+                          alliesRescued: 0,
+                          settlementsConquered: [],
+                          totalKills: 0,
+                        },
+                        sessionShotsFired: 0,
+                        sessionShotsHit: 0,
+                        level: {
+                          currentLevel: 1,
+                          killsThisLevel: 0,
+                          giantsSpawnedThisLevel: 0,
+                        },
+                      }));
+                      document.body.requestPointerLock();
+                    }
+                  }}
+                  style={{
+                    padding: "12px 30px",
+                    fontSize: "13px",
+                    fontWeight: "500",
+                    background: "transparent",
+                    color: "rgba(200,140,80,0.8)",
+                    border: "1px solid rgba(200,100,60,0.3)",
+                    cursor: "pointer",
+                    letterSpacing: "1px",
+                    textTransform: "uppercase",
+                    fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                    width: "100%",
+                  }}
+                >
+                  New Game (replaces saved run)
+                </button>
+                <button
+                  onClick={() => setContinueModalMode(null)}
+                  style={{
+                    padding: "10px 30px",
+                    fontSize: "12px",
+                    fontWeight: "400",
+                    background: "transparent",
+                    color: "rgba(180,160,140,0.55)",
+                    border: "1px solid rgba(180,160,140,0.15)",
+                    cursor: "pointer",
+                    letterSpacing: "1px",
+                    textTransform: "uppercase",
+                    fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
+                    width: "100%",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -8008,35 +8375,29 @@ function HUD({
                 background: "#1a1a2e",
                 border: "1px solid #333",
                 borderRadius: "14px",
-                padding: "32px",
+                padding: "28px 32px",
                 width: "100%",
-                maxWidth: "420px",
+                maxWidth: "460px",
+                maxHeight: "90vh",
+                overflowY: "auto",
                 color: "white",
                 fontFamily: '"Trebuchet MS", "Arial Narrow", Arial, sans-serif',
                 boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
               }}
             >
-              <h2 style={{ margin: "0 0 6px 0", fontSize: "22px" }}>
+              <h2 style={{ margin: "0 0 4px 0", fontSize: "22px" }}>
                 💳 Purchase Gold
               </h2>
-              <p
-                style={{
-                  margin: "0 0 20px 0",
-                  color: "#aaa",
-                  fontSize: "14px",
-                }}
-              >
+              <p style={{ margin: "0 0 16px 0", color: "#aaa", fontSize: "14px" }}>
                 {paymentModal.gold.toLocaleString()} 💰 for{" "}
-                <strong style={{ color: "#f39c12" }}>
-                  {paymentModal.price}
-                </strong>
+                <strong style={{ color: "#f39c12" }}>{paymentModal.price}</strong>
               </p>
               <p
                 style={{
                   margin: "0 0 20px 0",
-                  padding: "10px",
+                  padding: "9px 12px",
                   borderRadius: "8px",
-                  background: "rgba(255,193,7,0.15)",
+                  background: "rgba(255,193,7,0.12)",
                   border: "1px solid rgba(255,193,7,0.3)",
                   color: "#ffc107",
                   fontSize: "12px",
@@ -8045,82 +8406,109 @@ function HUD({
               >
                 ⚠️ Test mode — no real charges will be made
               </p>
-              <label style={{ display: "block", marginBottom: "14px" }}>
-                <span style={{ fontSize: "13px", color: "#aaa" }}>
-                  Card Number
-                </span>
+
+              {/* Billing Information */}
+              <div style={{ fontSize: "11px", color: "#e8a020", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "12px", fontWeight: "700" }}>
+                Billing Information
+              </div>
+              <div style={{ display: "flex", gap: "12px", marginBottom: "12px" }}>
+                {([
+                  { label: "First Name", placeholder: "", value: payFirstName, set: setPayFirstName },
+                  { label: "Last Name", placeholder: "", value: payLastName, set: setPayLastName },
+                ] as const).map((f) => (
+                  <label key={f.label} style={{ flex: 1 }}>
+                    <span style={{ fontSize: "12px", color: "#aaa" }}>{f.label} <span style={{ color: "#e74c3c" }}>*</span></span>
+                    <input
+                      type="text"
+                      placeholder={f.placeholder}
+                      value={f.value}
+                      onChange={(e) => (f.set as (v: string) => void)(e.target.value)}
+                      style={inputStyle}
+                    />
+                  </label>
+                ))}
+              </div>
+              <label style={{ display: "block", marginBottom: "12px" }}>
+                <span style={{ fontSize: "12px", color: "#aaa" }}>Street Address <span style={{ color: "#e74c3c" }}>*</span></span>
+                <input
+                  type="text"
+                  placeholder="123 Hotdog Lane"
+                  value={payAddress}
+                  onChange={(e) => setPayAddress(e.target.value)}
+                  style={inputStyle}
+                />
+              </label>
+              <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
+                <label style={{ flex: 2 }}>
+                  <span style={{ fontSize: "12px", color: "#aaa" }}>City <span style={{ color: "#e74c3c" }}>*</span></span>
+                  <input
+                    type="text"
+                    placeholder="Springfield"
+                    value={payCity}
+                    onChange={(e) => setPayCity(e.target.value)}
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={{ flex: 1 }}>
+                  <span style={{ fontSize: "12px", color: "#aaa" }}>State <span style={{ color: "#e74c3c" }}>*</span></span>
+                  <input
+                    type="text"
+                    placeholder="IL"
+                    value={payState}
+                    onChange={(e) => setPayState(e.target.value.toUpperCase().slice(0, 2))}
+                    maxLength={2}
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={{ flex: 1 }}>
+                  <span style={{ fontSize: "12px", color: "#aaa" }}>ZIP <span style={{ color: "#e74c3c" }}>*</span></span>
+                  <input
+                    type="text"
+                    placeholder="62701"
+                    value={payZip}
+                    onChange={(e) => setPayZip(e.target.value.replace(/[^\d-]/g, "").slice(0, 10))}
+                    maxLength={10}
+                    style={inputStyle}
+                  />
+                </label>
+              </div>
+
+              {/* Card Information */}
+              <div style={{ fontSize: "11px", color: "#e8a020", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "12px", fontWeight: "700" }}>
+                Card Details
+              </div>
+              <label style={{ display: "block", marginBottom: "12px" }}>
+                <span style={{ fontSize: "12px", color: "#aaa" }}>Card Number <span style={{ color: "#e74c3c" }}>*</span></span>
                 <input
                   type="text"
                   placeholder="1234 5678 9012 3456"
                   value={payCardNumber}
-                  onChange={(e) =>
-                    setPayCardNumber(formatCardNumber(e.target.value))
-                  }
+                  onChange={(e) => setPayCardNumber(formatCardNumber(e.target.value))}
                   maxLength={19}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    marginTop: "6px",
-                    padding: "10px 12px",
-                    borderRadius: "7px",
-                    border: "1px solid #444",
-                    background: "#0f1a30",
-                    color: "white",
-                    fontSize: "16px",
-                    letterSpacing: "2px",
-                    boxSizing: "border-box",
-                  }}
+                  style={{ ...inputStyle, fontSize: "16px", letterSpacing: "2px" }}
                 />
               </label>
-              <div
-                style={{ display: "flex", gap: "12px", marginBottom: "14px" }}
-              >
+              <div style={{ display: "flex", gap: "12px", marginBottom: "14px" }}>
                 <label style={{ flex: 1 }}>
-                  <span style={{ fontSize: "13px", color: "#aaa" }}>
-                    Expiry (MM/YY)
-                  </span>
+                  <span style={{ fontSize: "12px", color: "#aaa" }}>Expiry (MM/YY) <span style={{ color: "#e74c3c" }}>*</span></span>
                   <input
                     type="text"
                     placeholder="MM/YY"
                     value={payExpiry}
                     onChange={(e) => setPayExpiry(formatExpiry(e.target.value))}
                     maxLength={5}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      marginTop: "6px",
-                      padding: "10px 12px",
-                      borderRadius: "7px",
-                      border: "1px solid #444",
-                      background: "#0f1a30",
-                      color: "white",
-                      fontSize: "15px",
-                      boxSizing: "border-box",
-                    }}
+                    style={inputStyle}
                   />
                 </label>
                 <label style={{ flex: 1 }}>
-                  <span style={{ fontSize: "13px", color: "#aaa" }}>CVC</span>
+                  <span style={{ fontSize: "12px", color: "#aaa" }}>CVC <span style={{ color: "#e74c3c" }}>*</span></span>
                   <input
                     type="text"
                     placeholder="123"
                     value={payCVC}
-                    onChange={(e) =>
-                      setPayCVC(e.target.value.replace(/\D/g, "").slice(0, 4))
-                    }
+                    onChange={(e) => setPayCVC(e.target.value.replace(/\D/g, "").slice(0, 4))}
                     maxLength={4}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      marginTop: "6px",
-                      padding: "10px 12px",
-                      borderRadius: "7px",
-                      border: "1px solid #444",
-                      background: "#0f1a30",
-                      color: "white",
-                      fontSize: "15px",
-                      boxSizing: "border-box",
-                    }}
+                    style={inputStyle}
                   />
                 </label>
               </div>
@@ -9779,7 +10167,47 @@ function HUD({
               SETTINGS
             </button>
             <button
-              onClick={() => {
+              onClick={async () => {
+                if (!gameState.user.isGuest) {
+                  const savedWeapons = {
+                    currentWeapon: gameState.currentWeapon,
+                    ammo: gameState.ammo,
+                    reserveAmmo: gameState.reserveAmmo,
+                    unlockedWeapons: gameState.unlockedWeapons,
+                  };
+                  const storyModeLevel = gameState.gameMode === "story" ? gameState.level.currentLevel : 1;
+                  const endlessModeLevel = gameState.gameMode === "endless" ? gameState.level.currentLevel : 1;
+                  const snapshot: SavedRunStateProps = {
+                    storyModeLevel,
+                    endlessModeLevel,
+                    storyDifficulty: gameState.gameMode === "story" ? gameState.difficulty : null,
+                    savedHealth: gameState.health,
+                    savedCoins: gameState.coins,
+                    savedWeapons,
+                    savedGameMode: gameState.gameMode,
+                    augments: gameState.augmentLevels,
+                  };
+                  try {
+                    await fetch("/api/run/state", {
+                      method: "POST",
+                      credentials: "include",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        storyModeLevel,
+                        endlessModeLevel,
+                        augments: gameState.augmentLevels,
+                        storyDifficulty: snapshot.storyDifficulty,
+                        savedHealth: gameState.health,
+                        savedCoins: gameState.coins,
+                        savedWeapons,
+                        savedGameMode: gameState.gameMode,
+                      }),
+                    });
+                    setSavedRunState(snapshot);
+                  } catch (err) {
+                    console.error("Failed to save run state on exit:", err);
+                  }
+                }
                 setGameState((prev) => ({
                   ...prev,
                   gamePhase: "menu",
@@ -10368,6 +10796,10 @@ function Game() {
 
   // On mount, check if the user already has an active session
   const [sessionChecking, setSessionChecking] = useState(true);
+
+  const [savedRunState, setSavedRunState] = useState<SavedRunStateProps | null>(null);
+  const [continueModalMode, setContinueModalMode] = useState<"story" | "endless" | null>(null);
+
   useEffect(() => {
     const { setKeybinding, setNormalSensitivity } = useSettings.getState();
     fetch("/api/session", { credentials: "include" })
@@ -10458,6 +10890,26 @@ function Game() {
               setKeybinding("grenade", s.grenade_key || "KeyQ");
               const sens = parseFloat(s.mouse_sensitivity);
               setNormalSensitivity(isNaN(sens) ? 1 : sens);
+            }
+          } catch (_) {}
+
+          // Fetch saved run state for Continue / New Game prompt
+          try {
+            const runRes = await fetch("/api/run/state", { credentials: "include" });
+            if (runRes.ok) {
+              const runData = await runRes.json();
+              if (runData.savedGameMode) {
+                setSavedRunState({
+                  storyModeLevel: runData.storyModeLevel ?? 1,
+                  endlessModeLevel: runData.endlessModeLevel ?? 1,
+                  storyDifficulty: runData.storyDifficulty ?? null,
+                  savedHealth: runData.savedHealth ?? null,
+                  savedCoins: runData.savedCoins ?? null,
+                  savedWeapons: runData.savedWeapons ?? null,
+                  savedGameMode: runData.savedGameMode ?? null,
+                  augments: runData.augments ?? {},
+                });
+              }
             }
           } catch (_) {}
         }
@@ -10634,7 +11086,16 @@ function Game() {
     gameState.gamePhase !== "paused" &&
     gameState.gamePhase !== "levelTransition"
   ) {
-    return <HUD gameState={gameState} setGameState={setGameState} />;
+    return (
+      <HUD
+        gameState={gameState}
+        setGameState={setGameState}
+        savedRunState={savedRunState}
+        setSavedRunState={setSavedRunState}
+        continueModalMode={continueModalMode}
+        setContinueModalMode={setContinueModalMode}
+      />
+    );
   }
 
   return (
@@ -10701,7 +11162,14 @@ function Game() {
         </Suspense>
       </Canvas>
 
-      <HUD gameState={gameState} setGameState={setGameState} />
+      <HUD
+        gameState={gameState}
+        setGameState={setGameState}
+        savedRunState={savedRunState}
+        setSavedRunState={setSavedRunState}
+        continueModalMode={continueModalMode}
+        setContinueModalMode={setContinueModalMode}
+      />
     </>
   );
 }

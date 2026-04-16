@@ -795,10 +795,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // POST /api/run/state — save augment tiers and current mode levels
-  // Body: { storyModeLevel, endlessModeLevel, augments: { weaponDamage, ... } }
+  // Body: { storyModeLevel, endlessModeLevel, augments, storyDifficulty?, savedHealth?, savedCoins?, savedWeapons?, savedGameMode? }
   app.post("/api/run/state", requireAuth, async (req, res) => {
     try {
-      const { storyModeLevel, endlessModeLevel, augments } = req.body;
+      const {
+        storyModeLevel,
+        endlessModeLevel,
+        augments,
+        storyDifficulty,
+        savedHealth,
+        savedCoins,
+        savedWeapons,
+        savedGameMode,
+      } = req.body;
 
       if (
         typeof storyModeLevel !== "number" ||
@@ -809,11 +818,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid body" });
       }
 
+      const VALID_GAME_MODES = ["story", "endless"];
+      const VALID_DIFFICULTIES = ["normal", "hard", "extreme"];
+
+      const sanitizedGameMode =
+        typeof savedGameMode === "string" && VALID_GAME_MODES.includes(savedGameMode)
+          ? savedGameMode
+          : null;
+
+      const sanitizedDifficulty =
+        typeof storyDifficulty === "string" && VALID_DIFFICULTIES.includes(storyDifficulty)
+          ? storyDifficulty
+          : null;
+
+      let sanitizedWeapons: { currentWeapon: number; ammo: number; reserveAmmo: number; unlockedWeapons: number[] } | null = null;
+      if (
+        savedWeapons !== null &&
+        savedWeapons !== undefined &&
+        typeof savedWeapons === "object" &&
+        typeof savedWeapons.currentWeapon === "number" &&
+        typeof savedWeapons.ammo === "number" &&
+        typeof savedWeapons.reserveAmmo === "number" &&
+        Array.isArray(savedWeapons.unlockedWeapons) &&
+        savedWeapons.unlockedWeapons.every((w: unknown) => typeof w === "number")
+      ) {
+        sanitizedWeapons = {
+          currentWeapon: savedWeapons.currentWeapon,
+          ammo: savedWeapons.ammo,
+          reserveAmmo: savedWeapons.reserveAmmo,
+          unlockedWeapons: savedWeapons.unlockedWeapons,
+        };
+      }
+
       await saveRunState(
         req.session.userId!,
         storyModeLevel,
         endlessModeLevel,
-        augments
+        augments,
+        {
+          storyDifficulty: sanitizedDifficulty,
+          savedHealth: typeof savedHealth === "number" ? savedHealth : null,
+          savedCoins: typeof savedCoins === "number" ? savedCoins : null,
+          savedWeapons: sanitizedWeapons,
+          savedGameMode: sanitizedGameMode,
+        }
       );
 
       res.json({ success: true });
