@@ -118,6 +118,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // 3. Try to create the user in MySQL
       const newUser = await storage.createUser({ username, password, email });
 
+      // 4. Seed a default row in player_run_state so the account appears immediately
+      await saveRunState(newUser.id, 1, 1, {});
+
       console.log("User created successfully with id:", newUser.id);
       return res.json({
         message: "User created successfully",
